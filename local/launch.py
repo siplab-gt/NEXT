@@ -41,11 +41,11 @@ def get_backend():
 
 def launch(init_filename, targets_filename=None):
     with open(init_filename, 'r') as f:
-        init = yaml.load(f)
+        init = yaml.load(f, Loader=yaml.SafeLoader)
 
     if targets_filename:
         with open(targets_filename, 'r') as f:
-            targets = yaml.load(f)
+            targets = yaml.load(f, Loader=yaml.SafeLoader)
 
             if 'targets' not in init['args']:
                 init['args']['targets'] = {'targetset': []}
@@ -53,7 +53,7 @@ def launch(init_filename, targets_filename=None):
 
     # -- encode the experiment definition for transmission to the backend
     data_header = "data:application/x-yaml;base64,"
-    
+
     encoded_args = base64.encodestring(yaml.dump(init))
     encoded_attrs = OrderedDict(args=data_header+encoded_args)
 

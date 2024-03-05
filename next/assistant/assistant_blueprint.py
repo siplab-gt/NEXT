@@ -73,7 +73,7 @@ class ExperimentAssistant(Resource):
         else:
             args['upload'] = True
 
-        args['args'] = yaml.load(args['args'])
+        args['args'] = yaml.load(args['args'], Loader=yaml.SafeLoader)
 
         try:
             init_exp_args = args['args']

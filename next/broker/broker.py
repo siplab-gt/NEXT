@@ -1,6 +1,7 @@
 import next.utils as utils
 
 from datetime import datetime,timedelta
+# from kombu import Exchange, Connection
 
 import celery
 from next.broker.celery_app import tasks as tasks
@@ -25,6 +26,14 @@ class JobBroker:
         # location of hashes
         self.r = redis.StrictRedis(host=next.constants.RABBITREDIS_HOSTNAME, port=next.constants.RABBITREDIS_PORT, db=0)
 
+    # def __declare_exchange(self, domain, name):
+    #     # Configuration for RabbitMQ
+    #     exchange_name = '{}@{}'.format(name, domain)
+    #     exchange_type = 'direct'  # Could be 'topic', 'fanout', or other types depending on your application need
+    #     with Connection(next.constants.BROKER_URL) as conn:
+    #         exchange = Exchange(exchange_name, type=exchange_type, durable=True)
+    #         exchange(conn).declare()
+
     def applyAsync(self, app_id, exp_uid, task_name, args, ignore_result=False):
         """
         Run a task (task_name) on a set of args with a given app_id, and exp_uid.
@@ -40,6 +49,9 @@ class JobBroker:
         submit_timestamp = utils.datetimeNow('string')
         domain = self.__get_domain_for_job(app_id+"_"+exp_uid)
         if next.constants.CELERY_ON:
+            # Declare the exchange
+            # self.__declare_exchange(domain, 'async')
+
             result = tasks.apply.apply_async(args=[app_id,
                                                    exp_uid,
                                                    task_name,
@@ -73,6 +85,9 @@ class JobBroker:
         submit_timestamp = utils.datetimeNow('string')
         domain = self.__get_domain_for_job(app_id+"_"+exp_uid)
         if next.constants.CELERY_ON:
+            # # Declare the exchange
+            # self.__declare_exchange(domain, 'dashboard')
+
             result = tasks.apply_dashboard.apply_async(args=[app_id,
                                                              exp_uid,
                                                              args,
@@ -143,6 +158,9 @@ class JobBroker:
             soft_time_limit = time_limit
             hard_time_limit = time_limit + .01
         if next.constants.CELERY_ON:
+            # # Declare the exchange
+            # self.__declare_exchange(domain, 'sync_queue_'+str(queue_number))
+
             result = tasks.apply_sync_by_namespace.apply_async(args=[app_id,exp_uid,
                                                                      alg_id,alg_label,
                                                                      task_name, args,
@@ -172,6 +190,9 @@ class JobBroker:
         This implementation assumes just a single master node and no workers
         so only a single hostname (e.g. localhost) has celery workers.
         """
+        # TODO: sort this out, why doesnt multi worker work
+        domain = 'test_worker'
+        return domain
         if self.r.exists('MINIONWORKER_HOSTNAME'):
             self.hostname = self.r.get('MINIONWORKER_HOSTNAME')
             utils.debug_print('Found hostname: {} (Redis)'.format(self.hostname))
