@@ -1,5 +1,5 @@
 """
-next_backend Participant Resource 
+next_backend Participant Resource
 author: Christopher Fernandez, Lalit Jain
 Resource for accessing all participant data related to a resource
 """
@@ -16,7 +16,7 @@ from flask_restful import Resource, reqparse
 import traceback
 
 import json
-from io import BytesIO 
+from io import BytesIO
 import zipfile
 
 import next.utils
@@ -32,7 +32,7 @@ ell = LoggerAPI()
 resource_manager = ResourceManager()
 
 # Request parser. Checks that necessary dictionary keys are available in a given resource.
-# We rely on learningLib functions to ensure that all necessary arguments are available and parsed. 
+# We rely on learningLib functions to ensure that all necessary arguments are available and parsed.
 post_parser = reqparse.RequestParser(argument_class=APIArgument)
 
 # Custom errors for GET and POST verbs on experiment resource
@@ -67,7 +67,7 @@ class Participants(Resource):
         **Example response**:
 
         .. sourcecode:: http
-        
+
         HTTP/1.1 200 OK
         Vary: Accept
         Content-Type: application/json
@@ -79,7 +79,7 @@ class Participants(Resource):
         		status: OK,
        		},
         }
-        
+
         :>json all_participant_responses: list of all participant_responses
 
         :statuscode 200: Participants responses successfully returned
@@ -133,7 +133,7 @@ class Participants(Resource):
             zip_responses.seek(0)
 
             return send_file(zip_responses,
-                             attachment_filename=filename + '.zip',
+                             download_name=filename + '.zip',
                              as_attachment='True')
         else:
             return api_util.attach_meta(all_responses, meta_success), 200

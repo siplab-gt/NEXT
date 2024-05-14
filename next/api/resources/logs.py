@@ -1,7 +1,7 @@
 """
-next_backend Logs Resource 
+next_backend Logs Resource
 author: Christopher Fernandez, Lalit Jain
-Logs resource for all logs associated with a specified experiment. 
+Logs resource for all logs associated with a specified experiment.
 """
 
 '''
@@ -24,7 +24,7 @@ from next.api.resource_manager import ResourceManager
 resource_manager = ResourceManager()
 
 # Request parser. Checks that necessary dictionary keys are available in a given resource.
-# We rely on learningLib functions to ensure that all necessary arguments are available and parsed. 
+# We rely on learningLib functions to ensure that all necessary arguments are available and parsed.
 post_parser = reqparse.RequestParser(argument_class=APIArgument)
 
 # Custom errors for GET and POST verbs on experiment resource
@@ -60,7 +60,7 @@ class Logs(Resource):
         **Example response**:
 
         .. sourcecode:: http
-        
+
         HTTP/1.1 200 OK
         Vary: Accept
         Content-Type: application/json
@@ -72,12 +72,12 @@ class Logs(Resource):
                 status: OK,
             },
         ]
-        
+
         :>json log_data: list experiment_logs of all logs for specified experiment.
 
         :statuscode 200: Logs successfully returned
         :statuscode 400: Logs failed to be generated
-        """ 
+        """
 
         zip_true = False
         if request.args.get('zip'):
@@ -86,7 +86,7 @@ class Logs(Resource):
             except:
                 pass
 
-        
+
         # Get logs for exp_uid from resource_manager
         if log_type:
             experiment_logs = resource_manager.get_experiment_logs_of_type(exp_uid,
@@ -102,7 +102,7 @@ class Logs(Resource):
                     zf.writestr('logs.json', json.dumps(all_logs))
                 zip_logs.seek(0)
                 return send_file(zip_logs,
-                                 attachment_filename='logs.zip',
+                                 download_name='logs.zip',
                                  as_attachment='True')
             else:
                 return attach_meta(all_logs,meta_success), 200
