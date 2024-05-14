@@ -1,4 +1,4 @@
-from StringIO import StringIO
+from io import StringIO
 import pandas as pd
 from flask import Flask, send_file, request, abort
 from flask_restful import Resource, reqparse

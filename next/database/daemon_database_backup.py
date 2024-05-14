@@ -23,7 +23,7 @@ import os
 while(1):
 
 	timestamp = utils.datetimeNow()
-	print "[ %s ] Calling database daemon..." % str(timestamp)
+	print("[ %s ] Calling database daemon..." % str(timestamp))
 	subprocess.call('python ./next/database/database_backup.py',shell=True)
 
 	time.sleep(3600*6) # once every 6 hours

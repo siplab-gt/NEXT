@@ -2,7 +2,7 @@
 Layer for interfacing with Mongo.
 """
 
-import cPickle
+import pickle
 import traceback
 from datetime import datetime
 import time
@@ -10,6 +10,7 @@ from functools import wraps
 
 import numpy as np
 import pymongo
+from pymongo import ReturnDocument
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 from bson.binary import Binary
@@ -21,7 +22,7 @@ import next.utils as utils
 try:
     import next.broker.broker
 except:
-    print "Warning: you will not be able to submit jobs to the broker"
+    print("Warning: you will not be able to submit jobs to the broker")
     pass
 
 class DatabaseException(BaseException):
@@ -42,7 +43,7 @@ def to_db_fmt(x):
 
     # recursive descent through dicts
     if isinstance(x, dict):
-        return {k: to_db_fmt(v) for k, v in x.items()}
+        return {k: to_db_fmt(v) for k, v in list(x.items())}
 
     # convert Numpy arrays to python arrays
     # note: assumes that .tolist() will return only database-acceptable types
@@ -50,7 +51,7 @@ def to_db_fmt(x):
         return x.tolist()
 
     # types that MongoDB can natively store
-    if type(x) in {bool, int, float, long, complex, str, unicode, datetime}:
+    if type(x) in {bool, int, float, int, complex, str, str, datetime}:
         return x
 
     # interface types. don't repickle these
@@ -58,7 +59,7 @@ def to_db_fmt(x):
         return x
 
     # pickle everything else, wrap in MongoDB `Binary`
-    return Binary(cPickle.dumps(x, protocol=2))
+    return Binary(pickle.dumps(x, protocol=2))
 
 def from_db_fmt(x):
     # recursive descent through lists
@@ -67,7 +68,7 @@ def from_db_fmt(x):
 
     # recursive descent through dicts
     if isinstance(x, dict):
-        return {k: from_db_fmt(v) for k, v in x.items()}
+        return {k: from_db_fmt(v) for k, v in list(x.items())}
 
     # further code occasionally serializes `ObjectId`s to json, so stringify them now
     if isinstance(x, ObjectId):
@@ -76,8 +77,8 @@ def from_db_fmt(x):
     if isinstance(x, Binary):
         # this might be pickled data; let's attempt to deserialize it
         try:
-            return cPickle.loads(x)
-        except cPickle.UnpicklingError:
+            return pickle.loads(x)
+        except pickle.UnpicklingError:
             # this wasn't pickled data. just return it.
             return x
 
@@ -108,12 +109,13 @@ class DatabaseAPI(object):
     def connect_mongo(self, host, port):
         # Note: w=0 disables write acknowledgement, making PyMongo send writes
         #       without waiting to see if they succeeded
-        self.client = MongoClient(host, port, w=0)
+        # Note: w=1 is needed in py >= 3.2 for find_one_and_update to work
+        self.client = MongoClient(host, port, w=1)
 
         if not self.is_connected():
             raise DatabaseException("Server not available!")
 
-    def close():
+    def close(self):
         self.client.close()
 
     def is_connected(self):
@@ -157,13 +159,13 @@ class DatabaseAPI(object):
             new=True, upsert=True).get(key)
 
     def increment_many(self,bucket_id,doc_uid,key_value_dict):
-        projection = {k: True for k in key_value_dict.keys()}
-        values = {k: v for k, v in key_value_dict.items() if v != 0}
+        projection = {k: True for k in list(key_value_dict.keys())}
+        values = {k: v for k, v in list(key_value_dict.items()) if v != 0}
 
         new_doc = self._bucket(bucket_id).find_one_and_update({"_id": doc_uid},
             update={'$inc': values}, projection=projection, new=True, upsert=True)
 
-        return {k: new_doc.get(k) for k in key_value_dict.keys()}
+        return {k: new_doc.get(k) for k in list(key_value_dict.keys())}
 
     def get_list(self,bucket_id,doc_uid,key):
         return self.get(bucket_id, doc_uid, key)
@@ -186,8 +188,12 @@ class DatabaseAPI(object):
             raise IndexError("Cannot pop from empty list!")
 
     def append_list(self,bucket_id,doc_uid,key,value):
-        return self._bucket(bucket_id).find_one_and_update({"_id": doc_uid},
-            {'$push': {key: to_db_fmt(value)}}, new=True, upsert=True).get(key)
+
+        self._bucket(bucket_id).find_one_and_update({"_id": doc_uid},
+            {'$push': {key: to_db_fmt(value)}}, new=True, upsert=True)
+        return self._bucket(bucket_id).find_one({'_id': doc_uid}).get(key)
+        # return self._bucket(bucket_id).find_one_and_update({"_id": doc_uid},
+        #     {'$push': {key: to_db_fmt(value)}}, new=True, upsert=True).get(key)
 
     def set_list(self,bucket_id,doc_uid,key,value):
         self.set(bucket_id, doc_uid, key, value)
@@ -220,7 +226,7 @@ class DatabaseAPI(object):
             {'$unset': {key: True}})
 
     def ensure_index(self,bucket_id,index_dict):
-        self._bucket(bucket_id).create_index(index_dict.items())
+        self._bucket(bucket_id).create_index(list(index_dict.items()))
 
     def drop_all_indexes(self,bucket_id):
         self._bucket(bucket_id).drop_indexes()

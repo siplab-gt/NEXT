@@ -62,7 +62,7 @@ class SimpleTargetManager(object):
             raise DatabaseException("No documents with exp_uid {} could be retrieved".format(exp_uid))
         # Pop target_blob_dict out of list
         for i in range(len(mongotized_target_blob)):
-            if 'targetless' in mongotized_target_blob[i].keys():
+            if 'targetless' in list(mongotized_target_blob[i].keys()):
                 mongotized_target_blob.pop(i)
                 break
         try:

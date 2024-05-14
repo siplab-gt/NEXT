@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template
 import json, sys, verifier
-import doc as doc_gen
+from . import doc as doc_gen
 app = Flask(__name__, static_url_path='/static')
 
 @app.route('/doc/<string:form>')
@@ -23,7 +23,7 @@ def form(fn="excite"):
 
 @app.route('/submit', methods=["POST"])
 def submit():
-    print(json.dumps(request.data))
+    print((json.dumps(request.data)))
     return "done"
     
 if __name__ == '__main__':

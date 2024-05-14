@@ -1,22 +1,22 @@
 """
-Utility functions for the api. This includes generation of meta and error messages. 
+Utility functions for the api. This includes generation of meta and error messages.
 All overrided classes and methods of Flask should go here.
 
-Author: Lalit Jain, lalitkumarj@gmail.com 
+Author: Lalit Jain, lalitkumarj@gmail.com
 """
 
 import time
 
 def timeit(f):
-    """ 
+    """
     Utility used to time the duration of code execution. This script can be composed with any other script.
-    
-    Usage::\n
-      def f(n): 
-        return n**n  
 
-      def g(n): 
-        return n,n**n 
+    Usage::\n
+      def f(n):
+        return n**n
+
+      def g(n):
+        return n,n**n
 
       answer0,dt = timeit(f)(3)
       answer1,answer2,dt = timeit(g)(3)
@@ -35,15 +35,15 @@ def timeit(f):
 def attach_meta(response, meta, **kwargs):
     """
     Attach a meta dictionary to a response dictionary.
- 
+
     Inputs: :\n
     	(dict) response, (dict) meta, (key-value pairs) kwargs - optional messages to add to mets
 
     Usage: :\n
     """
-    for k, v in kwargs.iteritems():
+    for k, v in kwargs.items():
         meta[k] = v
-        
+
     response["meta"] = meta
     return response
 
@@ -59,17 +59,17 @@ import sys, traceback
 class NextBackendApi(Api):
     """
     Subclass of the default Api class of Flask-Restful with custom error handling for 500 requests
-    
+
     All other errors are passed onto the default handle_error.
     """
     def handle_error(self, e, **kwargs):
         exc_type, exc_value, tb = sys.exc_info()
-        backend_error = traceback.format_exc(tb)            
-        print "backend_error", backend_error,exc_type, exc_value, tb, traceback.format_exc(tb)
+        backend_error = traceback.format_exc(tb)
+        print("backend_error", backend_error,exc_type, exc_value, tb, traceback.format_exc(tb))
 
         # Catch internal system errors
         code = getattr(e, 'code', 500)
-        if code == 500:      
+        if code == 500:
             response = {
                 'meta':{
                     'status': 'FAIL',
@@ -78,8 +78,8 @@ class NextBackendApi(Api):
                     'backend_error': backend_error
                 }
             }
-            return self.make_response(response, 500)        
-    	return super(NextBackendApi, self).handle_error(e) 
+            return self.make_response(response, 500)
+        return super(NextBackendApi, self).handle_error(e)
 
 
 
@@ -93,10 +93,10 @@ class APIArgument(Argument):
     """
     def __init__(self, *args, **kwargs):
         """
-        Pass up the default arguments. 
+        Pass up the default arguments.
         """
         super(APIArgument, self).__init__(*args, **kwargs)
-    
+
     def handle_validation_error(self, error, bundle_errors):
         """
         Called when an error is raised while parsing. Aborts the request

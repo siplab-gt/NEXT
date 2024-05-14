@@ -80,10 +80,10 @@ CELERY_RESULT_BACKEND = 'redis://{hostname}:{port}/{db}/'.format(
     port=RABBITREDIS_PORT,
     db=os.environ.get('RABBITREDIS_DB', '0'))
 # CELERY_RESULT_BACKEND = BROKER_URL
-CELERY_TASK_RESULT_EXPIRES=60
-CELERY_TASK_SERIALIZER='json'
-CELERY_ACCEPT_CONTENT=['json']  # Ignore other content
-CELERY_RESULT_SERIALIZER='json'
+TASK_RESULT_EXPIRES=60
+TASK_SERIALIZER='json'
+ACCEPT_CONTENT=['json']  # Ignore other content
+RESULT_SERIALIZER='json'
 
 CELERY_ON = eval(os.environ.get('CELERY_ON','True'))
 

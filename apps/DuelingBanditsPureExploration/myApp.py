@@ -38,7 +38,7 @@ class MyApp:
         args: The experiment data, potentially modified.
         """
         # TODO: change this in every app type coded thus far!
-        if 'targetset' in args['targets'].keys():
+        if 'targetset' in list(args['targets'].keys()):
             n = len(args['targets']['targetset'])
             self.TargetManager.set_targetset(butler.exp_uid, args['targets']['targetset'])
         else:
@@ -108,10 +108,10 @@ class MyApp:
         scores, precisions = alg()
         ranks = (-numpy.array(scores)).argsort().tolist()
         n = len(scores)
-        indexes = numpy.array(range(n))[ranks]
+        indexes = numpy.array(list(range(n)))[ranks]
         scores = numpy.array(scores)[ranks]
         precisions = numpy.array(precisions)[ranks]
-        ranks = range(n)
+        ranks = list(range(n))
 
         targets = []
         for index in range(n):

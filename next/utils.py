@@ -1,6 +1,7 @@
 import yaml
 import random
 import sys
+import base64
 import pprint
 from decorator import decorator
 from line_profiler import LineProfiler
@@ -98,7 +99,7 @@ def getNewUID():
 
   Used for unique identifiers all over the system
   """
-  uid = os.urandom(16).encode('hex')
+  uid = os.urandom(16).hex()
   return uid
 
 
@@ -160,7 +161,7 @@ def filenames_to_ids(filenames, targets):
     if isinstance(filenames[0], tuple):
         return tuple([_to_ids(files, targets) for files in filenames])
     if isinstance(filenames[0], dict):
-        return {k: _to_ids(v, targets) for k, v in filenames.items()}
+        return {k: _to_ids(v, targets) for k, v in list(filenames.items())}
 
     ids = {_get_filename(target): target['target_id'] for target in targets}
 
@@ -180,16 +181,16 @@ def debug_print(*args, **kwargs):
             for line in lines:
                 pprint_arg = pprint.pformat(line).split('\n')
                 for line2 in pprint_arg:
-                    print '{}{}{}'.format(color_ansi[color],
+                    print('{}{}{}'.format(color_ansi[color],
                                           line2,
-                                          color_ansi['reset all'])
+                                          color_ansi['reset all']))
         else:
             pprint_a = pprint.pformat(a).split('\n')
             for line in pprint_a:
-                print '{}{}{}'.format(color_ansi[color],
+                print('{}{}{}'.format(color_ansi[color],
                                       line,
-                                      color_ansi['reset all'])
-    print ''
+                                      color_ansi['reset all']))
+    print('')
 
 def random_string(length=20):
     letters = list('qwertyuiopasdfghkjlzxcvbnm')

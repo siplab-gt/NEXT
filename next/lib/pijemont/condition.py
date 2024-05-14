@@ -21,7 +21,7 @@ class condition_lexer:
         try:
             t.value = float(t.value)
         except ValueError:
-            print("Integer value too large %d", t.value)
+            print(("Integer value too large %d", t.value))
             t.value = 0
         return t
 
@@ -98,9 +98,9 @@ class condition_parser:
 
 if __name__ == "__main__":
     p = condition_parser()
-    print(p.parse('2 > 3'))
-    print(p.parse('2 ( > 1 & > -1.5 )'))
+    print((p.parse('2 > 3')))
+    print((p.parse('2 ( > 1 & > -1.5 )')))
     try:
-        print(p.parse('2 ( > 1 & > -1a5 )'))
+        print((p.parse('2 ( > 1 & > -1a5 )')))
     except Exception as exc:
-        print("oops",exc)
+        print(("oops",exc))

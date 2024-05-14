@@ -34,7 +34,8 @@ class MyAlg:
       num_reported_answers = 0
 
     if num_reported_answers < R*n:
-      a = num_reported_answers/R
+      # force this to be an int
+      a = int(num_reported_answers/R)
       b = numpy.random.randint(n)
       while b==a:
         b = numpy.random.randint(n)
@@ -56,6 +57,7 @@ class MyAlg:
       q,score = utilsCrowdKernel.getRandomQuery(X)
       b,c,a = q
       p = 0
+
       for i in range(n):
         p += utilsCrowdKernel.getCrowdKernelTripletProbability(X[b],X[c],X[i]) * tau[a,i]
 
@@ -90,6 +92,7 @@ class MyAlg:
 
     n = butler.algorithms.get(key='n')
     num_reported_answers = butler.algorithms.increment(key='num_reported_answers')
+
     if num_reported_answers % int(n) == 0:
       butler.job('full_embedding_update', {}, time_limit=30)
     else:
@@ -105,7 +108,7 @@ class MyAlg:
     S = butler.algorithms.get(key='S')
 
     X = numpy.array(butler.algorithms.get(key='X'))
-    
+
     # set maximum time allowed to update embedding
     t_max = 1.0
     epsilon = 0.00001 # a relative convergence criterion, see computeEmbeddingWithGD documentation
@@ -122,7 +125,7 @@ class MyAlg:
 
     butler.algorithms.set(key='X',value=X.tolist())
     butler.algorithms.set(key='tau',value=tau.tolist())
-    
+
 
   def full_embedding_update(self,butler,args):
     verbose = False

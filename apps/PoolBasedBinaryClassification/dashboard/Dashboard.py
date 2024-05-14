@@ -30,9 +30,9 @@ class MyAppDashboard(AppDashboard):
 
         test_queries = butler.db.get_docs_with_filter(app.app_id+':queries',{'exp_uid':app.exp_uid, 'alg_label':test_alg_label})
 
-        test_S = [(query['target_index'], query['target_label']) 
+        test_S = [(query['target_index'], query['target_label'])
                             for query in test_queries
-                            if 'target_index' in query.keys()]
+                            if 'target_index' in list(query.keys())]
 
         targets = butler.targets.get_targetset(app.exp_uid)
         targets = sorted(targets,key=lambda x: x['target_id'])
@@ -43,10 +43,10 @@ class MyAppDashboard(AppDashboard):
             target_vec.append(1.)
             target_features.append(target_vec)
 
-        x_min = numpy.float('inf')
-        x_max = -numpy.float('inf')
-        y_min = numpy.float('inf')
-        y_max = -numpy.float('inf')
+        x_min = float('inf')
+        x_max = -float('inf')
+        y_min = float('inf')
+        y_max = -float('inf')
         list_of_alg_dicts = []
 
         for algorithm in alg_list:
@@ -72,7 +72,7 @@ class MyAppDashboard(AppDashboard):
             x = numpy.argsort(x)
             x = [x[i] for i in x]
             y = [y[i] for i in x]
-        
+
             alg_dict = {}
             alg_dict['legend_label'] = alg_label
             alg_dict['x'] = x
@@ -89,7 +89,7 @@ class MyAppDashboard(AppDashboard):
 
         import matplotlib.pyplot as plt
         import mpld3
-        fig, ax = plt.subplots(subplot_kw=dict(axisbg='#EEEEEE'))
+        fig, ax = plt.subplots(subplot_kw=dict(facecolor='#EEEEEE'))
         for alg_dict in list_of_alg_dicts:
             ax.plot(alg_dict['x'],alg_dict['y'],label=alg_dict['legend_label'])
         ax.set_xlabel('Number of answered queries')

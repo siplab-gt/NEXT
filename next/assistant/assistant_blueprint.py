@@ -40,14 +40,15 @@ def init_file(app_id=None):
 
 class ExperimentAssistant(Resource):
     def deserialise(self, data):
+        data = data.decode('utf-8')
         start = data.find('\n')
-        s = data[:start].decode('ascii')
+        s = data[:start]
         # print('s',s)
         d = [x.split(':') for x in s.split(';')]
         # print('d',d)
         start += 1
         ans = {}
-        for arg,size in d:
+        for arg, size in d:
             size = int(size)
             # print('a,s',arg,size)
             ans[arg] = data[start:start+size]
@@ -66,7 +67,7 @@ class ExperimentAssistant(Resource):
                 if args[key] in {'True', 'False'}:
                     args[key] = True if args[key] == 'True' else False
                 else:
-                    args[key] = base64.decodestring(args[key])
+                    args[key] = base64.b64decode(args[key]).decode('utf-8')
 
         if all([key not in args for key in ['bucket_id', 'key_id', 'secret_key']]):
             args['upload'] = False
@@ -77,7 +78,7 @@ class ExperimentAssistant(Resource):
 
         try:
             init_exp_args = args['args']
-            if 'targets' in args.keys():
+            if 'targets' in list(args.keys()):
                 target_zipfile = args['targets']
                 if args.get('upload', True):
                     bucket_id = args['bucket_id']
@@ -100,8 +101,8 @@ class ExperimentAssistant(Resource):
                     pairs = init_exp_args['args']['keys_for_all_targets']
 
                     for pair in pairs:
-                        map(lambda target: target.update({pair['key']: pair['value']}),
-                            init_exp_args['args']['targets']['targetset'])
+                        list(map(lambda target: target.update({pair['key']: pair['value']}),
+                            init_exp_args['args']['targets']['targetset']))
 
 
             # Init the experiment:

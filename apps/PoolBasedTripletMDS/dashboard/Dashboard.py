@@ -20,14 +20,14 @@ class MyAppDashboard(AppDashboard):
           (dict) MPLD3 plot dictionary
         """
         # get list of algorithms associated with project
-        args = butler.experiment.get(key='args')        
+        args = butler.experiment.get(key='args')
         test_alg_label = args['alg_list'][0]['test_alg_label']
 
         test_S = butler.queries.get(pattern={'exp_uid':app.exp_uid, 'alg_label':test_alg_label})
-        x_min = numpy.float('inf')
-        x_max = -numpy.float('inf')
-        y_min = numpy.float('inf')
-        y_max = -numpy.float('inf')
+        x_min = float('inf')
+        x_max = -float('inf')
+        y_min = float('inf')
+        y_max = -float('inf')
         list_of_alg_dicts = []
 
         for algorithm in args['alg_list']:
@@ -66,13 +66,28 @@ class MyAppDashboard(AppDashboard):
 
         import matplotlib.pyplot as plt
         import mpld3
-        fig, ax = plt.subplots(subplot_kw=dict(axisbg='#EEEEEE'))
+        fig, ax = plt.subplots(subplot_kw=dict(facecolor='#EEEEEE'))
         for alg_dict in list_of_alg_dicts:
             ax.plot(alg_dict['x'],alg_dict['y'],label=alg_dict['legend_label'])
         ax.set_xlabel('Number of answered triplets')
         ax.set_ylabel('Error on hold-out set')
-        ax.set_xlim([x_min,x_max])
-        ax.set_ylim([y_min,y_max])
+
+        # Check if data is ready before setting axis limits
+        if numpy.isfinite(x_min) and numpy.isfinite(x_max):
+            ax.set_xlim([x_min, x_max])
+        else:
+            # Log or handle the case where limits aren't ready
+            print("Test error plot - "
+                  "Error data not yet ready for setting limits (x-axis).")
+        # ax.set_xlim([x_min, x_max])
+        # Check if data is ready before setting axis limits
+        if numpy.isfinite(y_min) and numpy.isfinite(y_max):
+            ax.set_ylim([y_min, y_max])
+        else:
+            # Log or handle the case where limits aren't ready
+            print("Test error plot - "
+                  "Error data not yet ready for setting limits (y-axis).")
+        # ax.set_ylim([y_min, y_max])
         ax.grid(color='white', linestyle='solid')
         ax.set_title('Triplet Test Error', size=14)
         legend = ax.legend(loc=2,ncol=3,mode="expand")
@@ -106,10 +121,10 @@ class MyAppDashboard(AppDashboard):
         item = app.getModel(json.dumps({'exp_uid':app.exp_uid, 'args':{'alg_label':alg_label}}))
         embedding = item['X']
         data = []
-        x_min = numpy.float('inf')
-        x_max = -numpy.float('inf')
-        y_min = numpy.float('inf')
-        y_max = -numpy.float('inf')
+        x_min = float('inf')
+        x_max = -float('inf')
+        y_min = float('inf')
+        y_max = -float('inf')
         for idx,target in enumerate(embedding):
 
             target_dict = {}

@@ -105,7 +105,7 @@ class App(object):
             args_dict['git_hash'] = git_hash
             self.butler.experiment.set_many(key_value_dict=args_dict)
             return '{}', True, ''
-        except Exception, error:
+        except Exception as error:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             full_error = str(traceback.format_exc())+'\n'+str(error)
             utils.debug_print("initExp Exception: " + full_error, color='red')
@@ -117,7 +117,7 @@ class App(object):
 
     def getQuery(self, exp_uid, args_json):
         try:
-    	    args_dict = self.helper.convert_json(args_json)
+            args_dict = self.helper.convert_json(args_json)
             args_dict = verifier.verify(args_dict, self.reference_dict['getQuery']['args'])
             experiment_dict = self.butler.experiment.get()
             alg_list = experiment_dict['args']['alg_list']
@@ -127,7 +127,7 @@ class App(object):
             participant_uid = args_dict['args'].get('participant_uid', args_dict['exp_uid'])
             # Check to see if the first participant has come by and if not, save to db
             participant_doc = self.butler.participants.get(uid=participant_uid)
-            first_participant_query = participant_doc==None
+            first_participant_query = participant_doc is  None
             if first_participant_query:
                 participant_doc = {}
                 self.butler.participants.set(uid=participant_uid, value={'exp_uid':exp_uid, 'participant_uid':participant_uid})
@@ -175,7 +175,7 @@ class App(object):
                               'query_uid':query_uid})
             self.butler.queries.set(uid=query_uid, value=query_doc)
             return json.dumps({'args':query_doc,'meta':{'log_entry_durations':self.log_entry_durations}}), True,''
-        except Exception, error:
+        except Exception as error:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             full_error = str(traceback.format_exc())+'\n'+str(error)
             utils.debug_print("getQuery Exception: " + full_error, color='red')
@@ -195,7 +195,6 @@ class App(object):
                              utils.str2datetime(query['timestamp_query_generated'])
             round_trip_time = delta_datetime.total_seconds()
             response_time = float(args_dict['args'].get('response_time',0.))
-
             query_update = self.call_app_fn(query['alg_label'], query['alg_id'], 'processAnswer', args_dict)
             query_update.update({'response_time':response_time,
                                  'network_delay':round_trip_time - response_time,
@@ -205,14 +204,14 @@ class App(object):
 
             return json.dumps({'args': {}, 'meta': {'log_entry_durations':self.log_entry_durations}}), True, ''
 
-        except Exception, error:
+        except Exception as error:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             full_error = str(traceback.format_exc())+'\n'+str(error)
             utils.debug_print("processAnswer Exception: " + full_error, color='red')
-            log_entry = { 'exp_uid':exp_uid,'task':'processAnswer','error':full_error,'timestamp':utils.datetimeNow(),'args_json':args_json }
-            self.butler.ell.log( self.app_id+':APP-EXCEPTION', log_entry  )
-    	    traceback.print_tb(exc_traceback)
-    	    raise Exception(error)
+            log_entry = {'exp_uid': exp_uid, 'task': 'processAnswer', 'error': full_error, 'timestamp': utils.datetimeNow(), 'args_json': args_json}
+            self.butler.ell.log(self.app_id+':APP-EXCEPTION', log_entry)
+            traceback.print_tb(exc_traceback)
+            raise Exception(error)
 
     def getModel(self, exp_uid, args_json):
         try:
@@ -236,7 +235,7 @@ class App(object):
             return json.dumps({'args': myapp_response,
                                'meta': {'log_entry_durations':self.log_entry_durations,
                                         'timestamp': str(utils.datetimeNow())}}), True, ''
-        except Exception, error:
+        except Exception as error:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             full_error = str(traceback.format_exc())+'\n'+str(error)
             utils.debug_print("getModel Exception: " + full_error, color='red')

@@ -1,5 +1,5 @@
 import os
-import StringIO
+import io
 from functools import wraps
 
 import redis
@@ -107,7 +107,7 @@ class Memory(NextDictionary):
             self.ensure_connection()
             key = self.key_prefix + key
             d = self.cache.get(key)
-            f = StringIO.StringIO()
+            f = io.StringIO()
             n, l = d.split(":")
             l = int(l)
             n = int(n)

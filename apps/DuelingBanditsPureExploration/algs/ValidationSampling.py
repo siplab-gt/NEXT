@@ -19,7 +19,7 @@ class MyAlg:
                               value=failure_probability)
 
         alg = butler.algorithms.get()
-        params = alg.get(u'params', None)
+        params = alg.get('params', None)
         butler.algorithms.set(key='params', value=params)
 
         if params:

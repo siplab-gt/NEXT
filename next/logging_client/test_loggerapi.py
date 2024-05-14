@@ -44,5 +44,5 @@ def test_delete_logs_with_filter(lapi):
 
     lapi.delete_logs_with_filter(B, {'a': 2})
 
-    logs = [{k:v for k, v in d.items() if k != '_id'} for d in lapi._bucket(B).find()]
+    logs = [{k:v for k, v in list(d.items()) if k != '_id'} for d in lapi._bucket(B).find()]
     assert logs == [{'a': 6}]

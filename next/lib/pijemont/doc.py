@@ -1,11 +1,12 @@
-import json, sys, yaml, verifier
+import json, sys, yaml
+from .verifier import load_doc
 
 def get_docs(filename,base_path):
-    api,errs = verifier.load_doc(filename,base_path)
+    api,errs = load_doc(filename,base_path)
 
     if len(errs) > 0:
         raise Exception("Failed to verify: {}".format(errs))
-    
+
     return api,blank_gen(api),doc_gen(api)
 
 # def print_docs(api_url):
@@ -47,7 +48,7 @@ def args_gen(api, depth):
                                                                     value=args_gen(api['values'][k], depth+1),
                                                                     desc=("\n    "+indent+api['values'][k]['description'] if 'description' in api['values'][k] else ""))
                                                                     for k in api['values']]))
-                                
+
     elif(api["type"] == "tuple"):
         return "Tuple with the following values:\n{values}\n{indent}".format(
             indent=indent,

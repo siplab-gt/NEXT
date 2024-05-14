@@ -9,7 +9,7 @@ class MyApp:
 
     def initExp(self, butler, init_algs, args):
         exp_uid = butler.exp_uid
-        if 'targetset' in args['targets'].keys():
+        if 'targetset' in list(args['targets'].keys()):
             n  = len(args['targets']['targetset'])
             self.TargetManager.set_targetset(exp_uid, args['targets']['targetset'])
         else:

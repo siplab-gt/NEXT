@@ -1,29 +1,56 @@
-from boto.s3.connection import S3Connection
-from boto.s3.key import Key
+import boto3
 import next.utils as utils
 from pprint import pprint
 
+# TODO: grab from env
+AWS_ID =  ''
+AWS_KEY = ''
 
-def create_bucket(AWS_BUCKET_NAME, AWS_ID, AWS_KEY):
+# Initialize a session using your AWS credentials
+session = boto3.Session(
+    aws_access_key_id=AWS_ID,
+    aws_secret_access_key=AWS_KEY
+)
+
+# Use the session to create S3 resource
+s3 = session.resource('s3')
+
+def create_bucket(AWS_BUCKET_NAME):
     """
     Creates a bucket for an S3 account
     """
-    conn = S3Connection(AWS_ID, AWS_KEY)
-    bucket = conn.create_bucket(AWS_BUCKET_NAME)
+    bucket = s3.create_bucket(Bucket=AWS_BUCKET_NAME)
     return bucket
 
-
-def get_bucket(AWS_BUCKET_NAME, AWS_ID, AWS_KEY):
+def get_bucket(AWS_BUCKET_NAME):
     """
-    Creates a bucket for an S3 account
+    Retrieves a bucket object
     """
-    conn = S3Connection(AWS_ID, AWS_KEY)
-    bucket = conn.get_bucket(AWS_BUCKET_NAME, validate=False)
-    return bucket
+    bucket = s3.Bucket(AWS_BUCKET_NAME)
+    # If you need to verify the bucket exists on S3, use the following:
+    exists = True
+    try:
+        s3.meta.client.head_bucket(Bucket=AWS_BUCKET_NAME)
+    except boto3.exceptions.botocore.exceptions.ClientError as e:
+        # If a client error is thrown, check that it was a 404 error.
+        # If it was a 404 error, then the bucket does not exist.
+        error_code = int(e.response['Error']['Code'])
+        if error_code == 404:
+            exists = False
+    return bucket if exists else None
 
-def upload(filename, file_object, bucket):
-    k = Key(bucket)
-    k.key = filename
-    k.set_contents_from_file(file_object)
-    k.set_acl('public-read')
-    return k.generate_url(expires_in=0, query_auth=False, force_http=True)
+def upload(filename, file_object, AWS_BUCKET_NAME):
+    """
+    Uploads a file object to an S3 bucket
+    """
+    object = s3.Object(AWS_BUCKET_NAME, filename)
+    object.put(Body=file_object)
+    object.Acl().put(ACL='public-read')
+
+    # Generate the URL
+    url = "http://{}.s3.amazonaws.com/{}".format(AWS_BUCKET_NAME, filename)
+    return url
+
+# Note: AWS_ID and AWS_KEY are your AWS credentials.
+# Remove them from function arguments if you're using a session or handling
+# credentials in a different way (e.g., via environment variables or IAM roles).

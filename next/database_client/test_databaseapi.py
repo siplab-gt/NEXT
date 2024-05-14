@@ -93,15 +93,15 @@ def test_increment_many(db):
 
 def test_pop_list(db):
     B = 'test_pop_list'
-    doc = {'a': range(0, 10+1)}
+    doc = {'a': list(range(0, 10+1))}
 
     doc_uid = db._bucket(B).insert_one(doc).inserted_id
 
     assert db.pop_list(B, doc_uid, 'a', -1) == 10
-    assert db.get(B, doc_uid, 'a') == range(0, 9+1)
+    assert db.get(B, doc_uid, 'a') == list(range(0, 9+1))
 
     assert db.pop_list(B, doc_uid, 'a', 0) == 0
-    assert db.get(B, doc_uid, 'a') == range(1, 9+1)
+    assert db.get(B, doc_uid, 'a') == list(range(1, 9+1))
 
     # popping from an empty list should raise an exception
     db.set(B, doc_uid, 'a', [])
@@ -173,7 +173,7 @@ def test_get_docs_with_filter(db):
 
     retrieved_docs = db.get_docs_with_filter(B, {'b': 2})
     # remove `_id`s for asserts
-    retrieved_docs = [{k: v for k, v in r.items() if k != '_id'}
+    retrieved_docs = [{k: v for k, v in list(r.items()) if k != '_id'}
         for r in retrieved_docs]
     assert {'a': 3, 'b': 2} in retrieved_docs
     assert {'a': 5, 'b': 2} in retrieved_docs
@@ -208,12 +208,12 @@ def test_delete_docs_with_filter(db):
 
     db.delete_docs_with_filter(B, {'a': 2})
 
-    docs = [{k:v for k, v in d.items() if k != '_id'} for d in db._bucket(B).find()]
+    docs = [{k:v for k, v in list(d.items()) if k != '_id'} for d in db._bucket(B).find()]
     assert docs == [{'a': 6}]
 
 # === test utils ===
 def test_to_db_fmt():
-    import cPickle
+    import pickle
     import numpy as np
     from bson.binary import Binary
 
@@ -232,10 +232,10 @@ def test_to_db_fmt():
 
     # objects should be pickled
     x = object()
-    assert to_db_fmt(x) == Binary(cPickle.dumps(x, protocol=2))
+    assert to_db_fmt(x) == Binary(pickle.dumps(x, protocol=2))
 
 def test_from_db_fmt():
-    import cPickle
+    import pickle
     import numpy as np
 
     def does_invert(x):

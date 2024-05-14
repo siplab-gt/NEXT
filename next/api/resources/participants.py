@@ -9,7 +9,7 @@ example use:
 get a tripletMDS query:
 curl -X GET http://localhost:8001/api/experiment/[exp_uid]/participants
 '''
-from StringIO import StringIO
+from io import StringIO
 import pandas as pd
 from flask import Flask, send_file, request, abort
 from flask_restful import Resource, reqparse
@@ -87,10 +87,10 @@ class Participants(Resource):
     	"""
         true_values ={1, '1', 'True', 'true'}
         zip_true = False
-        if 'zip' in request.args.keys():
+        if 'zip' in list(request.args.keys()):
             zip_true = True if request.args.get('zip') in true_values else False
         csv = False
-        if 'csv' in request.args.keys():
+        if 'csv' in list(request.args.keys()):
             csv = True if request.args.get('csv') in true_values else False
 
         # Get all participants for exp_uid from resource_manager

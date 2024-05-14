@@ -31,6 +31,7 @@ broker = next.broker.broker.JobBroker()
 import next.apps.Butler as Butler
 Butler = Butler.Butler
 
+
 # add database commands
 dashboard_interface = api_util.NextBackendApi(dashboard)
 from next.dashboard.database import DatabaseBackup, DatabaseRestore
@@ -64,7 +65,7 @@ def experiment_list():
                                     'retired': rm.is_exp_retired(exp_uid),
                                     })
             except IndexError as e:
-                print e
+                print(e)
                 pass
 
     return render_template('experiment_list.html',

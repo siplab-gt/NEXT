@@ -4,7 +4,7 @@ utilsMDS.py
 author: Kevin Jamieson (kevin.g.jamieson@gmail.com)
 edited: 1/18/15
 
-This module has methods that assist with non-metric multidimensional scaling. 
+This module has methods that assist with non-metric multidimensional scaling.
 
 If you're trying to COMPUTE an embedding, you might simply call:
     X,emp_loss = computeEmbedding(n,d,S)
@@ -16,6 +16,7 @@ from numpy import *
 from numpy.random import *
 import numpy.random
 from numpy.linalg import *
+import math
 
 #eig = numpy.linalg
 norm = linalg.norm
@@ -32,14 +33,14 @@ def main():
 
     Creates some fake data and finds an embedding
     """
-    
+
     # generate some fake data
     n = 30
     d = 2
     m = int(ceil(40*n*d*log(n)))  # number of labels
-    
+
     p = 0.1; # error rate
-    
+
     Strain = []
     Stest = []
     Xtrue = randn(n,d);
@@ -64,34 +65,34 @@ def main():
             Stest.append(q)
 
 
-    # compute embedding 
+    # compute embedding
     X,emp_loss_train = computeEmbedding(n,d,Strain,num_random_restarts=2,epsilon=0.01,verbose=True)
 
     # compute loss on test set
     emp_loss_test,hinge_loss_test = getLoss(X,Stest)
 
-    print
-    print 'Training loss = %f,   Test loss = %f' %(emp_loss_train,emp_loss_test)
-    
+    print()
+    print('Training loss = %f,   Test loss = %f' %(emp_loss_train,emp_loss_test))
+
 
 
 def getRandomQuery(X):
     """
-    Outputs a triplet [i,j,k] chosen uniformly at random from all possible triplets 
+    Outputs a triplet [i,j,k] chosen uniformly at random from all possible triplets
     and score = abs( ||x_i - x_k||^2 - ||x_j - x_k||^2 )
-    
+
     Inputs:
         (numpy.ndarray) X : matrix from which n is extracted from and score is derived
-        
+
     Outputs:
         [(int) i, (int) j, (int) k] q : where k in [n], i in [n]-k, j in [n]-k-j
         (float) score : signed distance to current solution (positive if it agrees, negative otherwise)
-        
+
     Usage:
         q,score = getRandomQuery(X)
     """
     n,d = X.shape
-    
+
     i = randint(n)
     j = randint(n)
     while (j==i):
@@ -100,7 +101,7 @@ def getRandomQuery(X):
     while (k==i) | (k==j):
         k = randint(n)
     q = [i, j, k]
-    
+
     score = getTripletScore(X,q)
 
     return q,score
@@ -108,7 +109,7 @@ def getRandomQuery(X):
 def getTripletScore(X,q):
     """
     Given X,q=[i,j,k] returns score = ||x_j - x_k||^2 - ||x_i - x_k||^2
-    If score > 0 then the triplet agrees with the embedding, otherwise it does not 
+    If score > 0 then the triplet agrees with the embedding, otherwise it does not
 
     Usage:
         score = getTripletScore(X,[3,4,5])
@@ -135,12 +136,12 @@ def getLoss(X,S):
 
     emp_loss = 0 # 0/1 loss
     hinge_loss = 0 # hinge loss
-    
+
     for q in S:
         loss_ijk = getTripletScore(X,q)
 
         hinge_loss = hinge_loss + max(0,1. - loss_ijk)
-            
+
         if loss_ijk < 0:
             emp_loss = emp_loss + 1.
 
@@ -166,7 +167,7 @@ def getGradient(X,S):
     # pattern for computing gradient
     H = mat([[2.,0.,-2.],[ 0.,  -2.,  2.],[ -2.,  2.,  0.]])
 
-    # compute gradient 
+    # compute gradient
     G = zeros((n,d))
     for q in S:
         score = getTripletScore(X,q)
@@ -214,7 +215,7 @@ def computeEmbedding(n,d,S,num_random_restarts=0,max_num_passes=0,max_iter_GD=0,
 
     Outputs:
         (numpy.ndarray) X : output embedding
-        (float) gamma : Equal to a/b where a is max row norm of the gradient matrix and b is the avg row norm of the centered embedding matrix X. This is a means to determine how close the current solution is to the "best" solution.  
+        (float) gamma : Equal to a/b where a is max row norm of the gradient matrix and b is the avg row norm of the centered embedding matrix X. This is a means to determine how close the current solution is to the "best" solution.
     """
 
     if max_num_passes==0:
@@ -247,16 +248,16 @@ def computeEmbedding(n,d,S,num_random_restarts=0,max_num_passes=0,max_iter_GD=0,
             emp_loss_old = emp_loss_new
 
         if verbose:
-            print "restart %d:   emp_loss = %f,   hinge_loss = %f,   duration=%f+%f" %(num_restarts,emp_loss_new,hinge_loss_new,te_sgd,te_gd)
+            print("restart %d:   emp_loss = %f,   hinge_loss = %f,   duration=%f+%f" %(num_restarts,emp_loss_new,hinge_loss_new,te_sgd,te_gd))
 
     return X_old,emp_loss_old
 
 def computeEmbeddingWithEpochSGD(n,d,S,max_num_passes=0,max_norm=0,epsilon=0.01,a0=0.1,verbose=False):
     """
-    Performs epochSGD where step size is constant across each epoch, epochs are 
+    Performs epochSGD where step size is constant across each epoch, epochs are
     doubling in size, and step sizes are getting cut in half after each epoch.
-    This has the effect of having a step size decreasing like 1/T. a0 defines 
-    the initial step size on the first epoch. 
+    This has the effect of having a step size decreasing like 1/T. a0 defines
+    the initial step size on the first epoch.
 
     S is a list of triplets such that for each q in S, q = [i,j,k] means that
     object k should be closer to i than j.
@@ -264,7 +265,7 @@ def computeEmbeddingWithEpochSGD(n,d,S,max_num_passes=0,max_norm=0,epsilon=0.01,
     Inputs:
         (int) n : number of objects in embedding
         (int) d : desired dimension
-        (list [(int) i, (int) j,(int) k]) S : list of triplets, i,j,k must be in [n]. 
+        (list [(int) i, (int) j,(int) k]) S : list of triplets, i,j,k must be in [n].
         (int) max_num_passes : maximum number of passes over data (default equals 16)
         (float) max_norm : the maximum allowed norm of any one object (default equals 10*d)
         (float) epsilon : parameter that controls stopping condition (default = 0.01)
@@ -273,7 +274,7 @@ def computeEmbeddingWithEpochSGD(n,d,S,max_num_passes=0,max_norm=0,epsilon=0.01,
 
     Outputs:
         (numpy.ndarray) X : output embedding
-        (float) gamma : Equal to a/b where a is max row norm of the gradient matrix and b is the avg row norm of the centered embedding matrix X. This is a means to determine how close the current solution is to the "best" solution.  
+        (float) gamma : Equal to a/b where a is max row norm of the gradient matrix and b is the avg row norm of the centered embedding matrix X. This is a means to determine how close the current solution is to the "best" solution.
 
 
     Usage:
@@ -303,7 +304,7 @@ def computeEmbeddingWithEpochSGD(n,d,S,max_num_passes=0,max_norm=0,epsilon=0.01,
     # check losses
     if verbose:
         emp_loss,hinge_loss = getLoss(X,S)
-        print "iter=%d,   emp_loss=%f,   hinge_loss=%f,   a=%f" % (0,emp_loss,hinge_loss,a)
+        print("iter=%d,   emp_loss=%f,   hinge_loss=%f,   a=%f" % (0,emp_loss,hinge_loss,a))
 
     rel_max_grad = None
     while t < max_iters:
@@ -326,7 +327,7 @@ def computeEmbeddingWithEpochSGD(n,d,S,max_num_passes=0,max_norm=0,epsilon=0.01,
                 rel_avg_grad = sqrt( avg_grad_row_norm_sq / avg_row_norm_sq )
 
                 if verbose:
-                    print "iter=%d,   emp_loss=%f,   hinge_loss=%f,   rel_avg_grad=%f,   rel_max_grad=%f,   a=%f" % (t,emp_loss,hinge_loss,rel_avg_grad,rel_max_grad,a)
+                    print("iter=%d,   emp_loss=%f,   hinge_loss=%f,   rel_avg_grad=%f,   rel_max_grad=%f,   a=%f" % (t,emp_loss,hinge_loss,rel_avg_grad,rel_max_grad,a))
 
                 if rel_max_grad < epsilon:
                     break
@@ -360,7 +361,7 @@ def computeEmbeddingWithGD(X,S,max_iters=0,max_norm=0,epsilon=0.01,c1=0.0001,rho
 
     Inputs:
         (numpy.ndarray) X : input embedding
-        (list [(int) i, (int) j,(int) k]) S : list of triplets, i,j,k must be in [n]. 
+        (list [(int) i, (int) j,(int) k]) S : list of triplets, i,j,k must be in [n].
         (int) max_iters : maximum number of iterations of SGD (default equals 40*len(S))
         (float) max_norm : the maximum allowed norm of any one object (default equals 10*d)
         (float) epsilon : parameter that controls stopping condition, exits if gamma<epsilon (default = 0.01)
@@ -372,7 +373,7 @@ def computeEmbeddingWithGD(X,S,max_iters=0,max_norm=0,epsilon=0.01,c1=0.0001,rho
         (numpy.ndarray) X : output embedding
         (float) emp_loss : output 0/1 error
         (float) hinge_loss : output hinge loss
-        (float) gamma : Equal to a/b where a is max row norm of the gradient matrix and b is the avg row norm of the centered embedding matrix X. This is a means to determine how close the current solution is to the "best" solution.  
+        (float) gamma : Equal to a/b where a is max row norm of the gradient matrix and b is the avg row norm of the centered embedding matrix X. This is a means to determine how close the current solution is to the "best" solution.
 
 
     Usage:
@@ -391,7 +392,7 @@ def computeEmbeddingWithGD(X,S,max_iters=0,max_norm=0,epsilon=0.01,c1=0.0001,rho
     # check losses
     if verbose:
         emp_loss,hinge_loss = getLoss(X,S)
-        print "iter=%d,   emp_loss=%f,   hinge_loss=%f,   a=%f" % (0,emp_loss,hinge_loss,float('nan'))
+        print("iter=%d,   emp_loss=%f,   hinge_loss=%f,   a=%f" % (0,emp_loss,hinge_loss,float('nan')))
 
     alpha = .5
     t = 0
@@ -428,7 +429,7 @@ def computeEmbeddingWithGD(X,S,max_iters=0,max_norm=0,epsilon=0.01,c1=0.0001,rho
 
         # check losses
         if verbose:
-            print "hinge iter=%d,   emp_loss=%f,   hinge_loss=%f,   rel_avg_grad=%f,   rel_max_grad=%f,   a=%f,   i_t=%d" % (t,emp_loss_k,hinge_loss_k,rel_avg_grad,rel_max_grad,alpha,inner_t)
+            print("hinge iter=%d,   emp_loss=%f,   hinge_loss=%f,   rel_avg_grad=%f,   rel_max_grad=%f,   a=%f,   i_t=%d" % (t,emp_loss_k,hinge_loss_k,rel_avg_grad,rel_max_grad,alpha,inner_t))
 
     return X,emp_loss_0,hinge_loss_0,rel_max_grad
 

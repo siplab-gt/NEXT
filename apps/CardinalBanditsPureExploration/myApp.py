@@ -26,7 +26,7 @@ class MyApp:
         -------
         exp_data: The experiment data, potentially modified.
         """
-        if 'targetset' in args['targets'].keys():
+        if 'targetset' in list(args['targets'].keys()):
             n  = len(args['targets']['targetset'])
             self.TargetManager.set_targetset(butler.exp_uid, args['targets']['targetset'])
         else:
@@ -34,7 +34,7 @@ class MyApp:
         args['n'] = n
         del args['targets']
 
-        if 'labels' in args['rating_scale'].keys():
+        if 'labels' in list(args['rating_scale'].keys()):
             labels = args['rating_scale']['labels']
             max_label = max( label['reward'] for label in labels )
             min_label = min( label['reward'] for label in labels )
@@ -80,12 +80,12 @@ class MyApp:
         scores, precisions,counts = alg_response
         ranks = (-numpy.array(scores)).argsort().tolist()
         n = len(scores)
-        indexes = numpy.array(range(n))[ranks]
+        indexes = numpy.array(list(range(n)))[ranks]
         scores = numpy.array(scores)[ranks]
         precisions = numpy.array(precisions)[ranks]
         counts = numpy.array(counts)[ranks]
         standard_deviations = precisions*numpy.sqrt(counts)
-        ranks = range(n)
+        ranks = list(range(n))
         target_set = self.TargetManager.get_targetset(butler.exp_uid)
         target_set = sorted(target_set,key=lambda x: x['target_id'])
         targets = []

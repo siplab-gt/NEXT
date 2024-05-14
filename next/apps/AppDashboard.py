@@ -56,20 +56,19 @@ class AppDashboard(object):
     queries = butler.queries.get(pattern={'exp_uid':app.exp_uid})
     #self.db.get_docs_with_filter(app_id+':queries',{'exp_uid':exp_uid})
     start_date = utils.str2datetime(butler.admin.get(uid=app.exp_uid)['start_date'])
-    numerical_timestamps = [(utils.str2datetime(item['timestamp_query_generated'])-start_date).total_seconds() 
+    numerical_timestamps = [(utils.str2datetime(item['timestamp_query_generated'])-start_date).total_seconds()
                                 for item in queries]
-    fig, ax = plt.subplots(subplot_kw=dict(axisbg='#FFFFFF'),figsize=(12,1.5))
-    ax.hist(numerical_timestamps,min(int(1+4*numpy.sqrt(len(numerical_timestamps))),300),alpha=0.5,color='black')
+    fig, ax = plt.subplots(subplot_kw=dict(facecolor='#FFFFFF'),figsize=(8,1.5))
+    ax.hist(numerical_timestamps,min(int(1+4*numpy.sqrt(len(numerical_timestamps))),300),alpha=0.5,color='black',edgecolor = "black")
     ax.set_frame_on(False)
     ax.get_xaxis().set_ticks([])
     ax.get_yaxis().set_ticks([])
     ax.get_yaxis().set_visible(False)
-    ax.set_xlim(0, max(numerical_timestamps))
+    if numerical_timestamps:
+        ax.set_xlim(0, max(numerical_timestamps))
     plot_dict = mpld3.fig_to_dict(fig)
     plt.close()
     return plot_dict
-
-
 
   def compute_duration_multiline_plot(self, app, butler, task):
     """
@@ -84,10 +83,10 @@ class AppDashboard(object):
     """
 
     alg_list = butler.experiment.get(key='args')['alg_list']
-    x_min = numpy.float('inf')
-    x_max = -numpy.float('inf')
-    y_min = numpy.float('inf')
-    y_max = -numpy.float('inf')
+    x_min = float('inf')
+    x_max = -float('inf')
+    y_min = float('inf')
+    y_max = -float('inf')
     list_of_alg_dicts = []
 
     for algorithm in alg_list:
@@ -95,7 +94,7 @@ class AppDashboard(object):
       list_of_log_dict = butler.ell.get_logs_with_filter(app.app_id+':ALG-DURATION',
                                                                             {'exp_uid':app.exp_uid,'alg_label':alg_label,'task':task})
       list_of_log_dict = sorted(list_of_log_dict, key=lambda item: utils.str2datetime(item['timestamp']) )
-      
+
       x = []
       y = []
       t = []
@@ -105,13 +104,14 @@ class AppDashboard(object):
         x.append(k)
         y.append( item.get('app_duration',0.) + item.get('duration_enqueued',0.) )
         t.append(str(item['timestamp'])[:-3])
-        
+
       x = numpy.array(x)
       y = numpy.array(y)
       t = numpy.array(t)
       num_items = len(list_of_log_dict)
       multiplier = min(num_items,MAX_SAMPLES_PER_PLOT)
-      incr_inds = [ r*num_items/multiplier for r in range(multiplier)]
+      # force integers for indices
+      incr_inds = [int(r*num_items/multiplier) for r in range(multiplier)]
       max_inds = list(numpy.argsort(-y)[0:multiplier])
       final_inds = sorted(set(incr_inds + max_inds))
       x = list(x[final_inds])
@@ -132,7 +132,7 @@ class AppDashboard(object):
         pass
 
       list_of_alg_dicts.append(alg_dict)
-      
+
     return_dict = {}
     return_dict['data'] = list_of_alg_dicts
     return_dict['plot_type'] = 'multi_line_plot'
@@ -143,18 +143,30 @@ class AppDashboard(object):
     return_dict['y_min'] = y_min
     return_dict['y_max'] = y_max
 
-    fig, ax = plt.subplots(subplot_kw=dict(axisbg='#EEEEEE'))
+    fig, ax = plt.subplots(subplot_kw=dict(facecolor='#EEEEEE'))
     for alg_dict in list_of_alg_dicts:
-        ax.plot(alg_dict['x'],alg_dict['y'],label=alg_dict['legend_label'])
+        ax.plot(alg_dict['x'], alg_dict['y'], label=alg_dict['legend_label'])
     ax.set_xlabel('API Call')
     ax.set_ylabel('Duration (s)')
-    ax.set_xlim([x_min,x_max])
-    ax.set_ylim([y_min,y_max])
+    # Check if data is ready before setting axis limits
+    if numpy.isfinite(x_min) and numpy.isfinite(x_max) and (x_min != x_max):
+        ax.set_xlim([x_min, x_max])
+    else:
+        # Log or handle the case where limits aren't ready
+        print("Compute duration multiline plot - "
+              "Error data not yet ready for setting limits (x-axis).")
+    # Check if data is ready before setting axis limits
+    if numpy.isfinite(y_min) and numpy.isfinite(y_max) and (y_min != y_max):
+        ax.set_ylim([y_min, y_max])
+    else:
+        # Log or handle the case where limits aren't ready
+        print("Compute duration multline plot - "
+              "Error data not yet ready for setting limits (y-axis).")
     ax.grid(color='white', linestyle='solid')
     ax.set_title(task, size=14)
-    legend = ax.legend(loc=2,ncol=3,mode="expand")
+    legend = ax.legend(loc=2, ncol=3, mode="expand")
     for label in legend.get_texts():
-      label.set_fontsize('small')
+        label.set_fontsize('small')
     plot_dict = mpld3.fig_to_dict(fig)
     plt.close()
     return plot_dict
@@ -182,7 +194,8 @@ class AppDashboard(object):
     y = numpy.array(y)
     num_items = len(list_of_log_dict)
     multiplier = min(num_items,MAX_SAMPLES_PER_PLOT)
-    incr_inds = [ k*num_items/multiplier for k in range(multiplier)]
+    # force int for indices
+    incr_inds = [int(k*num_items/multiplier) for k in range(multiplier)]
     max_inds = list(numpy.argsort(-y)[0:multiplier])
     final_inds = sorted(set(incr_inds + max_inds))
 
@@ -196,6 +209,7 @@ class AppDashboard(object):
 
     max_y_value = 0.
     min_y_value = float('inf')
+
     for idx in final_inds:
       item = list_of_log_dict[idx]
       x.append(idx+1)
@@ -225,12 +239,14 @@ class AppDashboard(object):
       min_x = 0.
       max_x = 0.
 
-    fig, ax = plt.subplots(subplot_kw=dict(axisbg='#EEEEEE'))
+    fig, ax = plt.subplots(subplot_kw=dict(facecolor='#EEEEEE'))
     stack_coll = ax.stackplot(x,compute,dbGet,dbSet,admin,enqueued, alpha=.5)
     ax.set_xlabel('API Call')
     ax.set_ylabel('Duration (s)')
-    ax.set_xlim([min_x,max_x])
-    ax.set_ylim([0.,max_y_value])
+    if min_x != max_x:
+        ax.set_xlim([min_x, max_x])
+    if max_y_value != 0.:
+        ax.set_ylim([0., max_y_value])
     ax.grid(color='white', linestyle='solid')
     ax.set_title(alg_label+' - '+task, size=14)
     proxy_rects = [plt.Rectangle((0, 0), 1, 1, alpha=.5,fc=pc.get_facecolor()[0]) for pc in stack_coll]
@@ -260,17 +276,19 @@ class AppDashboard(object):
       except:
         pass
 
-    fig, ax = plt.subplots(subplot_kw=dict(axisbg='#FFFFFF'))
-    ax.hist(t, bins=min(len(t), MAX_SAMPLES_PER_PLOT), range=(0,30),alpha=0.5,color='black')
-    ax.set_xlim(0, 30)
-    ax.set_axis_off()
-    ax.set_xlabel('Durations (s)')
-    ax.set_ylabel('Count')
-    ax.set_title(alg_label + " - response time", size=14)
-    plot_dict = mpld3.fig_to_dict(fig)
-    plt.close()
+    fig, ax = plt.subplots(subplot_kw=dict(facecolor='#FFFFFF'))
+    bins = min(len(t), MAX_SAMPLES_PER_PLOT)
+    if bins > 0:
+        ax.hist(t, bins=bins, range=(0, 30), alpha=0.5, color='black', edgecolor="black")
+        ax.set_xlim(0, 30)
+        ax.set_axis_off()
+        ax.set_xlabel('Durations (s)')
+        ax.set_ylabel('Count')
+        ax.set_title(alg_label + " - response time", size=14)
+        plot_dict = mpld3.fig_to_dict(fig)
+        plt.close()
 
-    return plot_dict
+        return plot_dict
 
   def network_delay_histogram(self, app, butler, alg_label):
     """
@@ -291,8 +309,8 @@ class AppDashboard(object):
       except:
         pass
 
-    fig, ax = plt.subplots(subplot_kw=dict(axisbg='#FFFFFF'))
-    ax.hist(t,MAX_SAMPLES_PER_PLOT,range=(0,5),alpha=0.5,color='black')
+    fig, ax = plt.subplots(subplot_kw=dict(facecolor='#FFFFFF'))
+    ax.hist(t,MAX_SAMPLES_PER_PLOT,range=(0,5),alpha=0.5,color='black', edgecolor = "black")
     ax.set_xlim(0, 5)
     ax.set_axis_off()
     ax.set_xlabel('Durations (s)')

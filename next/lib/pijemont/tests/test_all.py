@@ -42,7 +42,7 @@ def run_test(filename):
     with open(os.path.join(dir_path,'test_files/{}'.format(filename))) as f:
         test = yaml.load(f.read())
     for test_name in test['inputs']:
-        print('    {}'.format(test_name))
+        print(('    {}'.format(test_name)))
         if test['load_errors']:
             args, out, load_errs = verify_yaml(test_name, test)
             assert (not load_errs is None) and len(load_errs) > 0
@@ -65,7 +65,7 @@ def test_all():
     for yaml_filename in os.listdir(dir_):
         if 'DS_Store' in yaml_filename:
             continue
-        print('Testing YAML file {}'.format(yaml_filename))
+        print(('Testing YAML file {}'.format(yaml_filename)))
         run_test(yaml_filename)
 
 if __name__ == "__main__":

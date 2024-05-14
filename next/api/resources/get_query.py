@@ -51,7 +51,7 @@ class getQuery(Resource):
         # Fetch app_id data from resource manager
         app_id = resource_manager.get_app_id(exp_uid)
         # Standardized participant_uid
-        if 'participant_uid' in args_data['args'].keys():
+        if 'participant_uid' in list(args_data['args'].keys()):
             args_data['args']['participant_uid'] = exp_uid+"_" + \
                                 str(args_data['args']['participant_uid'])
 

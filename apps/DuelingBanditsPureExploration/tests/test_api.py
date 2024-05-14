@@ -32,7 +32,7 @@ def test_api(assert_200=True, num_arms=5, num_clients=8, delta=0.05,
              params={'num_tries': 5}):
 
     app_id = 'DuelingBanditsPureExploration'
-    true_means = numpy.array(range(num_arms)[::-1])/float(num_arms)
+    true_means = numpy.array(list(range(num_arms))[::-1])/float(num_arms)
     pool = Pool(processes=num_clients)
     supported_alg_ids = ['BR_LilUCB', 'BR_Random', 'ValidationSampling', 'BR_KLUCB']
 
@@ -52,7 +52,7 @@ def test_api(assert_200=True, num_arms=5, num_clients=8, delta=0.05,
     algorithm_management_settings['mode'] = 'fixed_proportions'
     algorithm_management_settings['params'] = params
 
-    print algorithm_management_settings
+    print(algorithm_management_settings)
 
     #################################################
     # Test POST Experiment
@@ -101,7 +101,7 @@ def simulate_one_client(input_args):
     getQuery_times = []
     processAnswer_times = []
     for t in range(total_pulls):
-        print "        Participant {} had {} total pulls: ".format(participant_uid, t)
+        print("        Participant {} had {} total pulls: ".format(participant_uid, t))
 
         # test POST getQuery #
         # return a widget 1/5 of the time (normally, use HTML)

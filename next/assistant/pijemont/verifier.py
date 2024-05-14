@@ -112,7 +112,7 @@ def verify(input_dict, reference_dict):
         return input_dict
     except Exception:
       exc_type, exc_value, exc_traceback = sys.exc_info()
-      print("Exception: {} {}".format(error, traceback.format_exc()))
+      print(("Exception: {} {}".format(error, traceback.format_exc())))
       traceback.print_tb(exc_traceback)
       raise Exception(error)
 
@@ -171,11 +171,11 @@ def verify_helper(name, input_element, reference_dict):
             ans += [{"name":name, "message":"invalid boolean"}]
 
     elif reference_dict['type'] in NUM:
-        if not isinstance(input_element, (int, long, float)):
+        if not isinstance(input_element, (int, float)):
             ans += [{"name":name, "message":"invalid number"}]
 
     elif reference_dict['type'] in STRING:
-        if not isinstance(input_element, (str, unicode)):
+        if not isinstance(input_element, str):
             ans += [{"name":name, "message":"expected a string, got {}".format(type(input_element))}]
         elif 'values' in reference_dict and not input_element in reference_dict['values']:
             ans += [{"name":name, "message":"argument must be one of the specified strings: "+", ".join(reference_dict['values'])}]
@@ -210,10 +210,10 @@ def compare_dict_keys(d1, d2):
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         r,e = load_doc(sys.argv[1])
-        print('doc',r)
-        print('errs',e)
+        print(('doc',r))
+        print(('errs',e))
         if len(sys.argv) > 2:
             i,e = verify(sys.argv[2],r)
-            print("Errors",e)
-            print("Verified input",i)
+            print(("Errors",e))
+            print(("Verified input",i))
     

@@ -19,7 +19,7 @@ Example:
 
 """
 
-from __future__ import print_function
+
 import os
 import sys
 from collections import OrderedDict
@@ -28,7 +28,7 @@ import yaml
 import requests
 
 sys.path.append('../../next/lib')
-from docopt import docopt
+from .docopt import docopt
 
 
 def verify_environ():
@@ -79,10 +79,10 @@ def launch(init_filename, targets_filename=None, upload=True):
     host_url = os.environ.get('NEXT_BACKEND_GLOBAL_HOST', 'localhost')
     host_url = 'http://' + host_url + ':8000'
 
-    header = ['{}:{}'.format(key, len(item)) for key, item in d.items()]
+    header = ['{}:{}'.format(key, len(item)) for key, item in list(d.items())]
     header = ';'.join(header) + '\n'
 
-    to_send = ''.join([item for _, item in d.items()])
+    to_send = ''.join([item for _, item in list(d.items())])
 
     data = header + to_send
 

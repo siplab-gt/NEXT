@@ -71,6 +71,6 @@ class processAnswer(Resource):
         if didSucceed:
             return attach_meta(eval(response_json), meta_success), 200
         else:
-            print "Failed to processAnswer", message 
+            print("Failed to processAnswer", message) 
             return attach_meta({},custom_errors['ReportAnswerError'], backend_error=message)
     

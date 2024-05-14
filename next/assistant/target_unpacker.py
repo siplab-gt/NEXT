@@ -2,7 +2,7 @@ import zipfile
 import io
 import os
 from joblib import Parallel, delayed
-from StringIO import StringIO
+from io import StringIO
 import base64
 import random
 import sys
@@ -110,10 +110,10 @@ def unpack_text_file(s, kind='csv'):
     files = zipfile_to_dictionary(zip_file)
 
     # files is has at least one key; (tested before call in assistant_blueprint.py)
-    file_str = files[files.keys()[0]]
+    file_str = files[list(files.keys())[0]]
     if kind in {'csv', 'txt'}:
         strings = file_str.split('\n')  # -1 because last newline
-        strings = list(filter(lambda x: len(x) > 0, strings))
+        strings = list([x for x in strings if len(x) > 0])
         targets = [{'target_id': str(i),
                     'primary_type': 'text',
                     'primary_description': string,
