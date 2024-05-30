@@ -1,5 +1,6 @@
-from random import choice
+from random import choice, uniform
 from time import sleep
+from tqdm import tqdm
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -17,25 +18,34 @@ chrome_options.add_argument('--disable-dev-shm-usage')
 instance_count = 200
 
 # Replace with your target URL
-query_url = 'http://localhost:8000/query/query_page/query_page/5c9d71061565ca92b097ff494c969b'
+query_url = 'http://localhost:8000/query/query_page/query_page/28aee831f2cfb8094b9d2a86bb9a02'
+
 # Replace with number of examples
 n = 25
 # Create a list to store the WebDriver instances
 drivers = []
 
+
+# Define a function to get random sleep intervals
+def random_sleep(min_time=0.2, max_time=1.0):
+    sleep(uniform(min_time, max_time))
+
+
 # Create multiple instances of headless Chrome
-for _ in range(instance_count):
-    print('loading driver')
+print("Loading headless Chrome instances:")
+for _ in tqdm(range(instance_count)):
     driver = webdriver.Chrome(options=chrome_options)
     drivers.append(driver)
 
 # Iterate through the drivers and perform the clicks
-for driver in drivers:
+print("\nLoading experiment query pages:")
+for driver in tqdm(drivers):
     driver.get(query_url)
 
-for i in range(n):
+print(f"\nSimulating {n} users conducting the experiment:")
+for i in tqdm(range(n)):
     for driver in drivers:
-    # Wait until the elements with div ids 'left' and 'right' are clickable
+        # Wait until the elements with div ids 'left' and 'right' are clickable
         WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, 'left')))
         WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, 'right')))
 
@@ -43,8 +53,9 @@ for i in range(n):
         element_id = choice(['left', 'right'])
         driver.find_element(By.ID, element_id).click()
 
-        sleep(1)
+        random_sleep()
 
 # Quit all the WebDriver instances
-for driver in drivers:
+print("\nShutting down the WebDriver instances:")
+for driver in tqdm(drivers):
     driver.quit()

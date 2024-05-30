@@ -12,7 +12,7 @@ done
 
 for i in `seq 2 $CELERY_SYNC_WORKER_COUNT`
 do
-    celery -A next.broker.celery_app worker -l warning --concurrency=1 -n sync_worker_${i}@${HOSTNAME} -Q sync_queue_${i}@${HOSTNAME} --prefetch-multiplier=1  &
+    celery -A next.broker.celery_app worker -l warning --concurrency=1 -n sync_worker_${i}@${HOSTNAME} -Q sync_queue_${i}@${HOSTNAME} --prefetch-multiplier=1 &
 done
 
 

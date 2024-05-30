@@ -79,6 +79,16 @@ CELERY_RESULT_BACKEND = 'redis://{hostname}:{port}/{db}/'.format(
     hostname=RABBITREDIS_HOSTNAME,
     port=RABBITREDIS_PORT,
     db=os.environ.get('RABBITREDIS_DB', '0'))
+
+# Add connection pool and socket options to the Redis result backend
+redis_transport_options = {
+    'max_connections': 20,                # Maximum number of connections
+    'socket_timeout': 30,                 # Seconds before a socket read/write operation times out
+    'retry_on_timeout': True,             # Retry on timeout
+}
+
+CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = redis_transport_options
+
 # CELERY_RESULT_BACKEND = BROKER_URL
 TASK_RESULT_EXPIRES=60
 TASK_SERIALIZER='json'
@@ -89,16 +99,17 @@ CELERY_ON = eval(os.environ.get('CELERY_ON','True'))
 
 CELERY_SYNC_WORKER_COUNT = int(os.environ.get('CELERY_SYNC_WORKER_COUNT',1))
 
-# from kombu import Exchange, Queue
-# exchange_name = 'sync@{hostname}'.format(
-#         hostname=os.environ.get('HOSTNAME', 'localhost'))
-# sync_exchange = Exchange(name=exchange_name, type='fanout')
-# all_queues = ()
-# for i in range(1,CELERY_SYNC_WORKER_COUNT+1):
-#     queue_name = 'sync_queue_{worker_number}@{hostname}'.format(
-#         worker_number=i,
-#         hostname=os.environ.get('HOSTNAME', 'localhost'))
-#     all_queues += (Queue(name=queue_name,exchange=sync_exchange),)
 
-# CELERY_QUEUES = all_queues
+from kombu import Exchange, Queue
+exchange_name = 'sync@{hostname}'.format(
+        hostname=os.environ.get('HOSTNAME', 'localhost'))
+sync_exchange = Exchange(name=exchange_name, type='fanout')
+all_queues = ()
+for i in range(1,CELERY_SYNC_WORKER_COUNT+1):
+    queue_name = 'sync_queue_{worker_number}@{hostname}'.format(
+        worker_number=i,
+        hostname=os.environ.get('HOSTNAME', 'localhost'))
+    all_queues += (Queue(name=queue_name,exchange=sync_exchange),)
+
+CELERY_QUEUES = all_queues
 

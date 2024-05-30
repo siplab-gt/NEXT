@@ -15,6 +15,8 @@ import redis
 import json
 import time
 import next.utils as utils
+from contextlib import contextmanager
+
 
 class JobBroker:
 
@@ -24,7 +26,19 @@ class JobBroker:
         self.hostname = None
 
         # location of hashes
-        self.r = redis.StrictRedis(host=next.constants.RABBITREDIS_HOSTNAME, port=next.constants.RABBITREDIS_PORT, db=0)
+        self.pool = redis.ConnectionPool(host=next.constants.RABBITREDIS_HOSTNAME, port=next.constants.RABBITREDIS_PORT, max_connections=10, db=0)
+
+    @contextmanager
+    def get_redis_connection(self):
+        client = redis.Redis(connection_pool=self.pool)
+        client.set('MINIONWORKER_HOSTNAME', 'localhost')
+        try:
+            yield client
+        finally:
+            client.close()
+        # self.r = redis.Redis(connection_pool=pool)
+        # self.r.set('MINIONWORKER_HOSTNAME', 'localhost')
+        # self.r = redis.StrictRedis(host=next.constants.RABBITREDIS_HOSTNAME, port=next.constants.RABBITREDIS_PORT, db=0)
 
     # def __declare_exchange(self, domain, name):
     #     # Configuration for RabbitMQ
@@ -123,30 +137,31 @@ class JobBroker:
         num_queues = next.constants.CELERY_SYNC_WORKER_COUNT
 
         # assign namespaces to queues (with worker of concurrency 1) in round-robbin
-        try:
-            namespace_cnt = int(self.r.get(namespace+"_cnt"))
-        except:
-            pipe = self.r.pipeline(True)
-            while 1:
-                try:
-                    pipe.watch(namespace+"_cnt","namespace_counter")
-                    if not pipe.exists(namespace+"_cnt"):
-                        if not pipe.exists('namespace_counter'):
-                            namespace_counter = 0
+        with self.get_redis_connection() as client:
+            try:
+                namespace_cnt = int(client.get(namespace+"_cnt"))
+            except:
+                pipe = client.pipeline(True)
+                while 1:
+                    try:
+                        pipe.watch(namespace+"_cnt","namespace_counter")
+                        if not pipe.exists(namespace+"_cnt"):
+                            if not pipe.exists('namespace_counter'):
+                                namespace_counter = 0
+                            else:
+                                namespace_counter = pipe.get('namespace_counter')
+                            pipe.multi()
+                            pipe.set(namespace+"_cnt",int(namespace_counter)+1)
+                            pipe.set('namespace_counter',int(namespace_counter)+1)
+                            pipe.execute()
                         else:
-                            namespace_counter = pipe.get('namespace_counter')
-                        pipe.multi()
-                        pipe.set(namespace+"_cnt",int(namespace_counter)+1)
-                        pipe.set('namespace_counter',int(namespace_counter)+1)
-                        pipe.execute()
-                    else:
-                        pipe.unwatch()
-                    break
-                except redis.exceptions.WatchError:
-                    continue
-                finally:
-                    pipe.reset()
-            namespace_cnt = int(self.r.get(namespace+"_cnt"))
+                            pipe.unwatch()
+                        break
+                    except redis.exceptions.WatchError:
+                        continue
+                    finally:
+                        pipe.reset()
+                namespace_cnt = int(client.get(namespace+"_cnt"))
         queue_number = (namespace_cnt % num_queues) + 1
 
         queue_name = 'sync_queue_'+str(queue_number)+'@'+domain
@@ -191,23 +206,42 @@ class JobBroker:
         so only a single hostname (e.g. localhost) has celery workers.
         """
         # TODO: sort this out, why doesnt multi worker work
-        domain = 'test_worker'
-        return domain
-        if self.r.exists('MINIONWORKER_HOSTNAME'):
-            self.hostname = self.r.get('MINIONWORKER_HOSTNAME')
-            utils.debug_print('Found hostname: {} (Redis)'.format(self.hostname))
-        else:
-            with open('/etc/hosts', 'r') as fid:
-                for line in fid:
-                    if 'MINIONWORKER' in line:
-                        self.hostname = line.split('\t')[1].split(' ')[1]
-                        self.r.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
-                        utils.debug_print('Found hostname: {} (/etc/hosts)'.format(self.hostname))
-                        break
-        if self.hostname is None:
-            import socket
-            self.hostname = socket.gethostname()
-            self.r.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
-            utils.debug_print('Found hostname: {} (socket.gethostname())'.format(self.hostname))
+        # domain = 'test_worker'
+        # return domain
+        # if self.r.exists('MINIONWORKER_HOSTNAME'):
+        #     self.hostname = self.r.get('MINIONWORKER_HOSTNAME').decode('utf-8')
+        #     utils.debug_print('Found hostname: {} (Redis)'.format(self.hostname))
+        # else:
+        #     with open('/etc/hosts', 'r') as fid:
+        #         for line in fid:
+        #             if 'MINIONWORKER' in line:
+        #                 self.hostname = line.split('\t')[1].split(' ')[1]
+        #                 self.r.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
+        #                 utils.debug_print('Found hostname: {} (/etc/hosts)'.format(self.hostname))
+        #                 break
+        # if self.hostname is None:
+        #     import socket
+        #     self.hostname = socket.gethostname()
+        #     self.r.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
+        #     utils.debug_print('Found hostname: {} (socket.gethostname())'.format(self.hostname))
+        #
+        # return self.hostname
+        with self.get_redis_connection() as client:
+            if client.exists('MINIONWORKER_HOSTNAME'):
+                self.hostname = client.get('MINIONWORKER_HOSTNAME').decode('utf-8')
+                utils.debug_print('Found hostname: {} (Redis)'.format(self.hostname))
+            else:
+                with open('/etc/hosts', 'r') as fid:
+                    for line in fid:
+                        if 'MINIONWORKER' in line:
+                            self.hostname = line.split('\t')[1].split(' ')[1]
+                            client.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
+                            utils.debug_print('Found hostname: {} (/etc/hosts)'.format(self.hostname))
+                            break
+            if self.hostname is None:
+                import socket
+                self.hostname = socket.gethostname()
+                client.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
+                utils.debug_print('Found hostname: {} (socket.gethostname())'.format(self.hostname))
 
-        return self.hostname
+            return self.hostname

@@ -46,7 +46,7 @@ services:
       - CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=True
       - GIT_HASH={{GIT_HASH}}
       - PYTHONPATH=:/next_backend
-      - HOSTNAME=test_worker
+      - HOSTNAME=localhost
     networks:
      - nextnet
     depends_on:
@@ -68,7 +68,7 @@ services:
  #     - MINIONREDIS_PORT_6379_TCP_ADDR=minionredis
       - RABBIT_PORT_5672_TCP_ADDR=rabbitmq
       - RABBITREDIS_PORT_6379_TCP_ADDR=rabbitmqredis
-      - MINIONWORKER_HOSTNAME=test_worker
+      - MINIONWORKER_HOSTNAME=localhost
       - PYTHONUNBUFFERED=TRUE
       - PYTHONPATH=:/next_backend
       - NEXT_BACKEND_GLOBAL_HOST
@@ -107,7 +107,8 @@ services:
      - nextnet
 
   rabbitmqredis:
-    image: redis
+    build: {{NEXT_DIR}}/next/database/redis
+#    image: redis
     ports:
      - "0.0.0.0:6379:6379"
     networks:
