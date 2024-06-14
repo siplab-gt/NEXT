@@ -4,6 +4,7 @@ __dir__ = '/'.join(__file__.split('/')[:-1])
 if __dir__ == '':
     __dir__ = '.'
 
+
 def test_run_examples():
     zip_path = 'cartoon_cardinal/cap436.txt.zip'
     init_path = 'cartoon_cardinal/init.yaml'
@@ -24,6 +25,7 @@ def test_run_examples():
     command = 'python launch.py {} {} {}'.format(init_path, zip_path, args)
     exit_status = os.system('cd {}; '.format(__dir__) + command)
     assert exit_status == 0
+
 
 if __name__ == "__main__":
     test_run_examples()

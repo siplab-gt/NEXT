@@ -14,11 +14,11 @@ chrome_options.add_argument('--headless')
 chrome_options.add_argument('--no-sandbox')
 chrome_options.add_argument('--disable-dev-shm-usage')
 
-# Define the number of clicks
+# Define the number of simulated users
 instance_count = 200
 
 # Replace with your target URL
-query_url = 'http://localhost:8000/query/query_page/query_page/28aee831f2cfb8094b9d2a86bb9a02'
+query_url = 'http://localhost:8000/query/query_page/query_page/ac89d9ab92e5f8d12467c2dfb06d6e'
 
 # Replace with number of examples
 n = 25
@@ -42,12 +42,15 @@ print("\nLoading experiment query pages:")
 for driver in tqdm(drivers):
     driver.get(query_url)
 
-print(f"\nSimulating {n} users conducting the experiment:")
+print(f"\nSimulating {instance_count} users conducting the experiment:")
+print(f"\nSimulating {n} queries in the experiment:")
 for i in tqdm(range(n)):
     for driver in drivers:
         # Wait until the elements with div ids 'left' and 'right' are clickable
-        WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, 'left')))
-        WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, 'right')))
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, 'left')))
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, 'right')))
 
         # Randomly select either 'left' or 'right' element ID for each click
         element_id = choice(['left', 'right'])

@@ -9,18 +9,17 @@ example use:
 get a tripletMDS query:
 curl -X GET http://localhost:8001/api/experiment/[exp_uid]/logs
 '''
+
+
 from flask import Flask, request, send_file
 from flask_restful import Resource, reqparse
-
 import json
 import zipfile
 from io import BytesIO as BytesIO
-
 import next.utils
 from next.api.api_util import *
 from next.api.api_util import APIArgument
 from next.api.resource_manager import ResourceManager
-
 resource_manager = ResourceManager()
 
 # Request parser. Checks that necessary dictionary keys are available in a given resource.
@@ -32,7 +31,7 @@ meta_error = {
     'ExpDoesNotExistError': {
         'message': "No experiment with the specified experiment ID exists.",
         'code': 400,
-        'status':'FAIL'
+        'status': 'FAIL'
     },
 }
 
@@ -42,6 +41,8 @@ meta_success = {
 }
 
 # Logs resource class
+
+
 class Logs(Resource):
 
     def get(self, exp_uid, log_type=None):
@@ -86,13 +87,12 @@ class Logs(Resource):
             except:
                 pass
 
-
         # Get logs for exp_uid from resource_manager
         if log_type:
             experiment_logs = resource_manager.get_experiment_logs_of_type(exp_uid,
                                                                            log_type)
             all_logs = {'log_data': experiment_logs}
-            return attach_meta(all_logs,meta_success), 200
+            return attach_meta(all_logs, meta_success), 200
         else:
             experiment_logs = resource_manager.get_experiment_logs(exp_uid)
             all_logs = {'log_data': experiment_logs}
@@ -105,7 +105,7 @@ class Logs(Resource):
                                  download_name='logs.zip',
                                  as_attachment='True')
             else:
-                return attach_meta(all_logs,meta_success), 200
+                return attach_meta(all_logs, meta_success), 200
 
         if not experiment_logs:
-            return attach_meta({'message':'No logs to report.'},meta_success), 200
+            return attach_meta({'message': 'No logs to report.'}, meta_success), 200

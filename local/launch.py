@@ -17,6 +17,7 @@ Example:
 
 """
 
+from docopt import docopt
 import os
 import sys
 from collections import OrderedDict
@@ -25,7 +26,6 @@ import yaml
 import requests
 
 sys.path.append('../next/lib')
-from docopt import docopt
 
 
 def get_backend():
@@ -38,6 +38,7 @@ def get_backend():
         'host': os.environ.get('NEXT_BACKEND_GLOBAL_HOST', 'localhost'),
         'port': os.environ.get('NEXT_BACKEND_GLOBAL_PORT', '8000')
     }
+
 
 def launch(init_filename, targets_filename=None):
     with open(init_filename, 'r') as f:
@@ -59,7 +60,8 @@ def launch(init_filename, targets_filename=None):
     encoded_attrs = OrderedDict(args=data_header+str_encoded_args)
 
     # generate metadata describing each attr's length; this is prepended to the request data.
-    metadata = ';'.join(['{}:{}'.format(k, len(v)) for k, v in list(encoded_attrs.items())])
+    metadata = ';'.join(['{}:{}'.format(k, len(v))
+                        for k, v in list(encoded_attrs.items())])
 
     # concat all the encoded attrs together
     body = ''.join([v for _, v in list(encoded_attrs.items())])
@@ -73,17 +75,20 @@ def launch(init_filename, targets_filename=None):
 
     r = requests.post(host_url + '/assistant/init/experiment', data=payload)
     response = r.json()
-    print(response)
+
     if not response['success']:
         print('An error occurred launching the experiment:')
         print((response['message']))
         sys.exit()
 
-    dashboard_url = host_url + '/dashboard/experiment_dashboard/{}/{}'.format(response['exp_uid'], init['app_id'])
+    dashboard_url = host_url + \
+        '/dashboard/experiment_dashboard/{}/{}'.format(
+            response['exp_uid'], init['app_id'])
     print(('Dashboard URL: {}'.format(dashboard_url)))
     print(('NEXT Home URL: {}'.format(host_url + '/home')))
 
     return response
+
 
 if __name__ == "__main__":
     args = docopt(__doc__)

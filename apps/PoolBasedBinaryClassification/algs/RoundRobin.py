@@ -27,7 +27,8 @@ class MyAlg:
         # S maintains a list of labelled items. Appending to S will create it.
         butler.algorithms.append(key='S', value=(target_index, target_label))
         # Increment the number of reported answers by one.
-        num_reported_answers = butler.algorithms.increment(key='num_reported_answers')
+        num_reported_answers = butler.algorithms.increment(
+            key='num_reported_answers')
 
         # Run a model update job after every d answers
         d = butler.algorithms.get(key='d')
@@ -37,7 +38,8 @@ class MyAlg:
 
     def getModel(self, butler):
         # The model is simply the vector of weights and a record of the number of reported answers.
-        utils.debug_print(butler.algorithms.get(key=['weights', 'num_reported_answers']))
+        utils.debug_print(butler.algorithms.get(
+            key=['weights', 'num_reported_answers']))
         return butler.algorithms.get(key=['weights', 'num_reported_answers'])
 
     def full_embedding_update(self, butler, args):
@@ -46,7 +48,8 @@ class MyAlg:
         # Get the list of targets.
         targets = butler.targets.get_targetset(butler.exp_uid)
         # Extract the features form each target and then append a bias feature.
-        target_features = [targets[i]['meta']['features'] for i in range(len(targets))]
+        target_features = [targets[i]['meta']['features']
+                           for i in range(len(targets))]
         for feature_vector in target_features:
             feature_vector.append(1.)
         # Build a list of feature vectors and associated labels.

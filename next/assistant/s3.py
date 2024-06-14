@@ -3,7 +3,7 @@ import next.utils as utils
 from pprint import pprint
 
 # TODO: grab from env
-AWS_ID =  ''
+AWS_ID = ''
 AWS_KEY = ''
 
 # Initialize a session using your AWS credentials
@@ -15,12 +15,14 @@ session = boto3.Session(
 # Use the session to create S3 resource
 s3 = session.resource('s3')
 
+
 def create_bucket(AWS_BUCKET_NAME):
     """
     Creates a bucket for an S3 account
     """
     bucket = s3.create_bucket(Bucket=AWS_BUCKET_NAME)
     return bucket
+
 
 def get_bucket(AWS_BUCKET_NAME):
     """
@@ -38,6 +40,7 @@ def get_bucket(AWS_BUCKET_NAME):
         if error_code == 404:
             exists = False
     return bucket if exists else None
+
 
 def upload(filename, file_object, AWS_BUCKET_NAME):
     """

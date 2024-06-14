@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   cadvisor:
-    image: google/cadvisor:latest
+    build: {{NEXT_DIR}}/cadvisor
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:rw
@@ -10,14 +10,18 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
     ports:
       - "0.0.0.0:8888:8080"
+    privileged: true
+    secrets:
+      - cadvisor_user
+      - cadvisor_password
 
-#   minionredis:
-#     image: redis
-#     command: redis-server /next_backend/next/database/redis.conf
-#     volumes:
-#      - {{NEXT_DIR}}:/next_backend
-#     networks:
-#      - nextnet
+  minionredis:
+    image: redis
+    command: redis-server /next_backend/next/database/redis.conf
+    volumes:
+     - {{NEXT_DIR}}:/next_backend
+    networks:
+     - nextnet
 
   minionworker:
     build: {{NEXT_DIR}}/next/base_docker_image
@@ -27,11 +31,9 @@ services:
     working_dir: /next_backend
     environment:
       # Add necessary environment variables here
-#      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672
-#      - CELERY_RESULT_BACKEND=redis://minionredis:6379/0
-#      - CELERY_RESULT_BACKEND=redis://rabbitmqredis:6379/0
-#      - MINIONREDIS_PORT_6379_TCP_ADDR=minionredis
+      - MINIONREDIS_PORT_6379_TCP_ADDR=minionredis
       - MONGODB_PORT_27017_TCP_ADDR=mongodb
+      # for celery vars in constants.py
       - RABBIT_PORT_5672_TCP_ADDR=rabbitmq
       - RABBITREDIS_PORT_6379_TCP_ADDR=rabbitmqredis
       - PYTHONUNBUFFERED=TRUE
@@ -51,7 +53,7 @@ services:
      - nextnet
     depends_on:
       - rabbitmq
-#       - minionredis
+      - minionredis
       - rabbitmqredis
       - mongodb
 
@@ -65,7 +67,7 @@ services:
       - "0.0.0.0:8000:8000"
     environment:
       - MONGODB_PORT_27017_TCP_ADDR=mongodb
- #     - MINIONREDIS_PORT_6379_TCP_ADDR=minionredis
+      - MINIONREDIS_PORT_6379_TCP_ADDR=minionredis
       - RABBIT_PORT_5672_TCP_ADDR=rabbitmq
       - RABBITREDIS_PORT_6379_TCP_ADDR=rabbitmqredis
       - MINIONWORKER_HOSTNAME=localhost
@@ -84,7 +86,8 @@ services:
       - rabbitmqredis
 
   mongodb:
-    image: mongo:4.4
+    build: {{NEXT_DIR}}/next/base_docker_image
+    command: ["mongod", "--bind_ip_all"]
     user: root
     volumes:
      - {{NEXT_DIR}}:/next_backend
@@ -108,28 +111,12 @@ services:
 
   rabbitmqredis:
     build: {{NEXT_DIR}}/next/database/redis
-#    image: redis
     ports:
      - "0.0.0.0:6379:6379"
     networks:
      - nextnet
 
-#  mongodb:
-#    build: {{NEXT_DIR}}/next/base_docker_image
-#    #command: /usr/bin/mongod --smallfiles --rest
-#    command: /usr/bin/mongod
-#    volumes:
-#     - {{NEXT_DIR}}:/next_backend
-#     - /dump
-#     - /data/db
-#    working_dir: /next_backend
-#    expose:
-#     - "27017"
-#    ports:
-#     - "0.0.0.0:28017:28017" # mongo http monitor
-#    networks:
-#     - nextnet
-
+#  Missing Cluster Monitor Script
 #  rabbitmqmonitor:
 #    build: {{NEXT_DIR}}/next/base_docker_image
 #    command: python ./next/broker/cluster_monitor.py
@@ -145,6 +132,11 @@ services:
 #    networks:
 #     - nextnet
 
-
 networks:
   nextnet:
+
+secrets:
+  cadvisor_user:
+    file: ./cadvisor_user.txt
+  cadvisor_password:
+    file: ./cadvisor_password.txt
