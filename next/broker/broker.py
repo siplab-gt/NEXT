@@ -1,7 +1,6 @@
 import next.utils as utils
 
 from datetime import datetime,timedelta
-# from kombu import Exchange, Connection
 
 import celery
 from next.broker.celery_app import tasks as tasks
@@ -26,7 +25,12 @@ class JobBroker:
         self.hostname = None
 
         # location of hashes
-        self.pool = redis.ConnectionPool(host=next.constants.RABBITREDIS_HOSTNAME, port=next.constants.RABBITREDIS_PORT, max_connections=10, db=0)
+        self.pool = redis.ConnectionPool(
+            host=next.constants.RABBITREDIS_HOSTNAME,
+            port=next.constants.RABBITREDIS_PORT,
+            max_connections=10,
+            db=0
+        )
 
     @contextmanager
     def get_redis_connection(self):
@@ -36,17 +40,6 @@ class JobBroker:
             yield client
         finally:
             client.close()
-        # self.r = redis.Redis(connection_pool=pool)
-        # self.r.set('MINIONWORKER_HOSTNAME', 'localhost')
-        # self.r = redis.StrictRedis(host=next.constants.RABBITREDIS_HOSTNAME, port=next.constants.RABBITREDIS_PORT, db=0)
-
-    # def __declare_exchange(self, domain, name):
-    #     # Configuration for RabbitMQ
-    #     exchange_name = '{}@{}'.format(name, domain)
-    #     exchange_type = 'direct'  # Could be 'topic', 'fanout', or other types depending on your application need
-    #     with Connection(next.constants.BROKER_URL) as conn:
-    #         exchange = Exchange(exchange_name, type=exchange_type, durable=True)
-    #         exchange(conn).declare()
 
     def applyAsync(self, app_id, exp_uid, task_name, args, ignore_result=False):
         """
@@ -63,8 +56,6 @@ class JobBroker:
         submit_timestamp = utils.datetimeNow('string')
         domain = self.__get_domain_for_job(app_id+"_"+exp_uid)
         if next.constants.CELERY_ON:
-            # Declare the exchange
-            # self.__declare_exchange(domain, 'async')
 
             result = tasks.apply.apply_async(args=[app_id,
                                                    exp_uid,
@@ -99,8 +90,6 @@ class JobBroker:
         submit_timestamp = utils.datetimeNow('string')
         domain = self.__get_domain_for_job(app_id+"_"+exp_uid)
         if next.constants.CELERY_ON:
-            # # Declare the exchange
-            # self.__declare_exchange(domain, 'dashboard')
 
             result = tasks.apply_dashboard.apply_async(args=[app_id,
                                                              exp_uid,
@@ -173,8 +162,6 @@ class JobBroker:
             soft_time_limit = time_limit
             hard_time_limit = time_limit + .01
         if next.constants.CELERY_ON:
-            # # Declare the exchange
-            # self.__declare_exchange(domain, 'sync_queue_'+str(queue_number))
 
             result = tasks.apply_sync_by_namespace.apply_async(args=[app_id,exp_uid,
                                                                      alg_id,alg_label,
@@ -205,27 +192,6 @@ class JobBroker:
         This implementation assumes just a single master node and no workers
         so only a single hostname (e.g. localhost) has celery workers.
         """
-        # TODO: sort this out, why doesnt multi worker work
-        # domain = 'test_worker'
-        # return domain
-        # if self.r.exists('MINIONWORKER_HOSTNAME'):
-        #     self.hostname = self.r.get('MINIONWORKER_HOSTNAME').decode('utf-8')
-        #     utils.debug_print('Found hostname: {} (Redis)'.format(self.hostname))
-        # else:
-        #     with open('/etc/hosts', 'r') as fid:
-        #         for line in fid:
-        #             if 'MINIONWORKER' in line:
-        #                 self.hostname = line.split('\t')[1].split(' ')[1]
-        #                 self.r.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
-        #                 utils.debug_print('Found hostname: {} (/etc/hosts)'.format(self.hostname))
-        #                 break
-        # if self.hostname is None:
-        #     import socket
-        #     self.hostname = socket.gethostname()
-        #     self.r.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
-        #     utils.debug_print('Found hostname: {} (socket.gethostname())'.format(self.hostname))
-        #
-        # return self.hostname
         with self.get_redis_connection() as client:
             if client.exists('MINIONWORKER_HOSTNAME'):
                 self.hostname = client.get('MINIONWORKER_HOSTNAME').decode('utf-8')
