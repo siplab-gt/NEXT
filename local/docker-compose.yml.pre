@@ -14,6 +14,19 @@ services:
     secrets:
       - cadvisor_user
       - cadvisor_password
+    networks:
+      - nextnet
+
+  nginx:
+    image: nginx:latest
+    container_name: reverse_proxy
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
+    ports:
+      - 80:80
+    restart: always
+    networks:
+      - nextnet
 
   minionredis:
     image: redis
