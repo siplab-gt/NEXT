@@ -95,3 +95,17 @@ To create your own experiments, simply create a new `init.yaml` with the appropr
 and follow the same steps. Note that if your targets are just text, you may skip the hosting step
 and simply include the data in the `init.yaml` file.
 
+
+## Using Cadvisor
+You can use Cadvisor to monitor CPU and MEM usage on your system, with a breakdown of each docker component.
+
+Make sure create the text files `local/cadvisor_user.txt` and  `local/cadvisor_password.txt` to contain only the user and password for cadvisor.
+Do not commit these files.
+You can sign in to cadvisor at `http://localhost:8888` or `http://AWS_INSTANCE_IP/cadvisor`
+
+
+## Stress Tests
+To run the stress test, activate your python environment setup above. Then edit the file `local/stress_test.py` changing `n` to the number of queries,
+`instance_count` to the number of users you want to simulate, and `query_url` to the query url provided by the NEXT experiment dashboard.
+
+If testing on an AWS instance, make sure to replace `localhost:8000` with you `AWS_INSTANCE_IP`.
