@@ -19,7 +19,8 @@ Example:
 
 """
 
-from __future__ import print_function
+
+from .docopt import docopt
 import os
 import sys
 from collections import OrderedDict
@@ -28,7 +29,6 @@ import yaml
 import requests
 
 sys.path.append('../../next/lib')
-from docopt import docopt
 
 
 def verify_environ():
@@ -49,7 +49,6 @@ def launch(init_filename, targets_filename=None, upload=True):
 
     with open(init_filename, 'r') as f:
         init = yaml.load(f)
-
 
     header = "data:application/{};base64,"
     args = base64.encodestring(yaml.dump(init))
@@ -79,10 +78,10 @@ def launch(init_filename, targets_filename=None, upload=True):
     host_url = os.environ.get('NEXT_BACKEND_GLOBAL_HOST', 'localhost')
     host_url = 'http://' + host_url + ':8000'
 
-    header = ['{}:{}'.format(key, len(item)) for key, item in d.items()]
+    header = ['{}:{}'.format(key, len(item)) for key, item in list(d.items())]
     header = ';'.join(header) + '\n'
 
-    to_send = ''.join([item for _, item in d.items()])
+    to_send = ''.join([item for _, item in list(d.items())])
 
     data = header + to_send
 
@@ -99,6 +98,7 @@ def launch(init_filename, targets_filename=None, upload=True):
     print('\n')
     print('NEXT Home URL:\n    {}'.format(host_url + '/home'))
     return response
+
 
 if __name__ == "__main__":
     args = docopt(__doc__)

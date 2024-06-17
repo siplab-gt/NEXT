@@ -22,7 +22,9 @@
 #
 
 
-from __future__ import with_statement
+from boto import ec2
+from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
+import boto
 import json
 import hashlib
 import logging
@@ -37,7 +39,9 @@ import tarfile
 import tempfile
 import textwrap
 import time
-import urllib2
+import urllib.request
+import urllib.error
+import urllib.parse
 import warnings
 from datetime import datetime
 from optparse import OptionParser
@@ -91,63 +95,60 @@ DEFAULT_AMI = 'ami-9abea4fb'  # Ubuntu Server 14.04 LTS
 DEFAULT_USER = 'ubuntu'
 DEFAULT_INSTANCE_TYPE = 'm3.large'
 
-import boto
-from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
-from boto import ec2
-
 
 class UsageError(Exception):
     pass
 
 
 instance_info = {
-"c1.medium" : { "cpu": 2, "memory": 1.7, "cost_per_hr": 0.13 },
-"c1.xlarge" : { "cpu": 8, "memory": 7, "cost_per_hr": 0.52 },
-"c3.large" : { "cpu": 2, "memory": 3.75, "cost_per_hr": 0.105 },
-"c3.xlarge" : { "cpu": 4, "memory": 7.5, "cost_per_hr": 0.21 },
-"c3.2xlarge" : { "cpu": 8, "memory": 15, "cost_per_hr": 0.42 },
-"c3.4xlarge" : { "cpu": 16, "memory": 30, "cost_per_hr": 0.84 },
-"c3.8xlarge" : { "cpu": 32, "memory": 60, "cost_per_hr": 1.68 },
-"c4.large" : { "cpu": 2, "memory": 3.75, "cost_per_hr": 0.116 },
-"c4.xlarge" : { "cpu": 4, "memory": 7.5, "cost_per_hr": 0.232 },
-"c4.2xlarge" : { "cpu": 8, "memory": 15, "cost_per_hr": 0.464 },
-"c4.4xlarge" : { "cpu": 16, "memory": 30, "cost_per_hr": 0.928 },
-"c4.8xlarge" : { "cpu": 36, "memory": 60, "cost_per_hr": 1.856 },
-"cc2.8xlarge" : { "cpu": 32, "memory": 60.5, "cost_per_hr": 2 },
-"cr1.8xlarge" : { "cpu": 32, "memory": 244, "cost_per_hr": 3.5 },
-"d2.xlarge" : { "cpu": 4, "memory": 30.5, "cost_per_hr": 0.69 },
-"d2.2xlarge" : { "cpu": 8, "memory": 61, "cost_per_hr": 1.38 },
-"d2.4xlarge" : { "cpu": 16, "memory": 122, "cost_per_hr": 2.76 },
-"d2.8xlarge" : { "cpu": 36, "memory": 244, "cost_per_hr": 5.52 },
-"g2.2xlarge" : { "cpu": 8, "memory": 15, "cost_per_hr": 0.65 },
-"g2.8xlarge" : { "cpu": 32, "memory": 60, "cost_per_hr": 2.6 },
-"hi1.4xlarge" : { "cpu": 16, "memory": 60.5, "cost_per_hr": 3.1 },
-"hs1.8xlarge" : { "cpu": 16, "memory": 117, "cost_per_hr": 4.6 },
-"i2.xlarge" : { "cpu": 4, "memory": 30.5, "cost_per_hr": 0.853 },
-"i2.2xlarge" : { "cpu": 8, "memory": 61, "cost_per_hr": 1.705 },
-"i2.4xlarge" : { "cpu": 16, "memory": 122, "cost_per_hr": 3.41 },
-"i2.8xlarge" : { "cpu": 32, "memory": 244, "cost_per_hr": 6.82 },
-"m1.small" : { "cpu": 1, "memory": 1.7, "cost_per_hr": 0.044 },
-"m1.medium" : { "cpu": 1, "memory": 3.75, "cost_per_hr": 0.087 },
-"m1.large" : { "cpu": 2, "memory": 7.5, "cost_per_hr": 0.175 },
-"m1.xlarge" : { "cpu": 4, "memory": 15, "cost_per_hr": 0.35 },
-"m2.xlarge" : { "cpu": 2, "memory": 17.1, "cost_per_hr": 0.245 },
-"m2.2xlarge" : { "cpu": 4, "memory": 34.2, "cost_per_hr": 0.49 },
-"m2.4xlarge" : { "cpu": 8, "memory": 68.4, "cost_per_hr": 0.98 },
-"m3.medium" : { "cpu": 1, "memory": 3.75, "cost_per_hr": 0.07 },
-"m3.large" : { "cpu": 2, "memory": 7.5, "cost_per_hr": 0.14 },
-"m3.xlarge" : { "cpu": 4, "memory": 15, "cost_per_hr": 0.28 },
-"m3.2xlarge" : { "cpu": 8, "memory": 30, "cost_per_hr": 0.56 },
-"r3.large" : { "cpu": 2, "memory": 15, "cost_per_hr": 0.175 },
-"r3.xlarge" : { "cpu": 4, "memory": 30.5, "cost_per_hr": 0.35 },
-"r3.2xlarge" : { "cpu": 8, "memory": 61, "cost_per_hr": 0.7 },
-"r3.4xlarge" : { "cpu": 16, "memory": 122, "cost_per_hr": 1.4 },
-"r3.8xlarge" : { "cpu": 32, "memory": 244, "cost_per_hr": 2.8 },
-"t1.micro" : { "cpu": 1, "memory": 0.615, "cost_per_hr": 0.02 },
-"t2.micro" : { "cpu": 1, "memory": 1, "cost_per_hr": 0.013 },
-"t2.small" : { "cpu": 1, "memory": 2, "cost_per_hr": 0.026 },
-"t2.medium" : { "cpu": 2, "memory": 4, "cost_per_hr": 0.052 },
+    "c1.medium": {"cpu": 2, "memory": 1.7, "cost_per_hr": 0.13},
+    "c1.xlarge": {"cpu": 8, "memory": 7, "cost_per_hr": 0.52},
+    "c3.large": {"cpu": 2, "memory": 3.75, "cost_per_hr": 0.105},
+    "c3.xlarge": {"cpu": 4, "memory": 7.5, "cost_per_hr": 0.21},
+    "c3.2xlarge": {"cpu": 8, "memory": 15, "cost_per_hr": 0.42},
+    "c3.4xlarge": {"cpu": 16, "memory": 30, "cost_per_hr": 0.84},
+    "c3.8xlarge": {"cpu": 32, "memory": 60, "cost_per_hr": 1.68},
+    "c4.large": {"cpu": 2, "memory": 3.75, "cost_per_hr": 0.116},
+    "c4.xlarge": {"cpu": 4, "memory": 7.5, "cost_per_hr": 0.232},
+    "c4.2xlarge": {"cpu": 8, "memory": 15, "cost_per_hr": 0.464},
+    "c4.4xlarge": {"cpu": 16, "memory": 30, "cost_per_hr": 0.928},
+    "c4.8xlarge": {"cpu": 36, "memory": 60, "cost_per_hr": 1.856},
+    "cc2.8xlarge": {"cpu": 32, "memory": 60.5, "cost_per_hr": 2},
+    "cr1.8xlarge": {"cpu": 32, "memory": 244, "cost_per_hr": 3.5},
+    "d2.xlarge": {"cpu": 4, "memory": 30.5, "cost_per_hr": 0.69},
+    "d2.2xlarge": {"cpu": 8, "memory": 61, "cost_per_hr": 1.38},
+    "d2.4xlarge": {"cpu": 16, "memory": 122, "cost_per_hr": 2.76},
+    "d2.8xlarge": {"cpu": 36, "memory": 244, "cost_per_hr": 5.52},
+    "g2.2xlarge": {"cpu": 8, "memory": 15, "cost_per_hr": 0.65},
+    "g2.8xlarge": {"cpu": 32, "memory": 60, "cost_per_hr": 2.6},
+    "hi1.4xlarge": {"cpu": 16, "memory": 60.5, "cost_per_hr": 3.1},
+    "hs1.8xlarge": {"cpu": 16, "memory": 117, "cost_per_hr": 4.6},
+    "i2.xlarge": {"cpu": 4, "memory": 30.5, "cost_per_hr": 0.853},
+    "i2.2xlarge": {"cpu": 8, "memory": 61, "cost_per_hr": 1.705},
+    "i2.4xlarge": {"cpu": 16, "memory": 122, "cost_per_hr": 3.41},
+    "i2.8xlarge": {"cpu": 32, "memory": 244, "cost_per_hr": 6.82},
+    "m1.small": {"cpu": 1, "memory": 1.7, "cost_per_hr": 0.044},
+    "m1.medium": {"cpu": 1, "memory": 3.75, "cost_per_hr": 0.087},
+    "m1.large": {"cpu": 2, "memory": 7.5, "cost_per_hr": 0.175},
+    "m1.xlarge": {"cpu": 4, "memory": 15, "cost_per_hr": 0.35},
+    "m2.xlarge": {"cpu": 2, "memory": 17.1, "cost_per_hr": 0.245},
+    "m2.2xlarge": {"cpu": 4, "memory": 34.2, "cost_per_hr": 0.49},
+    "m2.4xlarge": {"cpu": 8, "memory": 68.4, "cost_per_hr": 0.98},
+    "m3.medium": {"cpu": 1, "memory": 3.75, "cost_per_hr": 0.07},
+    "m3.large": {"cpu": 2, "memory": 7.5, "cost_per_hr": 0.14},
+    "m3.xlarge": {"cpu": 4, "memory": 15, "cost_per_hr": 0.28},
+    "m3.2xlarge": {"cpu": 8, "memory": 30, "cost_per_hr": 0.56},
+    "r3.large": {"cpu": 2, "memory": 15, "cost_per_hr": 0.175},
+    "r3.xlarge": {"cpu": 4, "memory": 30.5, "cost_per_hr": 0.35},
+    "r3.2xlarge": {"cpu": 8, "memory": 61, "cost_per_hr": 0.7},
+    "r3.4xlarge": {"cpu": 16, "memory": 122, "cost_per_hr": 1.4},
+    "r3.8xlarge": {"cpu": 32, "memory": 244, "cost_per_hr": 2.8},
+    "t1.micro": {"cpu": 1, "memory": 0.615, "cost_per_hr": 0.02},
+    "t2.micro": {"cpu": 1, "memory": 1, "cost_per_hr": 0.013},
+    "t2.small": {"cpu": 1, "memory": 2, "cost_per_hr": 0.026},
+    "t2.medium": {"cpu": 2, "memory": 4, "cost_per_hr": 0.052},
 }
+
 
 class colors:
     HEADER = '\033[95m'
@@ -159,6 +160,8 @@ class colors:
     BOLD = '\033[1m'
 
 # Configure and parse our command-line arguments
+
+
 def parse_args():
     parser = OptionParser(
         prog="spark-ec2",
@@ -190,7 +193,7 @@ def parse_args():
              "slaves across multiple (an additional $0.01/Gb for bandwidth" +
              "between zones applies) (default: a single zone chosen at random)")
     parser.add_option("-a", "--ami", default=DEFAULT_AMI,
-        help="Amazon Machine Image ID to use (default: %default). ")
+                      help="Amazon Machine Image ID to use (default: %default). ")
     parser.add_option(
         "-D", metavar="[ADDRESS:]PORT", dest="proxy_port",
         help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
@@ -268,7 +271,7 @@ def parse_args():
     parser.add_option(
         "--prefix", default=None, help="A prefix to filter files in a bucket with. Only has effect on action={listbucket}")
     parser.add_option(
-        "--custom-config", type="string",help="Custom Configuration")
+        "--custom-config", type="string", help="Custom Configuration")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -282,12 +285,12 @@ def parse_args():
     if home_dir is None or not os.path.isfile(home_dir + '/.boto'):
         if not os.path.isfile('/etc/boto.cfg'):
             if os.getenv('AWS_ACCESS_KEY_ID') is None:
-                print >> stderr, ("ERROR: The environment variable AWS_ACCESS_KEY_ID " +
-                                  "must be set")
+                print(("ERROR: The environment variable AWS_ACCESS_KEY_ID " +
+                       "must be set"), file=stderr)
                 sys.exit(1)
             if os.getenv('AWS_SECRET_ACCESS_KEY') is None:
-                print >> stderr, ("ERROR: The environment variable AWS_SECRET_ACCESS_KEY " +
-                                  "must be set")
+                print(("ERROR: The environment variable AWS_SECRET_ACCESS_KEY " +
+                       "must be set"), file=stderr)
                 sys.exit(1)
     return (opts, action, cluster_name)
 
@@ -299,7 +302,7 @@ def get_or_make_group(conn, name, vpc_id):
     if len(group) > 0:
         return group[0]
     else:
-        print "Creating security group " + name
+        print("Creating security group " + name)
         return conn.create_security_group(name, "NEXT EC2 group", vpc_id)
 
 
@@ -316,10 +319,10 @@ def is_active(instance):
 # Fails if there already instances running in the cluster's groups.
 def launch_cluster(conn, opts, cluster_name):
     if opts.identity_file is None:
-        print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
+        print("ERROR: Must provide an identity file (-i) for ssh connections.", file=stderr)
         sys.exit(1)
     if opts.key_pair is None:
-        print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
+        print("ERROR: Must provide a key pair name (-k) to use on instances.", file=stderr)
         sys.exit(1)
 
     user_data_content = None
@@ -327,12 +330,15 @@ def launch_cluster(conn, opts, cluster_name):
         with open(opts.user_data) as user_data_file:
             user_data_content = user_data_file.read()
 
-    print "Setting up security groups..."
-    master_group = get_or_make_group(conn, cluster_name + "-master", opts.vpc_id)
-    if opts.slaves>0: slave_group = get_or_make_group(conn, cluster_name + "-slaves", opts.vpc_id)
+    print("Setting up security groups...")
+    master_group = get_or_make_group(
+        conn, cluster_name + "-master", opts.vpc_id)
+    if opts.slaves > 0:
+        slave_group = get_or_make_group(
+            conn, cluster_name + "-slaves", opts.vpc_id)
     authorized_address = opts.authorized_address
     if master_group.rules == []:  # Group was just now created
-        if opts.slaves>0:
+        if opts.slaves > 0:
             if opts.vpc_id is None:
                 master_group.authorize(src_group=master_group)
                 master_group.authorize(src_group=slave_group)
@@ -350,14 +356,16 @@ def launch_cluster(conn, opts, cluster_name):
                 master_group.authorize(ip_protocol='udp', from_port=0, to_port=65535,
                                        src_group=slave_group)
         master_group.authorize('tcp', 22, 22, authorized_address)
-        master_group.authorize('tcp', NEXT_BACKEND_GLOBAL_PORT, NEXT_BACKEND_GLOBAL_PORT, authorized_address)
-        #master_group.authorize('tcp', NEXT_FRONTEND_BASE_GLOBAL_PORT, NEXT_FRONTEND_BASE_GLOBAL_PORT, authorized_address)
-        master_group.authorize('tcp', NEXT_FRONTEND_GLOBAL_PORT, NEXT_FRONTEND_GLOBAL_PORT, authorized_address)
+        master_group.authorize(
+            'tcp', NEXT_BACKEND_GLOBAL_PORT, NEXT_BACKEND_GLOBAL_PORT, authorized_address)
+        # master_group.authorize('tcp', NEXT_FRONTEND_BASE_GLOBAL_PORT, NEXT_FRONTEND_BASE_GLOBAL_PORT, authorized_address)
+        master_group.authorize(
+            'tcp', NEXT_FRONTEND_GLOBAL_PORT, NEXT_FRONTEND_GLOBAL_PORT, authorized_address)
         master_group.authorize('tcp', 5555, 5555, authorized_address)
         master_group.authorize('tcp', 8888, 8888, authorized_address)
         master_group.authorize('tcp', 15672, 15672, authorized_address)
         master_group.authorize('tcp', 28017, 28017, authorized_address)
-    if opts.slaves>0 and slave_group.rules == []:  # Group was just now created
+    if opts.slaves > 0 and slave_group.rules == []:  # Group was just now created
         if opts.vpc_id is None:
             slave_group.authorize(src_group=master_group)
             slave_group.authorize(src_group=slave_group)
@@ -380,8 +388,8 @@ def launch_cluster(conn, opts, cluster_name):
     existing_masters, existing_slaves = get_existing_cluster(conn, opts, cluster_name,
                                                              die_on_error=False)
     if existing_slaves or (existing_masters and not opts.use_existing_master):
-        print >> stderr, ("ERROR: There are already instances running in " +
-                          "the desired group")
+        print(("ERROR: There are already instances running in " +
+               "the desired group"), file=stderr)
         sys.exit(1)
 
     # we use group ids to work around https://github.com/boto/boto/issues/350
@@ -390,19 +398,19 @@ def launch_cluster(conn, opts, cluster_name):
         additional_group_ids = [sg.id
                                 for sg in conn.get_all_security_groups()
                                 if opts.additional_security_group in (sg.name, sg.id)]
-    print "Launching instances..."
+    print("Launching instances...")
 
     try:
         image = conn.get_all_images(image_ids=[opts.ami])[0]
     except:
-        print >> stderr, "Could not find AMI " + opts.ami
-        print colors.FAIL + '[error] The startup script could not find your AMI. '\
-                + 'You are either in the incorrect region (in which case see [1]) '\
-                + 'or need to specify both the --region and --ami flags.\n'\
-                + 'example: --region={0} --ami={1}\n'.format(DEFAULT_REGION, DEFAULT_AMI)\
-                + '\n'\
-                + '[1]:https://github.com/nextml/NEXT/issues/11'\
-                + colors.ENDC
+        print("Could not find AMI " + opts.ami, file=stderr)
+        print(colors.FAIL + '[error] The startup script could not find your AMI. '
+              + 'You are either in the incorrect region (in which case see [1]) '
+                + 'or need to specify both the --region and --ami flags.\n'
+                + 'example: --region={0} --ami={1}\n'.format(DEFAULT_REGION, DEFAULT_AMI)
+                + '\n'
+                + '[1]:https://github.com/nextml/NEXT/issues/11'
+                + colors.ENDC)
         sys.exit(1)
 
     # Create block device mapping so that we can add EBS volumes if asked to.
@@ -427,11 +435,11 @@ def launch_cluster(conn, opts, cluster_name):
             block_map["/dev/sd" + chr(ord('s') + i)] = device
 
     # Launch slaves
-    if opts.slaves>0:
+    if opts.slaves > 0:
         if opts.spot_price is not None:
             # Launch spot instances with the requested price
-            print ("Requesting %d slaves as spot instances with price $%.3f" %
-                   (opts.slaves, opts.spot_price))
+            print(("Requesting %d slaves as spot instances with price $%.3f" %
+                   (opts.slaves, opts.spot_price)))
             zones = get_zones(conn, opts)
             num_zones = len(zones)
             i = 0
@@ -454,7 +462,7 @@ def launch_cluster(conn, opts, cluster_name):
                 my_req_ids += [req.id for req in slave_reqs]
                 i += 1
 
-            print "Waiting for spot instances to be granted..."
+            print("Waiting for spot instances to be granted...")
             try:
                 while True:
                     time.sleep(10)
@@ -465,26 +473,29 @@ def launch_cluster(conn, opts, cluster_name):
                     active_instance_ids = []
                     for i in my_req_ids:
                         if i in id_to_req and id_to_req[i].state == "active":
-                            active_instance_ids.append(id_to_req[i].instance_id)
+                            active_instance_ids.append(
+                                id_to_req[i].instance_id)
                     if len(active_instance_ids) == opts.slaves:
-                        print "All %d slaves granted" % opts.slaves
-                        reservations = conn.get_all_reservations(active_instance_ids)
+                        print("All %d slaves granted" % opts.slaves)
+                        reservations = conn.get_all_reservations(
+                            active_instance_ids)
                         slave_nodes = []
                         for r in reservations:
                             slave_nodes += r.instances
                         break
                     else:
-                        print "%d of %d slaves granted, waiting longer" % (
-                            len(active_instance_ids), opts.slaves)
+                        print("%d of %d slaves granted, waiting longer" % (
+                            len(active_instance_ids), opts.slaves))
             except:
-                print "Canceling spot instance requests"
+                print("Canceling spot instance requests")
                 conn.cancel_spot_instance_requests(my_req_ids)
                 # Log a warning if any of these requests actually launched instances:
                 (master_nodes, slave_nodes) = get_existing_cluster(
                     conn, opts, cluster_name, die_on_error=False)
                 running = len(master_nodes) + len(slave_nodes)
                 if running:
-                    print >> stderr, ("WARNING: %d instances are still running" % running)
+                    print(("WARNING: %d instances are still running" %
+                          running), file=stderr)
                 sys.exit(0)
         else:
             # Launch non-spot instances
@@ -496,7 +507,8 @@ def launch_cluster(conn, opts, cluster_name):
                 num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
                 if num_slaves_this_zone > 0:
                     slave_res = image.run(key_name=opts.key_pair,
-                                          security_group_ids=[slave_group.id] + additional_group_ids,
+                                          security_group_ids=[
+                                              slave_group.id] + additional_group_ids,
                                           instance_type=opts.instance_type,
                                           placement=zone,
                                           min_count=num_slaves_this_zone,
@@ -506,15 +518,15 @@ def launch_cluster(conn, opts, cluster_name):
                                           placement_group=opts.placement_group,
                                           user_data=user_data_content)
                     slave_nodes += slave_res.instances
-                    print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
-                                                                    zone, slave_res.id)
+                    print("Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
+                                                                    zone, slave_res.id))
                 i += 1
     else:
         slave_nodes = []
 
     # Launch or resume masters
     if existing_masters:
-        print "Starting master..."
+        print("Starting master...")
         for inst in existing_masters:
             if inst.state not in ["shutting-down", "terminated"]:
                 inst.start()
@@ -526,7 +538,8 @@ def launch_cluster(conn, opts, cluster_name):
         if opts.zone == 'all':
             opts.zone = random.choice(conn.get_all_zones()).name
         master_res = image.run(key_name=opts.key_pair,
-                               security_group_ids=[master_group.id] + additional_group_ids,
+                               security_group_ids=[
+                                   master_group.id] + additional_group_ids,
                                instance_type=master_type,
                                placement=opts.zone,
                                min_count=1,
@@ -537,10 +550,10 @@ def launch_cluster(conn, opts, cluster_name):
                                user_data=user_data_content)
 
         master_nodes = master_res.instances
-        print "Launched master in %s, regid = %s" % (opts.zone, master_res.id)
+        print("Launched master in %s, regid = %s" % (opts.zone, master_res.id))
 
     # This wait time corresponds to SPARK-4983
-    print "Waiting for AWS to propagate instance metadata..."
+    print("Waiting for AWS to propagate instance metadata...")
     time.sleep(5)
     # Give the instances descriptive names
     for master in master_nodes:
@@ -561,7 +574,7 @@ def launch_cluster(conn, opts, cluster_name):
 
 
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
-    print "Searching for existing cluster " + cluster_name + "..."
+    print("Searching for existing cluster " + cluster_name + "...")
     reservations = conn.get_all_reservations()
     master_nodes = []
     slave_nodes = []
@@ -574,14 +587,16 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
             elif (cluster_name + "-slaves") in group_names:
                 slave_nodes.append(inst)
     if any((master_nodes, slave_nodes)):
-        print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes))
+        print("Found %d master(s), %d slaves" %
+              (len(master_nodes), len(slave_nodes)))
     if master_nodes != [] or not die_on_error:
         return (master_nodes, slave_nodes)
     else:
         if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
+            print("ERROR: Could not find master in group " +
+                  cluster_name + "-master", file=sys.stderr)
         else:
-            print >> sys.stderr, "ERROR: Could not find any existing cluster"
+            print("ERROR: Could not find any existing cluster", file=sys.stderr)
         sys.exit(1)
 
 
@@ -590,7 +605,7 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
 def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     master = master_nodes[0].public_dns_name
     if deploy_ssh_key:
-        print "Generating cluster's SSH key on master..."
+        print("Generating cluster's SSH key on master...")
         key_setup = """
           [ -f ~/.ssh/id_rsa ] ||
             (ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa &&
@@ -598,21 +613,21 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
         """
         ssh(master, opts, key_setup)
         dot_ssh_tar = ssh_read(master, opts, ['tar', 'c', '.ssh'])
-        print "Transferring cluster's SSH key to slaves..."
+        print("Transferring cluster's SSH key to slaves...")
         for slave in slave_nodes:
-            print slave.public_dns_name
+            print(slave.public_dns_name)
             ssh_write(slave.public_dns_name, opts, ['tar', 'x'], dot_ssh_tar)
 
-    print "Running setup on master..."
+    print("Running setup on master...")
     setup_next_cluster(master, opts)
-    print "Done!"
+    print("Done!")
 
-    print "Start rsync of local next-discovery source code up"
+    print("Start rsync of local next-discovery source code up")
     rsync_dir(LOCAL_NEXT_PATH, EC2_NEXT_PATH, opts, master)
     rsync_docker_config(opts, master_nodes, slave_nodes)
-    print "Done!"
+    print("Done!")
 
-    print "Running docker-compose up on master..."
+    print("Running docker-compose up on master...")
     docker_up(opts, master_nodes, slave_nodes)
 
 
@@ -624,6 +639,7 @@ def rsync_dir(local_src_dir, ec2_dest_dir, opts, host):
         "%s@%s:%s/" % (opts.user, host, ec2_dest_dir)
     ]
     subprocess.check_call(command)
+
 
 def setup_next_cluster(master, opts):
     # Create a temp directory in which we will place all the files to be
@@ -667,34 +683,38 @@ def docker_login(opts, master_nodes, slave_nodes):
     master = master_nodes[0].public_dns_name
 
     import signal
+
     def preexec_function():
         # Ignore the SIGINT signal by setting the handler to the standard
         # signal handler SIG_IGN.
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    ssh(master, opts, "sudo chmod 777 " + EC2_NEXT_PATH + '/' + 'docker_login.sh')
+    ssh(master, opts, "sudo chmod 777 " +
+        EC2_NEXT_PATH + '/' + 'docker_login.sh')
     ssh(master, opts, 'sudo ' + EC2_NEXT_PATH + '/' + 'docker_login.sh')
 
 
 def list_bucket(opts):
     AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
-    conn = boto.connect_s3( AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY )
-    print "Trying to connect to bucket %s"%(opts.bucket)
+    conn = boto.connect_s3(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+    print("Trying to connect to bucket %s" % (opts.bucket))
     try:
-        bucket = conn.get_bucket( opts.bucket )
-        if hasattr(opts,'prefix'):
-            print [ key.name.encode( "utf-8" ) for key in bucket.list(prefix=opts.prefix) ]
+        bucket = conn.get_bucket(opts.bucket)
+        if hasattr(opts, 'prefix'):
+            print([key.name.encode("utf-8")
+                  for key in bucket.list(prefix=opts.prefix)])
         else:
-            print [ key.name.encode( "utf-8" ) for key in bucket.list() ]
+            print([key.name.encode("utf-8") for key in bucket.list()])
 
-    except boto.exception.S3ResponseError, e:
-        print "This bucket does not exist. Please create a new bucket using createbucket command."
+    except boto.exception.S3ResponseError as e:
+        print("This bucket does not exist. Please create a new bucket using createbucket command.")
+
 
 def createbucket(opts):
     AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
-    conn = boto.connect_s3( AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY )
+    conn = boto.connect_s3(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 
     gotbucket = False
     while not gotbucket:
@@ -702,19 +722,20 @@ def createbucket(opts):
         try:
             newbucket = conn.create_bucket(bucket_uid)
             gotbucket = True
-        except boto.exception.S3CreateError, e:
+        except boto.exception.S3CreateError as e:
             pass
 
-    print 'Your AWS S3 bucket has been successfully created with bucket name set as: ', bucket_uid
-    print
-    print 'To automatically use this bucket, input the following command into your terminal:'
-    print 'export AWS_BUCKET_NAME='+bucket_uid
+    print('Your AWS S3 bucket has been successfully created with bucket name set as: ', bucket_uid)
+    print()
+    print('To automatically use this bucket, input the following command into your terminal:')
+    print('export AWS_BUCKET_NAME='+bucket_uid)
+
 
 def rsync_docker_config(opts, master_nodes, slave_nodes):
     master = master_nodes[0].public_dns_name
 
     opts.master_instance_type = master_nodes[0].instance_type
-    if len(slave_nodes)>0:
+    if len(slave_nodes) > 0:
         opts.instance_type = slave_nodes[0].instance_type
 
     master_num_cpus = instance_info[opts.master_instance_type]['cpu']
@@ -735,21 +756,22 @@ def rsync_docker_config(opts, master_nodes, slave_nodes):
         "SLAVE_LIST": ','.join([i.public_dns_name for i in slave_nodes]),
         "NEXT_BACKEND_GLOBAL_HOST": master,
         "NEXT_BACKEND_GLOBAL_PORT": NEXT_BACKEND_GLOBAL_PORT,
-        "NEXT_FRONTEND_GLOBAL_HOST":master,
-        "NEXT_FRONTEND_GLOBAL_PORT":NEXT_FRONTEND_GLOBAL_PORT,
-        "AWS_ACCESS_ID":os.getenv('AWS_ACCESS_KEY_ID'),
-        "AWS_ACCESS_KEY_ID":os.getenv('AWS_ACCESS_KEY_ID'),
-        "AWS_SECRET_ACCESS_KEY":os.getenv('AWS_SECRET_ACCESS_KEY'),
-        "AWS_BUCKET_NAME":os.getenv('AWS_BUCKET_NAME','next-database-backups'),
-        "SITE_KEY":os.getenv('SITE_KEY', None)
+        "NEXT_FRONTEND_GLOBAL_HOST": master,
+        "NEXT_FRONTEND_GLOBAL_PORT": NEXT_FRONTEND_GLOBAL_PORT,
+        "AWS_ACCESS_ID": os.getenv('AWS_ACCESS_KEY_ID'),
+        "AWS_ACCESS_KEY_ID": os.getenv('AWS_ACCESS_KEY_ID'),
+        "AWS_SECRET_ACCESS_KEY": os.getenv('AWS_SECRET_ACCESS_KEY'),
+        "AWS_BUCKET_NAME": os.getenv('AWS_BUCKET_NAME', 'next-database-backups'),
+        "SITE_KEY": os.getenv('SITE_KEY', None)
     }
     with open('./templates/docker_login.sh') as src:
         with open(tmp_dir+'/docker_login.sh', "w") as dest:
             text = src.read()
             env_vars = ''
             for key in master_environment_vars:
-                env_vars += 'export ' + str(key) + '=' + str(master_environment_vars[key]) + '\n'
-            text = text.replace("{{ environment_variables }}",env_vars)
+                env_vars += 'export ' + \
+                    str(key) + '=' + str(master_environment_vars[key]) + '\n'
+            text = text.replace("{{ environment_variables }}", env_vars)
             dest.write(text)
             dest.close()
 
@@ -758,8 +780,9 @@ def rsync_docker_config(opts, master_nodes, slave_nodes):
             text = src.read()
             env_vars = ''
             for key in master_environment_vars:
-                env_vars += 'export ' + str(key) + '=' + str(master_environment_vars[key]) + '\n'
-            text = text.replace("{{ environment_variables }}",env_vars)
+                env_vars += 'export ' + \
+                    str(key) + '=' + str(master_environment_vars[key]) + '\n'
+            text = text.replace("{{ environment_variables }}", env_vars)
             dest.write(text)
             dest.close()
 
@@ -768,20 +791,20 @@ def rsync_docker_config(opts, master_nodes, slave_nodes):
         docker_compose_template_vars = json.loads(opts.custom_config)
     else:
         docker_compose_template_vars = {
-            "CELERY_ON": os.getenv('CELERY_ON',True),
+            "CELERY_ON": os.getenv('CELERY_ON', True),
 
             "CELERY_SYNC_WORKER_COUNT": 4,
 
-            "CELERY_ASYNC_WORKER_COUNT":min(8,2*master_num_cpus),
-            "CELERY_THREADS_PER_ASYNC_WORKER":max(1,int(.25*master_num_cpus)),
-            "CELERY_ASYNC_WORKER_PREFETCH":1,
+            "CELERY_ASYNC_WORKER_COUNT": min(8, 2*master_num_cpus),
+            "CELERY_THREADS_PER_ASYNC_WORKER": max(1, int(.25*master_num_cpus)),
+            "CELERY_ASYNC_WORKER_PREFETCH": 1,
 
-            "CELERY_DASHBOARD_WORKER_COUNT":1,
-            "CELERY_THREADS_PER_DASHBOARD_WORKER":2,
-            "CELERY_DASHBOARD_WORKER_PREFETCH":1,
+            "CELERY_DASHBOARD_WORKER_COUNT": 1,
+            "CELERY_THREADS_PER_DASHBOARD_WORKER": 2,
+            "CELERY_DASHBOARD_WORKER_PREFETCH": 1,
 
-            "NEXT_BACKEND_NUM_GUNICORN_WORKERS":int(master_num_cpus+1),
-            "NEXT_BACKEND_GUNICORN_WORKER_MAX_REQUESTS":100
+            "NEXT_BACKEND_NUM_GUNICORN_WORKERS": int(master_num_cpus+1),
+            "NEXT_BACKEND_GUNICORN_WORKER_MAX_REQUESTS": 100
         }
     docker_compose_template_vars["NEXT_BACKEND_GLOBAL_PORT"] = NEXT_BACKEND_GLOBAL_PORT
     docker_compose_template_vars["GIT_HASH"] = git_hash
@@ -790,11 +813,11 @@ def rsync_docker_config(opts, master_nodes, slave_nodes):
             text = src.read()
             env_vars = ''
             for key in docker_compose_template_vars:
-                text = text.replace("{{" + key + "}}",str(docker_compose_template_vars[key]))
+                text = text.replace("{{" + key + "}}",
+                                    str(docker_compose_template_vars[key]))
             dest.write(text)
             dest.close()
-            print text
-
+            print(text)
 
     # rsync the whole directory over to the master machine
     command = [
@@ -818,11 +841,12 @@ def is_ssh_available(host, opts, print_ssh_output=True):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT  # we pipe stderr through stdout to preserve output order
     )
-    cmd_output = s.communicate()[0]  # [1] is stderr, which we redirected to stdout
+    # [1] is stderr, which we redirected to stdout
+    cmd_output = s.communicate()[0]
 
     if s.returncode != 0 and print_ssh_output:
         # extra leading newline is for spacing in wait_for_cluster_state()
-        print textwrap.dedent("""\n
+        print(textwrap.dedent("""\n
             Warning: SSH connection error. (This could be temporary.)
             Host: {h}
             SSH return code: {r}
@@ -831,7 +855,7 @@ def is_ssh_available(host, opts, print_ssh_output=True):
             h=host,
             r=s.returncode,
             o=cmd_output.strip()
-        )
+        ))
 
     return s.returncode == 0
 
@@ -866,12 +890,13 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
     num_attempts = 0
 
     while True:
-        time.sleep(10*( 1.*(num_attempts>0) + 0.1))  # seconds
+        time.sleep(10*(1.*(num_attempts > 0) + 0.1))  # seconds
 
         for i in cluster_instances:
             i.update()
 
-        statuses = conn.get_all_instance_status(instance_ids=[i.id for i in cluster_instances])
+        statuses = conn.get_all_instance_status(
+            instance_ids=[i.id for i in cluster_instances])
 
         if cluster_state == 'ssh-ready':
             if all(i.state == 'running' for i in cluster_instances) and \
@@ -891,10 +916,10 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
     sys.stdout.write("\n")
 
     end_time = datetime.now()
-    print "Cluster is now in '{s}' state. Waited {t} seconds.".format(
+    print("Cluster is now in '{s}' state. Waited {t} seconds.".format(
         s=cluster_state,
         t=(end_time - start_time).seconds
-    )
+    ))
 
 
 def stringify_command(parts):
@@ -935,8 +960,8 @@ def ssh(host, opts, command):
                         "--key-pair parameters and try again.".format(host))
                 else:
                     raise e
-            print >> stderr, \
-                "Error executing remote command, retrying after 30 seconds: {0}".format(e)
+            print("Error executing remote command, retrying after 30 seconds: {0}".format(
+                e), file=stderr)
             time.sleep(30)
             tries = tries + 1
 
@@ -965,7 +990,8 @@ def ssh_write(host, opts, command, arguments):
     tries = 0
     while True:
         proc = subprocess.Popen(
-            ssh_command(opts) + ['%s@%s' % (opts.user, host), stringify_command(command)],
+            ssh_command(opts) + ['%s@%s' %
+                                 (opts.user, host), stringify_command(command)],
             stdin=subprocess.PIPE)
         proc.stdin.write(arguments)
         proc.stdin.close()
@@ -973,10 +999,11 @@ def ssh_write(host, opts, command, arguments):
         if status == 0:
             break
         elif tries > 5:
-            raise RuntimeError("ssh_write failed with error %s" % proc.returncode)
+            raise RuntimeError(
+                "ssh_write failed with error %s" % proc.returncode)
         else:
-            print >> stderr, \
-                "Error {0} while executing remote command, retrying after 30 seconds".format(status)
+            print("Error {0} while executing remote command, retrying after 30 seconds".format(
+                status), file=stderr)
             time.sleep(30)
             tries = tries + 1
 
@@ -1001,19 +1028,19 @@ def get_partition(total, num_partitions, current_partitions):
 def real_main():
     (opts, action, cluster_name) = parse_args()
 
-    print 'opts : ' + str(opts)
-    print
-    print 'cluster_name : ' + str(cluster_name)
-    print
+    print('opts : ' + str(opts))
+    print()
+    print('cluster_name : ' + str(cluster_name))
+    print()
 
     if opts.ebs_vol_num > 8:
-        print >> stderr, "ebs-vol-num cannot be greater than 8"
+        print("ebs-vol-num cannot be greater than 8", file=stderr)
         sys.exit(1)
 
     try:
         conn = ec2.connect_to_region(opts.region)
     except Exception as e:
-        print >> stderr, (e)
+        print((e), file=stderr)
         sys.exit(1)
 
     # Select an AZ at random if it was not specified.
@@ -1021,13 +1048,15 @@ def real_main():
         opts.zone = random.choice(conn.get_all_zones()).name
 
     if action == "launch":
-        print colors.OKBLUE + '[fyi]: NEXT has launched once red and blue messages start'\
-                            + ' printing.\n' + colors.ENDC
+        print(colors.OKBLUE + '[fyi]: NEXT has launched once red and blue messages start'
+                            + ' printing.\n' + colors.ENDC)
         try:
             if opts.resume:
-                (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
+                (master_nodes, slave_nodes) = get_existing_cluster(
+                    conn, opts, cluster_name)
             else:
-                (master_nodes, slave_nodes) = launch_cluster(conn, opts, cluster_name)
+                (master_nodes, slave_nodes) = launch_cluster(
+                    conn, opts, cluster_name)
 
             print_dns_urls(prefix=True)
             wait_for_cluster_state(
@@ -1039,38 +1068,39 @@ def real_main():
             print_dns_urls(instances=master_nodes + slave_nodes)
             setup_cluster(conn, master_nodes, slave_nodes, opts, True)
         except boto.exception.EC2ResponseError:
-            print colors.FAIL + '[error] Your cluster failed to launch. This could happen'\
-                  + ' for several reasons:\n'\
-                  + '1. Are you in the right region? AMIs and keypairs are region\n'\
-                  + '   specific. For more details, see [0] and [1].\n'\
-                  + '2. Have you followed the setup guide at [2]?\n'\
-                  + '\n[0]:https://github.com/nextml/NEXT/issues/11\n'\
-                  + '[1]:https://github.com/nextml/NEXT/wiki/Troubleshooting\n'\
-                  + '[2]:https://github.com/nextml/NEXT/wiki/NEXT-EC2-Launch-Tutorial'\
-                 + colors.ENDC\
+            print(colors.FAIL + '[error] Your cluster failed to launch. This could happen'
+                  + ' for several reasons:\n'
+                  + '1. Are you in the right region? AMIs and keypairs are region\n'
+                  + '   specific. For more details, see [0] and [1].\n'
+                  + '2. Have you followed the setup guide at [2]?\n'
+                  + '\n[0]:https://github.com/nextml/NEXT/issues/11\n'
+                  + '[1]:https://github.com/nextml/NEXT/wiki/Troubleshooting\n'
+                  + '[2]:https://github.com/nextml/NEXT/wiki/NEXT-EC2-Launch-Tutorial'
+                  + colors.ENDC)\
 
     elif action == "destroy":
-        print "Are you sure you want to destroy the cluster %s?" % cluster_name
-        print "The following instances will be terminated:"
+        print("Are you sure you want to destroy the cluster %s?" % cluster_name)
+        print("The following instances will be terminated:")
         (master_nodes, slave_nodes) = get_existing_cluster(
             conn, opts, cluster_name, die_on_error=False)
         for inst in master_nodes + slave_nodes:
-            print "> %s" % inst.public_dns_name
+            print("> %s" % inst.public_dns_name)
 
         msg = "ALL DATA ON ALL NODES WILL BE LOST!!\nDestroy cluster %s (y/N): " % cluster_name
-        response = raw_input(msg)
+        response = input(msg)
         if response == "y":
-            print "Terminating master..."
+            print("Terminating master...")
             for inst in master_nodes:
                 inst.terminate()
-            print "Terminating slaves..."
+            print("Terminating slaves...")
             for inst in slave_nodes:
                 inst.terminate()
 
             # Delete security groups as well
             if opts.delete_groups:
-                print "Deleting security groups (this will take some time)..."
-                group_names = [cluster_name + "-master", cluster_name + "-slaves"]
+                print("Deleting security groups (this will take some time)...")
+                group_names = [cluster_name +
+                               "-master", cluster_name + "-slaves"]
                 wait_for_cluster_state(
                     conn=conn,
                     opts=opts,
@@ -1079,13 +1109,14 @@ def real_main():
                 )
                 attempt = 1
                 while attempt <= 3:
-                    print "Attempt %d" % attempt
-                    groups = [g for g in conn.get_all_security_groups() if g.name in group_names]
+                    print("Attempt %d" % attempt)
+                    groups = [g for g in conn.get_all_security_groups()
+                              if g.name in group_names]
                     success = True
                     # Delete individual rules in all groups before deleting groups to
                     # remove dependencies between them
                     for group in groups:
-                        print "Deleting rules in security group " + group.name
+                        print("Deleting rules in security group " + group.name)
                         for rule in group.rules:
                             for grant in rule.grants:
                                 success &= group.revoke(ip_protocol=rule.ip_protocol,
@@ -1100,10 +1131,11 @@ def real_main():
                         try:
                             # It is needed to use group_id to make it work with VPC
                             conn.delete_security_group(group_id=group.id)
-                            print "Deleted security group %s" % group.name
+                            print("Deleted security group %s" % group.name)
                         except boto.exception.EC2ResponseError:
                             success = False
-                            print "Failed to delete security group %s" % group.name
+                            print("Failed to delete security group %s" %
+                                  group.name)
 
                     # Unfortunately, group.revoke() returns True even if a rule was not
                     # deleted, so this needs to be rerun if something fails
@@ -1113,13 +1145,14 @@ def real_main():
                     attempt += 1
 
                 if not success:
-                    print "Failed to delete all security groups after 3 tries."
-                    print "Try re-running in a few minutes."
+                    print("Failed to delete all security groups after 3 tries.")
+                    print("Try re-running in a few minutes.")
 
     elif action == "login":
-        (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name)
         master = master_nodes[0].public_dns_name
-        print "Logging into master " + master + "..."
+        print("Logging into master " + master + "...")
         proxy_opt = []
         if opts.proxy_port is not None:
             proxy_opt = ['-D', opts.proxy_port]
@@ -1127,70 +1160,80 @@ def real_main():
             ssh_command(opts) + proxy_opt + ['-t', '-t', "%s@%s" % (opts.user, master)])
 
     elif action == "reboot-slaves":
-        response = raw_input(
+        response = input(
             "Are you sure you want to reboot the cluster " +
             cluster_name + " slaves?\n" +
             "Reboot cluster slaves " + cluster_name + " (y/N): ")
         if response == "y":
             (master_nodes, slave_nodes) = get_existing_cluster(
                 conn, opts, cluster_name, die_on_error=False)
-            print "Rebooting slaves..."
+            print("Rebooting slaves...")
             for inst in slave_nodes:
                 if inst.state not in ["shutting-down", "terminated"]:
-                    print "Rebooting " + inst.id
+                    print("Rebooting " + inst.id)
                     inst.reboot()
 
     elif action == "get-master":
-        (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
-        print 'public_dns_name  : \t' + master_nodes[0].public_dns_name
-        print 'instance_type \t : \t' + master_nodes[0].instance_type
-        print 'num_cpus \t : \t' + str(instance_info[master_nodes[0].instance_type]['cpu'])
-        print 'memory (GB) \t : \t' + str(instance_info[master_nodes[0].instance_type]['memory'])
-        print 'cost ($/hr) \t : \t' + str(instance_info[master_nodes[0].instance_type]['cost_per_hr'])
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name)
+        print('public_dns_name  : \t' + master_nodes[0].public_dns_name)
+        print('instance_type \t : \t' + master_nodes[0].instance_type)
+        print('num_cpus \t : \t' +
+              str(instance_info[master_nodes[0].instance_type]['cpu']))
+        print('memory (GB) \t : \t' +
+              str(instance_info[master_nodes[0].instance_type]['memory']))
+        print('cost ($/hr) \t : \t' +
+              str(instance_info[master_nodes[0].instance_type]['cost_per_hr']))
 
     elif action == "rsync":
         if cluster_name == "host":
-            master = os.getenv('NEXT_BACKEND_GLOBAL_HOST','localhost')
+            master = os.getenv('NEXT_BACKEND_GLOBAL_HOST', 'localhost')
             rsync_dir(LOCAL_NEXT_PATH, EC2_NEXT_PATH, opts, master)
         else:
-            (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
+            (master_nodes, slave_nodes) = get_existing_cluster(
+                conn, opts, cluster_name)
             master = master_nodes[0].public_dns_name
             rsync_dir(LOCAL_NEXT_PATH, EC2_NEXT_PATH, opts, master)
             rsync_docker_config(opts, master_nodes, slave_nodes)
 
     elif action == "docker_up":
-        (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name)
         docker_up(opts, master_nodes, slave_nodes)
 
     elif action == "docker_login":
-        (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name)
         docker_login(opts, master_nodes, slave_nodes)
 
     elif action == "backup":
-        (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name)
         master = master_nodes[0].public_dns_name
         # opts.backup_filename
-        command = "cd %s; sudo docker exec nextdiscovery_mongodbbackup_1 /bin/bash -c 'python ./next/database/database_backup.py %s' " % (EC2_NEXT_PATH,opts.backup_filename)
+        command = "cd %s; sudo docker exec nextdiscovery_mongodbbackup_1 /bin/bash -c 'python ./next/database/database_backup.py %s' " % (
+            EC2_NEXT_PATH, opts.backup_filename)
         ssh(master, opts, command)
 
     elif action == "restore":
-        (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name)
         master = master_nodes[0].public_dns_name
         # opts.backup_filename
-        command = "cd %s; sudo docker exec nextdiscovery_mongodbbackup_1 /bin/bash -c 'python ./next/database/database_restore.py %s' " % (EC2_NEXT_PATH,opts.backup_filename)
+        command = "cd %s; sudo docker exec nextdiscovery_mongodbbackup_1 /bin/bash -c 'python ./next/database/database_restore.py %s' " % (
+            EC2_NEXT_PATH, opts.backup_filename)
         ssh(master, opts, command)
 
-
     elif action == "listbucket":
-        print "listbucket"
+        print("listbucket")
         list_bucket(opts)
 
     elif action == "createbucket":
-        print "createbucket"
+        print("createbucket")
         createbucket(opts)
 
     elif action == "stop":
-        response = raw_input(
+        response = input(
             "Are you sure you want to stop the cluster " +
             cluster_name + "?\nDATA ON EPHEMERAL DISKS WILL BE LOST, " +
             "BUT THE CLUSTER WILL KEEP USING SPACE ON\n" +
@@ -1200,11 +1243,11 @@ def real_main():
         if response == "y":
             (master_nodes, slave_nodes) = get_existing_cluster(
                 conn, opts, cluster_name, die_on_error=False)
-            print "Stopping master..."
+            print("Stopping master...")
             for inst in master_nodes:
                 if inst.state not in ["shutting-down", "terminated"]:
                     inst.stop()
-            print "Stopping slaves..."
+            print("Stopping slaves...")
             for inst in slave_nodes:
                 if inst.state not in ["shutting-down", "terminated"]:
                     if inst.spot_instance_request_id:
@@ -1213,12 +1256,13 @@ def real_main():
                         inst.stop()
 
     elif action == "start":
-        (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
-        print "Starting slaves..."
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name)
+        print("Starting slaves...")
         for inst in slave_nodes:
             if inst.state not in ["shutting-down", "terminated"]:
                 inst.start()
-        print "Starting master..."
+        print("Starting master...")
         for inst in master_nodes:
             if inst.state not in ["shutting-down", "terminated"]:
                 inst.start()
@@ -1233,27 +1277,29 @@ def real_main():
         setup_cluster(conn, master_nodes, slave_nodes, opts, False)
 
     else:
-        print >> stderr, "Invalid action: %s" % action
+        print("Invalid action: %s" % action, file=stderr)
         sys.exit(1)
 
 
 def print_dns_urls(instances=None, prefix=False):
     if instances:
         for inst in instances:
-            print colors.OKBLUE + '[1]:http://%s' % inst.public_dns_name + colors.ENDC
-            print colors.OKBLUE + '[2]:http://%s:8000/dashboard/experiment_list' \
-                                 % inst.public_dns_name + colors.ENDC
+            print(colors.OKBLUE + '[1]:http://%s' %
+                  inst.public_dns_name + colors.ENDC)
+            print(colors.OKBLUE + '[2]:http://%s:8000/dashboard/experiment_list'
+                  % inst.public_dns_name + colors.ENDC)
     if prefix:
-        print colors.OKBLUE + '[fyi]: The NEXT web interface will be available at [1]\n'\
-                             + '[fyi]: The NEXT dashboard will be available at [2]\n'\
-                             + '[fyi]: (URLs [1] and [2] available after cluster ssh-ready)\n'\
-                             + '[fyi]: (also available through get-master command' + colors.ENDC
+        print(colors.OKBLUE + '[fyi]: The NEXT web interface will be available at [1]\n'
+              + '[fyi]: The NEXT dashboard will be available at [2]\n'
+              + '[fyi]: (URLs [1] and [2] available after cluster ssh-ready)\n'
+              + '[fyi]: (also available through get-master command' + colors.ENDC)
+
 
 def main():
     try:
         real_main()
-    except UsageError, e:
-        print >> stderr, "\nError:\n", e
+    except UsageError as e:
+        print("\nError:\n", e, file=stderr)
         sys.exit(1)
 
 

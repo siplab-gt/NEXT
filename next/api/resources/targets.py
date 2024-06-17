@@ -1,4 +1,4 @@
-from StringIO import StringIO
+from io import StringIO
 import pandas as pd
 from flask import Flask, send_file, request, abort
 from flask_restful import Resource, reqparse
@@ -30,7 +30,7 @@ meta_error = {
     'ExpDoesNotExistError': {
         'message': "No experiment with the specified experiment ID exists.",
         'code': 400,
-        'status':'FAIL'
+        'status': 'FAIL'
     },
 }
 
@@ -40,6 +40,8 @@ meta_success = {
 }
 
 # Participants resource class
+
+
 class Targets(Resource):
     def get(self, exp_uid):
         app_id = resource_manager.get_app_id(exp_uid)

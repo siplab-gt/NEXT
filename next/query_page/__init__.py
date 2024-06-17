@@ -1,1 +1,1 @@
-from query_page import query_page
+from .query_page import query_page

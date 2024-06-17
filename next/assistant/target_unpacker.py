@@ -2,7 +2,7 @@ import zipfile
 import io
 import os
 from joblib import Parallel, delayed
-from StringIO import StringIO
+from io import StringIO
 import base64
 import random
 import sys
@@ -29,7 +29,7 @@ def zipfile_to_dictionary(zip_file):
     """
     filenames = zip_file.namelist()
     filenames = [f for f in filenames if not any([ignore in f.lower() for ignore in
-                                             ['ds_store', 'icon', '__macosx']])]
+                                                  ['ds_store', 'icon', '__macosx']])]
     filenames = [f for f in filenames if len(f.split('/')[-1]) > 0]
     filenames = sorted(filenames)
 
@@ -39,6 +39,7 @@ def zipfile_to_dictionary(zip_file):
         name = filename.split('/')[-1]
         files[name] = f
     return files
+
 
 def upload_target(filename, file_obj, bucket_name, aws_key, aws_secret_key,
                   i=None, get_bucket=True):
@@ -66,6 +67,7 @@ def upload_target(filename, file_obj, bucket_name, aws_key, aws_secret_key,
             'alt_type': 'text',
             'alt_description': filename}
 
+
 def get_filenames_from_zip(s):
     base64_zip = io.BytesIO(s)
     zip_file = zipfile.ZipFile(base64_zip)
@@ -82,20 +84,21 @@ def unpack(s, aws_key, aws_secret_key, bucket_name, n_jobs=None,
         n_jobs = min(len(files), 50)
 
     if not bucket_name:
-        bucket_name = '{}{}'.format(aws_key.lower(), utils.random_string(length=20))
+        bucket_name = '{}{}'.format(
+            aws_key.lower(), utils.random_string(length=20))
 
     # TODO: trim here for JSON object to append to dictionaries
     # TODO: manage CSV targets here
     # TODO: how come creating a S3 bucket isn't working for me?
     utils.debug_print('=== Starting upload of targets to S3 ===')
     try:
-        targets = Parallel(n_jobs=n_jobs, backend='threading') \
-                    (delayed(upload_target, check_pickle=False)
-                              (name, file, bucket_name, aws_key, aws_secret_key,
-                               i=i, get_bucket=True)
-                   for i, (name, file) in enumerate(files.items()))
+        targets = Parallel(n_jobs=n_jobs, backend='threading')(delayed(upload_target, check_pickle=False)
+                                                               (name, file, bucket_name, aws_key, aws_secret_key,
+                                                                i=i, get_bucket=True)
+                                                               for i, (name, file) in enumerate(files.items()))
     except:
-        utils.debug_print('Whoops, parallel S3 upload failed. Trying serially.')
+        utils.debug_print(
+            'Whoops, parallel S3 upload failed. Trying serially.')
         targets = [upload_target(name, file, bucket_name, aws_key, aws_secret_key,
                                  i=i, get_bucket=True)
                    for i, (name, file) in enumerate(files.items())]
@@ -110,10 +113,10 @@ def unpack_text_file(s, kind='csv'):
     files = zipfile_to_dictionary(zip_file)
 
     # files is has at least one key; (tested before call in assistant_blueprint.py)
-    file_str = files[files.keys()[0]]
+    file_str = files[list(files.keys())[0]]
     if kind in {'csv', 'txt'}:
         strings = file_str.split('\n')  # -1 because last newline
-        strings = list(filter(lambda x: len(x) > 0, strings))
+        strings = list([x for x in strings if len(x) > 0])
         targets = [{'target_id': str(i),
                     'primary_type': 'text',
                     'primary_description': string,

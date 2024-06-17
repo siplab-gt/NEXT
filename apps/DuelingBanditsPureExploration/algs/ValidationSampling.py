@@ -19,7 +19,7 @@ class MyAlg:
                               value=failure_probability)
 
         alg = butler.algorithms.get()
-        params = alg.get(u'params', None)
+        params = alg.get('params', None)
         butler.algorithms.set(key='params', value=params)
 
         if params:
@@ -45,7 +45,8 @@ class MyAlg:
 
         butler.algorithms.set(key='query_list', value=query_list)
 
-        butler.algorithms.set(key='keys', value=list(arm_key_value_dict.keys()))
+        butler.algorithms.set(
+            key='keys', value=list(arm_key_value_dict.keys()))
         butler.algorithms.set_many(key_value_dict=arm_key_value_dict)
 
         return True
@@ -59,10 +60,9 @@ class MyAlg:
         return query + [query[0]]
 
     def processAnswer(self, butler, left_id, right_id, painted_id, winner_id):
-        butler.algorithms.increment_many(key_value_dict=
-                                         {'Xsum_'+str(painted_id): 1.0,
-                                          'T_'+str(painted_id): 1.0,
-                                          'total_pulls': 1})
+        butler.algorithms.increment_many(key_value_dict={'Xsum_'+str(painted_id): 1.0,
+                                                         'T_'+str(painted_id): 1.0,
+                                                         'total_pulls': 1})
 
         # The following lines enforce "do not ask". The query list gets shorter
         # each time this function is called (and an question is answered).

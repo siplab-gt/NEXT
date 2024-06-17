@@ -1,3 +1,6 @@
+import logging
+import json
+import sys
 from next.api import api_blueprint
 from next.dashboard.dashboard import dashboard
 from next.assistant.assistant_blueprint import assistant
@@ -17,27 +20,27 @@ else:
 app.register_blueprint(dashboard, url_prefix=dashboard_prefix)
 app.register_blueprint(query_page, url_prefix='/query')
 
+
 @app.context_processor
 def inject_global_templatevars():
     return dict(next_git_hash=constants.GIT_HASH,
                 next_version=constants.VERSION)
 
-import logging
-import sys
+
 # Log to standard out. Remember to turn off in production
 app.logger.addHandler(logging.StreamHandler(sys.stdout))
 app.logger.setLevel(logging.DEBUG)
 
-#Handle internal errors using a custom error message
-import json
+# Handle internal errors using a custom error message
+
+
 @app.errorhandler(404)
 def internal_system_error(error):
-    response  = {
-        'meta':{
-            'status':'FAIL',
-            'code':404,
-            'message':'Resource not found'
+    response = {
+        'meta': {
+            'status': 'FAIL',
+            'code': 404,
+            'message': 'Resource not found'
         }
     }
     return json.dumps(response), 404
-

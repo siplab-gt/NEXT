@@ -3,9 +3,10 @@ from apps.Tests.tests.test_api import get_alg, get_exp, set_and_get_exp
 
 
 class MyApp:
-    def __init__(self,db):
+    def __init__(self, db):
         self.app_id = 'Tests'
-        self.TargetManager = next.apps.SimpleTargetManager.SimpleTargetManager(db)
+        self.TargetManager = next.apps.SimpleTargetManager.SimpleTargetManager(
+            db)
 
     def initExp(self, butler, init_algs, args):
         set_and_get_exp(butler)
@@ -26,5 +27,3 @@ class MyApp:
         get_exp(butler)
         assert alg() == "return_get_model"
         return True
-
-

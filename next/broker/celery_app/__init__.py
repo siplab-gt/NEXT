@@ -1,1 +1,1 @@
-from celery_broker import *
+from .celery_broker import *

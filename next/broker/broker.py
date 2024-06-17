@@ -1,6 +1,6 @@
 import next.utils as utils
 
-from datetime import datetime,timedelta
+from datetime import datetime, timedelta
 
 import celery
 from next.broker.celery_app import tasks as tasks
@@ -14,6 +14,8 @@ import redis
 import json
 import time
 import next.utils as utils
+from contextlib import contextmanager
+
 
 class JobBroker:
 
@@ -23,7 +25,21 @@ class JobBroker:
         self.hostname = None
 
         # location of hashes
-        self.r = redis.StrictRedis(host=next.constants.RABBITREDIS_HOSTNAME, port=next.constants.RABBITREDIS_PORT, db=0)
+        self.pool = redis.ConnectionPool(
+            host=next.constants.RABBITREDIS_HOSTNAME,
+            port=next.constants.RABBITREDIS_PORT,
+            max_connections=10,
+            db=0
+        )
+
+    @contextmanager
+    def get_redis_connection(self):
+        client = redis.Redis(connection_pool=self.pool)
+        client.set('MINIONWORKER_HOSTNAME', 'localhost')
+        try:
+            yield client
+        finally:
+            client.close()
 
     def applyAsync(self, app_id, exp_uid, task_name, args, ignore_result=False):
         """
@@ -40,6 +56,7 @@ class JobBroker:
         submit_timestamp = utils.datetimeNow('string')
         domain = self.__get_domain_for_job(app_id+"_"+exp_uid)
         if next.constants.CELERY_ON:
+
             result = tasks.apply.apply_async(args=[app_id,
                                                    exp_uid,
                                                    task_name,
@@ -52,7 +69,8 @@ class JobBroker:
             else:
                 return result.get(interval=0.001)
         else:
-            result = tasks.apply(app_id,exp_uid,task_name, args, submit_timestamp)
+            result = tasks.apply(app_id, exp_uid, task_name,
+                                 args, submit_timestamp)
             if ignore_result:
                 return True
             else:
@@ -73,6 +91,7 @@ class JobBroker:
         submit_timestamp = utils.datetimeNow('string')
         domain = self.__get_domain_for_job(app_id+"_"+exp_uid)
         if next.constants.CELERY_ON:
+
             result = tasks.apply_dashboard.apply_async(args=[app_id,
                                                              exp_uid,
                                                              args,
@@ -84,14 +103,14 @@ class JobBroker:
             else:
                 return result.get(interval=0.001)
         else:
-            result = tasks.apply_dashboard(app_id,exp_uid, args, submit_timestamp)
+            result = tasks.apply_dashboard(
+                app_id, exp_uid, args, submit_timestamp)
             if ignore_result:
                 return True
             else:
                 return result
 
-
-    def applySyncByNamespace(self, app_id, exp_uid, alg_id, alg_label, task_name, args, namespace=None, ignore_result=False,time_limit=0):
+    def applySyncByNamespace(self, app_id, exp_uid, alg_id, alg_label, task_name, args, namespace=None, ignore_result=False, time_limit=0):
         """
         Run a task (task_name) on a set of args with a given app_id, and exp_uid asynchronously.
         Waits for computation to finish and returns the answer unless ignore_result=True in which case its a non-blocking call.
@@ -102,36 +121,40 @@ class JobBroker:
 
         """
         submit_timestamp = utils.datetimeNow('string')
-        if namespace==None:
-            namespace=exp_uid
+        if namespace == None:
+            namespace = exp_uid
         domain = self.__get_domain_for_job(app_id+"_"+exp_uid)
         num_queues = next.constants.CELERY_SYNC_WORKER_COUNT
 
         # assign namespaces to queues (with worker of concurrency 1) in round-robbin
-        try:
-            namespace_cnt = int(self.r.get(namespace+"_cnt"))
-        except:
-            pipe = self.r.pipeline(True)
-            while 1:
-                try:
-                    pipe.watch(namespace+"_cnt","namespace_counter")
-                    if not pipe.exists(namespace+"_cnt"):
-                        if not pipe.exists('namespace_counter'):
-                            namespace_counter = 0
+        with self.get_redis_connection() as client:
+            try:
+                namespace_cnt = int(client.get(namespace+"_cnt"))
+            except:
+                pipe = client.pipeline(True)
+                while 1:
+                    try:
+                        pipe.watch(namespace+"_cnt", "namespace_counter")
+                        if not pipe.exists(namespace+"_cnt"):
+                            if not pipe.exists('namespace_counter'):
+                                namespace_counter = 0
+                            else:
+                                namespace_counter = pipe.get(
+                                    'namespace_counter')
+                            pipe.multi()
+                            pipe.set(namespace+"_cnt",
+                                     int(namespace_counter)+1)
+                            pipe.set('namespace_counter',
+                                     int(namespace_counter)+1)
+                            pipe.execute()
                         else:
-                            namespace_counter = pipe.get('namespace_counter')
-                        pipe.multi()
-                        pipe.set(namespace+"_cnt",int(namespace_counter)+1)
-                        pipe.set('namespace_counter',int(namespace_counter)+1)
-                        pipe.execute()
-                    else:
-                        pipe.unwatch()
-                    break
-                except redis.exceptions.WatchError:
-                    continue
-                finally:
-                    pipe.reset()
-            namespace_cnt = int(self.r.get(namespace+"_cnt"))
+                            pipe.unwatch()
+                        break
+                    except redis.exceptions.WatchError:
+                        continue
+                    finally:
+                        pipe.reset()
+                namespace_cnt = int(client.get(namespace+"_cnt"))
         queue_number = (namespace_cnt % num_queues) + 1
 
         queue_name = 'sync_queue_'+str(queue_number)+'@'+domain
@@ -143,8 +166,9 @@ class JobBroker:
             soft_time_limit = time_limit
             hard_time_limit = time_limit + .01
         if next.constants.CELERY_ON:
-            result = tasks.apply_sync_by_namespace.apply_async(args=[app_id,exp_uid,
-                                                                     alg_id,alg_label,
+
+            result = tasks.apply_sync_by_namespace.apply_async(args=[app_id, exp_uid,
+                                                                     alg_id, alg_label,
                                                                      task_name, args,
                                                                      namespace, job_uid,
                                                                      submit_timestamp, time_limit],
@@ -156,7 +180,8 @@ class JobBroker:
             else:
                 return result.get(interval=.001)
         else:
-            result = tasks.apply_sync_by_namespace(app_id,exp_uid,alg_id,alg_label,task_name, args, namespace, job_uid, submit_timestamp, time_limit)
+            result = tasks.apply_sync_by_namespace(
+                app_id, exp_uid, alg_id, alg_label, task_name, args, namespace, job_uid, submit_timestamp, time_limit)
             if ignore_result:
                 return True
             else:
@@ -172,21 +197,29 @@ class JobBroker:
         This implementation assumes just a single master node and no workers
         so only a single hostname (e.g. localhost) has celery workers.
         """
-        if self.r.exists('MINIONWORKER_HOSTNAME'):
-            self.hostname = self.r.get('MINIONWORKER_HOSTNAME')
-            utils.debug_print('Found hostname: {} (Redis)'.format(self.hostname))
-        else:
-            with open('/etc/hosts', 'r') as fid:
-                for line in fid:
-                    if 'MINIONWORKER' in line:
-                        self.hostname = line.split('\t')[1].split(' ')[1]
-                        self.r.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
-                        utils.debug_print('Found hostname: {} (/etc/hosts)'.format(self.hostname))
-                        break
-        if self.hostname is None:
-            import socket
-            self.hostname = socket.gethostname()
-            self.r.set('MINIONWORKER_HOSTNAME', self.hostname, ex=360)  # expire after 10 minutes
-            utils.debug_print('Found hostname: {} (socket.gethostname())'.format(self.hostname))
+        with self.get_redis_connection() as client:
+            if client.exists('MINIONWORKER_HOSTNAME'):
+                self.hostname = client.get(
+                    'MINIONWORKER_HOSTNAME').decode('utf-8')
+                utils.debug_print(
+                    'Found hostname: {} (Redis)'.format(self.hostname))
+            else:
+                with open('/etc/hosts', 'r') as fid:
+                    for line in fid:
+                        if 'MINIONWORKER' in line:
+                            self.hostname = line.split('\t')[1].split(' ')[1]
+                            # expire after 10 minutes
+                            client.set('MINIONWORKER_HOSTNAME',
+                                       self.hostname, ex=360)
+                            utils.debug_print(
+                                'Found hostname: {} (/etc/hosts)'.format(self.hostname))
+                            break
+            if self.hostname is None:
+                import socket
+                self.hostname = socket.gethostname()
+                client.set('MINIONWORKER_HOSTNAME', self.hostname,
+                           ex=360)  # expire after 10 minutes
+                utils.debug_print(
+                    'Found hostname: {} (socket.gethostname())'.format(self.hostname))
 
-        return self.hostname
+            return self.hostname

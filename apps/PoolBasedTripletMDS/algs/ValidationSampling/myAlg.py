@@ -1,5 +1,5 @@
 import numpy as np
-import utilsMDS
+from . import utilsMDS
 import time
 import next.utils as utils
 import random
@@ -24,7 +24,7 @@ class MyAlg:
         if params:
             if 'query_list' in params:
                 query_list = params['query_list']
-                if isinstance(query_list[0][0], (str, unicode)):
+                if isinstance(query_list[0][0], str):
                     targetset = butler.targets.get_targetset(butler.exp_uid)
                     query_list = utils.filenames_to_ids(query_list, targetset)
 

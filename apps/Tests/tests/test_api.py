@@ -15,7 +15,7 @@ app_id = 'Tests'
 
 
 def test_api(assert_200=True, num_objects=5, desired_dimension=2,
-            total_pulls_per_client=4, num_experiments=1, num_clients=6):
+             total_pulls_per_client=4, num_experiments=1, num_clients=6):
 
     pool = Pool(processes=num_clients)
     supported_alg_ids = ['TestAlg']
@@ -60,11 +60,12 @@ def test_api(assert_200=True, num_objects=5, desired_dimension=2,
 
         experiment = numpy.random.choice(exp_info)
         exp_uid = experiment['exp_uid']
-        pool_args.append((exp_uid, participant_uid, total_pulls_per_client, assert_200))
+        pool_args.append(
+            (exp_uid, participant_uid, total_pulls_per_client, assert_200))
     results = pool.map(simulate_one_client, pool_args)
 
     for result in results:
-        print result
+        print(result)
 
     test_utils.getModel(exp_uid, app_id, supported_alg_ids, alg_list)
 
@@ -77,7 +78,7 @@ def simulate_one_client(input_args):
     processAnswer_times = []
 
     for t in range(total_pulls):
-        print "Participant {1} has taken {0} pulls".format(t, participant_uid)
+        print("Participant {1} has taken {0} pulls".format(t, participant_uid))
         # test POST getQuery #
         widget = random.choice([True] + 4*[False])
         widget = True
@@ -104,11 +105,12 @@ def simulate_one_client(input_args):
         processAnswer_args_dict["args"]["query_uid"] = query_uid
         processAnswer_args_dict["args"]['response_time'] = response_time
 
-        processAnswer_json_response, dt = test_utils.processAnswer(processAnswer_args_dict)
+        processAnswer_json_response, dt = test_utils.processAnswer(
+            processAnswer_args_dict)
         processAnswer_times.append(dt)
 
     r = test_utils.format_times(getQuery_times, processAnswer_times, total_pulls,
-            participant_uid)
+                                participant_uid)
 
     return r
 
@@ -122,10 +124,14 @@ def set_and_get_exp(butler):
 
 
 def get_exp(butler):
-    assert butler.experiment['exp_key_1'] == butler.experiment.get(key='exp_key_1') == 'exp_value_1'
-    assert butler.experiment['exp_key_2'] == butler.experiment.get(key='exp_key_2') == 'exp_value_2'
-    assert butler.experiment.memory['exp_key_mem_1'] == butler.experiment.memory.get(key='exp_key_mem_1') == 'exp_value_mem_1'
-    assert butler.experiment.memory['exp_key_mem_2'] == butler.experiment.memory.get(key='exp_key_mem_2') == 'exp_value_mem_2'
+    assert butler.experiment['exp_key_1'] == butler.experiment.get(
+        key='exp_key_1') == 'exp_value_1'
+    assert butler.experiment['exp_key_2'] == butler.experiment.get(
+        key='exp_key_2') == 'exp_value_2'
+    assert butler.experiment.memory['exp_key_mem_1'] == butler.experiment.memory.get(
+        key='exp_key_mem_1') == 'exp_value_mem_1'
+    assert butler.experiment.memory['exp_key_mem_2'] == butler.experiment.memory.get(
+        key='exp_key_mem_2') == 'exp_value_mem_2'
 
 
 def set_and_get_alg(butler):
@@ -137,10 +143,15 @@ def set_and_get_alg(butler):
 
 
 def get_alg(butler):
-    assert butler.algorithms['alg_key_1'] == butler.algorithms.get(key='alg_key_1') == 'alg_value_1'
-    assert butler.algorithms['alg_key_2'] == butler.algorithms.get(key='alg_key_2') == 'alg_value_2'
-    assert butler.algorithms.memory['alg_key_mem_1'] == butler.algorithms.memory.get(key='alg_key_mem_1') == 'alg_value_mem_1'
-    assert butler.algorithms.memory['alg_key_mem_2'] == butler.algorithms.memory.get(key='alg_key_mem_2') == 'alg_value_mem_2'
+    assert butler.algorithms['alg_key_1'] == butler.algorithms.get(
+        key='alg_key_1') == 'alg_value_1'
+    assert butler.algorithms['alg_key_2'] == butler.algorithms.get(
+        key='alg_key_2') == 'alg_value_2'
+    assert butler.algorithms.memory['alg_key_mem_1'] == butler.algorithms.memory.get(
+        key='alg_key_mem_1') == 'alg_value_mem_1'
+    assert butler.algorithms.memory['alg_key_mem_2'] == butler.algorithms.memory.get(
+        key='alg_key_mem_2') == 'alg_value_mem_2'
+
 
 if __name__ == '__main__':
     test_api()

@@ -32,9 +32,10 @@ def test_api(assert_200=True, num_arms=5, num_clients=8, delta=0.05,
              params={'num_tries': 5}):
 
     app_id = 'DuelingBanditsPureExploration'
-    true_means = numpy.array(range(num_arms)[::-1])/float(num_arms)
+    true_means = numpy.array(list(range(num_arms))[::-1])/float(num_arms)
     pool = Pool(processes=num_clients)
-    supported_alg_ids = ['BR_LilUCB', 'BR_Random', 'ValidationSampling', 'BR_KLUCB']
+    supported_alg_ids = ['BR_LilUCB', 'BR_Random',
+                         'ValidationSampling', 'BR_KLUCB']
 
     alg_list = []
     for i, alg_id in enumerate(supported_alg_ids):
@@ -47,12 +48,13 @@ def test_api(assert_200=True, num_arms=5, num_clients=8, delta=0.05,
 
     params = []
     for algorithm in alg_list:
-        params.append({'alg_label': algorithm['alg_label'], 'proportion':1./len(alg_list)})
+        params.append(
+            {'alg_label': algorithm['alg_label'], 'proportion': 1./len(alg_list)})
     algorithm_management_settings = {}
     algorithm_management_settings['mode'] = 'fixed_proportions'
     algorithm_management_settings['params'] = params
 
-    print algorithm_management_settings
+    print(algorithm_management_settings)
 
     #################################################
     # Test POST Experiment
@@ -86,7 +88,7 @@ def test_api(assert_200=True, num_arms=5, num_clients=8, delta=0.05,
         experiment = numpy.random.choice(exp_info)
         exp_uid = experiment['exp_uid']
         pool_args.append((exp_uid, participant_uid, total_pulls_per_client,
-                          true_means,assert_200))
+                          true_means, assert_200))
 
     results = pool.map(simulate_one_client, pool_args)
 
@@ -95,13 +97,15 @@ def test_api(assert_200=True, num_arms=5, num_clients=8, delta=0.05,
 
     test_utils.getModel(exp_uid, app_id, supported_alg_ids, alg_list)
 
+
 def simulate_one_client(input_args):
-    exp_uid,participant_uid,total_pulls,true_means,assert_200 = input_args
+    exp_uid, participant_uid, total_pulls, true_means, assert_200 = input_args
 
     getQuery_times = []
     processAnswer_times = []
     for t in range(total_pulls):
-        print "        Participant {} had {} total pulls: ".format(participant_uid, t)
+        print("        Participant {} had {} total pulls: ".format(
+            participant_uid, t))
 
         # test POST getQuery #
         # return a widget 1/5 of the time (normally, use HTML)
@@ -125,7 +129,8 @@ def simulate_one_client(input_args):
 
         #  print left
         reward_left = true_means[left['target_id']] + numpy.random.randn()*0.5
-        reward_right = true_means[right['target_id']] + numpy.random.randn()*0.5
+        reward_right = true_means[right['target_id']
+                                  ] + numpy.random.randn()*0.5
         if reward_left > reward_right:
             target_winner = left
         else:
@@ -133,20 +138,21 @@ def simulate_one_client(input_args):
 
         response_time = time.time() - ts
 
-        # test POST processAnswer 
+        # test POST processAnswer
         processAnswer_args_dict = {'args': {'query_uid': query_uid,
                                             'response_time': response_time,
                                             'target_winner': target_winner["target_id"]},
                                    'exp_uid': exp_uid}
-        processAnswer_json_response, dt = test_utils.processAnswer(processAnswer_args_dict)
+        processAnswer_json_response, dt = test_utils.processAnswer(
+            processAnswer_args_dict)
         processAnswer_times += [dt]
 
     r = test_utils.format_times(getQuery_times, processAnswer_times, total_pulls,
-                   participant_uid)
+                                participant_uid)
     return r
 
 
 if __name__ == '__main__':
     test_api()
     # test_api(assert_200=True, num_arms=5, num_clients=10, delta=0.05,
-                #    total_pulls_per_client=10, num_experiments=1)
+    #    total_pulls_per_client=10, num_experiments=1)

@@ -18,5 +18,3 @@ class MyAlg:
     def getModel(self, butler):
         get_alg(butler)
         return "return_process_answer"
-
-
