@@ -15,7 +15,7 @@ chrome_options.add_argument('--no-sandbox')
 chrome_options.add_argument('--disable-dev-shm-usage')
 
 # Define the number of simulated users
-instance_count = 22
+instance_count = 200
 
 # Replace with your target URL
 query_url = 'http://next.localhost/query/query_page/query_page/570964757addf7828590c6104ab1e7'
