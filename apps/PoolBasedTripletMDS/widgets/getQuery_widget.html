@@ -11,14 +11,50 @@
     height:85%;
   }
 
+  .row {
+    justify-content: space-between;
+  }
+
+  .col-xs-6 {
+    width: 49%;
+  }
+
+  .col-xs-6#left {
+    margin-right: 1%;
+  }
+
+  .col-xs-6#right {
+    margin-left: 1%;
+  }
+
   div.row > div.col-xs-6 {
     height:100%;
-    outline: 1px solid black;
+    /* outline: 1px solid black; */
+    border-radius: 30px;
+    align-content: center;
+    justify-content: center;
+    padding: 10px;
+    border: 1px solid #67b1ce;
+    box-shadow:  -1px 1px #67b1ce,
+         -2px 2px #67b1ce,
+         -3px 3px #67b1ce,
+         -4px 4px #67b1ce,
+         -5px 5px #67b1ce;
   }
 
   div.row > div.col-xs-12 {
     height:100%;
-    outline: 1px solid black;
+    /* outline: 1px solid black; */
+    border-radius: 30px;
+    align-content: center;
+    justify-content: center;
+    padding: 10px;
+    border: 1px solid #67b1ce;
+    box-shadow:  -1px 1px #67b1ce,
+         -2px 2px #67b1ce,
+         -3px 3px #67b1ce,
+         -4px 4px #67b1ce,
+         -5px 5px #67b1ce;
   }
 
   #wrapper > div.row {
@@ -29,6 +65,49 @@
     max-height:100%;
     max-width:100%;
     height:auto;
+    border-radius: 30px;
+  }
+
+
+  #wrapper video{
+    max-height:100%;
+    max-width:100%;
+    height:auto;
+    border-radius: 30px;
+  }
+
+  .target-text {
+    text-align: center;
+    text-justify: center;
+    font-size: x-large;
+    padding: 20px;
+  }
+
+  #center .target-text {
+    font-size: xx-large;
+  }
+
+  .row #center {
+  /*  border: 20px solid red; */
+    background: #dbd7d2;
+  }
+
+  .row #left {
+    background: #dbd7d2;
+    cursor: pointer;
+  }
+
+  #left:hover {
+    background-color: #C0C0C0;
+  }
+
+  .row #right {
+    background: #dbd7d2;
+    cursor: pointer;
+  }
+
+  #right:hover {
+    background-color: #C0C0C0;
   }
 </style>
 <br/>
@@ -39,17 +118,17 @@
     <img class="center-block" src={{ query.target_indices[0].primary_description }}></img>
     {% elif query.target_indices[0].primary_type == "text" %}
     <div>
-      <div>{{ query.target_indices[0].primary_description|safe }}</div>
+      <div class="target-text">{{ query.target_indices[0].primary_description|safe }}</div>
     </div>
 
     {% elif query.target_indices[0].primary_type == "video" %}
-    <video width="320" height="240"  poster="http://jimpunk.net/Loading/wp-content/uploads/loading1.gif" controls autoplay loop>
+    <video class="center-block" width="320" height="240"  poster="http://jimpunk.net/Loading/wp-content/uploads/loading1.gif" controls autoplay loop>
       <source src={{ query.target_indices[0].primary_description }} type="video/mp4">
       <source src={{ query.target_indices[0].primary_description }}>
 	Your browser does not support the video tag.
     </video>
     {% elif query.target_indices[0].primary_type == "audio" %}
-    <audio controls src={{ query.target_indices[0].primary_description }}></audio>
+    <audio class="center-block" controls src={{ query.target_indices[0].primary_description }}></audio>
     {% endif %}
   </div>
 </div>
@@ -61,16 +140,16 @@
     <img class="center-block" src={{ query.target_indices[1].primary_description }}></img>
 
     {% elif query.target_indices[1].primary_type == "text"%}
-    <div>{{ query.target_indices[1].primary_description|safe }}</div>
+    <div class="target-text">{{ query.target_indices[1].primary_description|safe }}</div>
 
     {% elif query.target_indices[0].primary_type == "video" %}
-    <video width="320" height="240" poster="http://jimpunk.net/Loading/wp-content/uploads/loading1.gif" controls autoplay loop>
+    <video class="center-block" width="320" height="240" poster="http://jimpunk.net/Loading/wp-content/uploads/loading1.gif" controls autoplay loop>
       <source src={{ query.target_indices[1].primary_description }} type="video/mp4">
       <source src={{ query.target_indices[1].primary_description }}>
 	Your browser does not support the video tag.
     </video>
     {% elif query.target_indices[0].primary_type == "audio" %}
-    <audio controls src={{ query.target_indices[1].primary_description }}></audio>
+    <audio class="center-block" controls src={{ query.target_indices[1].primary_description }}></audio>
     {% endif %}
   </div>
 
@@ -79,15 +158,15 @@
     {% if query.target_indices[2].primary_type == "image" or query.target_indices[2].primary_type == "img" %}
     <img class="center-block" src={{ query.target_indices[2].primary_description }}> </img>
     {% elif query.target_indices[2].primary_type == "text" %}
-    <div>{{ query.target_indices[2].primary_description|safe }}</div>
+    <div class="target-text">{{ query.target_indices[2].primary_description|safe }}</div>
     {% elif query.target_indices[0].primary_type == "video" %}
-    <video width="320" height="240" poster="http://jimpunk.net/Loading/wp-content/uploads/loading1.gif" controls autoplay loop>
+    <video class="center-block" width="320" height="240" poster="http://jimpunk.net/Loading/wp-content/uploads/loading1.gif" controls autoplay loop>
       <source src={{ query.target_indices[2].primary_description }} type="video/mp4">
       <source src={{ query.target_indices[2].primary_description }}>
 	Your browser does not support the video tag.
     </video>
     {% elif query.target_indices[0].primary_type == "audio" %}
-    <audio controls src={{ query.target_indices[2].primary_description }}></audio>
+    <audio class="center-block" controls src={{ query.target_indices[2].primary_description }}></audio>
     {% endif %}
   </div>
 </div>
@@ -98,12 +177,22 @@
 
   var submit_right = function() {
   	next_widget.processAnswer({"target_winner": {{ query.target_indices[2].target_id }}});
-  	$('#right').css({'outline': '2px solid #FF0000'});
+  	$('#right').css(
+      {
+        'border': '1px solid #cc0000',
+        'box-shadow':  '-1px 1px #cc0000, -2px 2px #cc0000, -3px 3px #cc0000, -4px 4px #cc0000, -5px 5px #cc0000'
+      });
+     // {'outline': '2px solid #cc0000'});
   }
 
   var submit_left = function() {
   	next_widget.processAnswer({"target_winner": {{ query.target_indices[1].target_id }}});
-  	$('#left').css({'outline': '2px solid #FF0000'});
+  	$('#left').css(
+      {
+        'border': '1px solid #cc0000',
+        'box-shadow':  '-1px 1px #cc0000, -2px 2px #cc0000, -3px 3px #cc0000, -4px 4px #cc0000, -5px 5px #cc0000'
+      });
+      // {'outline': '2px solid #cc0000'});
   }
 
   function checkKey(e) {

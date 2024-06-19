@@ -1,0 +1,51 @@
+app_id: PoolBasedTripletMDS
+args:
+  alg_list:
+    - {alg_id: CrowdKernel, alg_label: Test, test_alg_label: Test}
+    - {alg_id: STE, alg_label: STE, test_alg_label: Test}
+    - {alg_id: RandomSampling, alg_label: RandomSampling, test_alg_label: Test}
+    - {alg_id: UncertaintySampling, alg_label: UncertaintySampling, test_alg_label: Test}
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    - {alg_label: Test, proportion: 0.25}
+    - {alg_label: STE, proportion: 0.25}
+    - {alg_label: RandomSampling, proportion: 0.25}
+    - {alg_label: UncertaintySampling, proportion: 0.25}
+  d: 2
+  debrief: Test debrief
+  failure_probability: 0.01
+  instructions: Test instructions
+  participant_to_algorithm_management: one_to_many
+  targets:
+    targetset:
+    - {primary_description: 'This is example text, left over urls from the image examples0022.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0036.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0050.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0074.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0076.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0112.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0114.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0126.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0142.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0152.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0184.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0194.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0200.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0208.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0220.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0254.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0256.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0312.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0322.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0326.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0414.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0420.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0430.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0438.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0454.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0470.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0494.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0524.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0526.png', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'This is example text, left over urls from the image examples0572.png', alt_description: '', primary_type: 'text', alt_type: ''}
