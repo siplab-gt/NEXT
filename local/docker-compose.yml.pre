@@ -22,6 +22,7 @@ services:
     container_name: reverse_proxy
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
+      - ./media:/var/www/media
     ports:
       - 80:80
     restart: always
