@@ -6,6 +6,11 @@ import next.constants as constants
 from next.api.resource_manager import ResourceManager
 import next.utils as utils
 
+
+
+# FOR DEBUG
+import logging
+
 resource_manager = ResourceManager()
 query_page = Blueprint('query_page',
                        __name__,
@@ -16,6 +21,14 @@ query_page = Blueprint('query_page',
 @query_page.route('/query_page/<page>')
 @query_page.route('/query_page/<page>/<exp_uid>')
 def load_page(page, exp_uid=None):
+    
+    
+    # logging.basicConfig(filename="/home/ubuntu/NEXT/next/output.log",  # Log file name
+    #     level=logging.INFO  # Set the logging level to INFO
+    #     #format='%(asctime)s - %(levelname)s - %(message)s'  # Log format
+    # )
+    # logging.info('This is an informational message.')
+    
     experiment = resource_manager.get_experiment(exp_uid)
     app_template = page+'.html'
     if constants.NEXT_BACKEND_GLOBAL_HOST:

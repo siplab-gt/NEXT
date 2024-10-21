@@ -1,0 +1,63 @@
+initExp:
+  args:
+    A:
+      description: Number of elements in a query to choose from
+      type: num
+    B:
+      description: Number of elements to rank
+      type: num
+    n:
+      description: Number of targets
+      type: num
+    d:
+      description: Dimension of embedding
+      type: num
+    failure_probability:
+      description: Confidence of result
+      type: num
+    burn_in_period:
+      description: Burn_in period for InfoTuple
+      type: num
+    down_sample_rate:
+      description: Downsample rate for InfoTuple
+      type: num
+    mu:
+      description: Regularization parameter for InfoTuple
+      type: num
+  rets:
+    type: bool
+    description: A boolean indicating success
+    values: true
+
+getQuery:
+  rets:
+    description: The list of targets to ask about
+    type: list # Size A
+    values:
+        type: num
+        description: The ID of the target in the query
+      
+processAnswer:
+    args:
+      target_winner:
+        description: A list of IDs of the targets reranked from the query
+        type: list  # Size B
+        values:
+            type: num
+            description: The ID of the target
+    rets:
+      type: bool
+      description: A boolean indicating success
+      values: true
+
+getModel:
+  rets:
+    type: dict
+    description: The current state of the model
+    values:
+      X:
+        description: The embedding
+        type: stuff
+      num_reported_answers:
+        description: How many answers have been reported (for this algorithm)
+        type: num

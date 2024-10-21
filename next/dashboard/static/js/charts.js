@@ -65,8 +65,8 @@ var buttonsChart = [["#A9A9C6"]];
          y:
          }
          */
-        d3TripletPlot = function(data) {
 
+        d3TripletPlot = function(data) {
             if (data.length == 0){
                 $('#'+div_id).html("<h3>No data available to be plotted.<h3>");
             }
@@ -79,7 +79,8 @@ var buttonsChart = [["#A9A9C6"]];
                 } else if(data[i].target.primary_type=="text") {
                     text_data.push(data[i]);
                 } else if(data[i].target.primary_type=="video") {
-            data[i].target.primary_description = data[i].target.alt_description;
+            // WHO ADDED THISSS!
+            // data[i].target.primary_description = data[i].target.alt_description;
             if(data[i].target.alt_type=="image"){
             image_data.push(data[i]);
             } else {
@@ -170,7 +171,7 @@ var buttonsChart = [["#A9A9C6"]];
                 .on("mousedown", inspect_target );
 
 
-             var texts = svg.selectAll("text").data(text_data);
+            var texts = svg.selectAll("text").data(text_data);
             texts.enter()
                 .append("svg:text")
                 .attr("text", function(d) { return d.target.primary_description })
@@ -181,7 +182,7 @@ var buttonsChart = [["#A9A9C6"]];
                 .attr("fill", "black")
                 .attr("text-anchor", "middle")
                 .attr("dominant-baseline","middle")
-                .text( function(d) { return d.target.primary_description } )
+                .text( function(d) {return d.target.primary_description } )
                 .on("mouseover", function(d){ d3.select(this)
                     .attr("font-size", .75*dilation/zm.scale()*fontsize+"px")
                     .each( show_tooltip )
@@ -191,6 +192,7 @@ var buttonsChart = [["#A9A9C6"]];
                     .each( hide_tooltip )
                 } )
                 .on("mousedown", inspect_target );
+            
 
 
 

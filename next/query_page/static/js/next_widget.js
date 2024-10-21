@@ -12,7 +12,6 @@ var next_widget = (function($){
 	setUrl : function(url) {      
 	    _url = url;
 	},
-	
 	getQuery : function(div_id,args,callbacks){
 	    $.ajax({
 		url: _url+"/api/experiment/getQuery",
@@ -28,7 +27,11 @@ var next_widget = (function($){
 		_args = {};
 		_args["exp_uid"] = args["exp_uid"];
 		_args["args"] = {};
+		console.log(data.args)
+		console.log(data.args["query_uid"])
+		
 		_args["args"]["query_uid"] = data.args["query_uid"]; 
+		
 		// Set the callbacks
 		_callbacks = callbacks;
 		_callbacks.getQuery_success(data);

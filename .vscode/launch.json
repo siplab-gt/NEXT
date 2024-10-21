@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Launch Script with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/local/launch.py",  // Adjust the path if needed
+            "args": ["${workspaceFolder}/local/birdvids/aws-init.yaml"],  // Arguments passed to the script
+            "console": "integratedTerminal",  // Allows viewing output in the terminal
+            "justMyCode": false  // Set to true if you want to debug your own code only
+        }
+    ]
+}

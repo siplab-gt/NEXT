@@ -1,0 +1,384 @@
+<style>
+  /* Your existing styles */
+  html, body {
+    height: 100%;
+  }
+
+  div.container {
+    height: 100%;
+  }
+
+  #wrapper {
+    height: 85%;
+  }
+
+  .targets-container {
+    justify-content: flex-start; /* Align items to the start */
+    gap: 10px; /* Consistent gap between items */
+    display: flex;
+    flex-wrap: nowrap; /* Prevent wrapping to multiple rows */
+    overflow-x: auto; /* Allow horizontal scrolling if items overflow */
+    margin-bottom: 20px; /* Space between rows */
+    border: 2px solid red;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 20px;
+  }
+
+  .anchor-container {
+    display: flex;
+    flex-direction: column; /* Stack "Anchor" label above the target */
+    align-items: center; /* Center the anchor container */
+    margin-bottom: 20px;
+  }
+
+  .anchor-label {
+    font-size: large;
+    font-weight: bold;
+    margin-bottom: 10px; /* Space between label and anchor */
+  }
+
+  .anchor-target {
+    width: 30%;
+    height: 100%;
+    border-radius: 30px;
+    padding: 10px;
+    border: 1px solid #67b1ce;
+    box-shadow: -1px 1px #67b1ce, -2px 2px #67b1ce, -3px 3px #67b1ce, -4px 4px #67b1ce, -5px 5px #67b1ce;
+    text-align: center;
+  }
+
+  .target-container {
+    width: 30%;
+    margin: 1%;
+    height: 100%;
+    border-radius: 30px;
+    padding: 10px;
+    border: 1px solid #67b1ce;
+    box-shadow: -1px 1px #67b1ce, -2px 2px #67b1ce, -3px 3px #67b1ce, -4px 4px #67b1ce, -5px 5px #67b1ce;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .target-container:hover {
+    background-color: #C0C0C0;
+  }
+
+  img, video, audio {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 30px;
+  }
+
+  .target-text {
+    font-size: x-large;
+    padding: 20px;
+  }
+
+  .dragging {
+    opacity: 0.5;
+  }
+
+  .over {
+    outline: 2px dashed #67b1ce; /* Highlight drop target */
+  }
+
+  .submit-container {
+    width: 100%;
+    text-align: center;
+    margin-top: 20px;
+  }
+
+  .submit-btn {
+    padding: 10px 20px;
+    background-color: #67b1ce;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    cursor: pointer;
+    font-size: large;
+  }
+
+  .submit-btn:hover {
+    background-color: #55899b;
+  }
+
+  /* Instruction text */
+  .instruction-text {
+    text-align: center;
+    font-size: large;
+    margin-bottom: 20px;
+  }
+
+  /* toRank styling */
+  .toRank-container {
+    justify-content: flex-start;
+    display: flex;
+    flex-wrap: nowrap; /* Ensure targets are arranged in a single row */
+    gap: 10px; /* Consistent gap between items */
+    border: 2px solid green;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    margin-top: 20px;
+    min-height: 150px;
+    overflow-x: auto; /* Allow horizontal scrolling if needed */
+  }
+
+  .toRank-container-text {
+    text-align: center;
+    font-size: large;
+    margin-bottom: 20px;
+    color: #333;
+  }
+</style>
+
+<!-- Anchor Section -->
+<div class="anchor-container">
+  <div class="anchor-label">Anchor</div>
+  <div class="anchor-target"
+       id="target-{{ query.target_indices[0].target_id }}">
+    {% if query.target_indices[0].primary_type == "image" or query.target_indices[0].primary_type == "img" %}
+    <img src="{{ query.target_indices[0].primary_description }}" alt="Target Image">
+    
+    {% elif query.target_indices[0].primary_type == "text" %}
+    <div class="target-text">{{ query.target_indices[0].primary_description|safe }}</div>
+    
+    {% elif query.target_indices[0].primary_type == "video" %}
+    <video controls autoplay loop>
+      <source src="{{ query.target_indices[0].primary_description }}" type="video/mp4">
+      Your browser does not support the video tag.
+    </video>
+    
+    {% elif query.target_indices[0].primary_type == "audio" %}
+    <audio controls>
+      <source src="{{ query.target_indices[0].primary_description }}" type="audio/mpeg">
+      Your browser does not support the audio tag.
+    </audio>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Instruction Text -->
+<div class="instruction-text">
+  Here is a list of {{ query.A }} targets. <br>
+  Right click and choose exactly {{ query.B }} targets.
+</div>
+
+<!-- Second Row with Red Border around all Non-Anchor Targets -->
+<div class="targets-container" id="targets-container">
+  {% for target in query.target_indices[1:] %}
+  <div class="target-container"
+       id="target-{{ target.target_id }}"
+       draggable="true"
+       ondragstart="dragStart(event)"
+       ondragover="dragOver(event)"
+       ondragleave="dragLeave(event)"
+       ondrop="drop(event)">
+    {% if target.primary_type == "image" or target.primary_type == "img" %}
+    <img src="{{ target.primary_description }}" alt="Target Image">
+    
+    {% elif target.primary_type == "text" %}
+    <div class="target-text">{{ target.primary_description|safe }}</div>
+    
+    {% elif target.primary_type == "video" %}
+    <video controls autoplay loop>
+      <source src="{{ target.primary_description }}" type="video/mp4">
+      Your browser does not support the video tag.
+    </video>
+    
+    {% elif target.primary_type == "audio" %}
+    <audio controls>
+      <source src="{{ target.primary_description }}" type="audio/mpeg">
+      Your browser does not support the audio tag.
+    </audio>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="toRank-container-text">
+  Dragging the targets around and rank them left to right from the most similar to the least similar compared to anchor. <br>
+  Right click to discard a target.
+</div>
+
+<!-- To Rank Container -->
+<div class="toRank-container" id="toRank-container"
+     ondragover="dragOver(event)"
+     ondrop="drop(event)">
+</div>
+
+
+<div class="submit-container">
+  <button class="submit-btn" onclick="submitAnswer()">Submit</button>
+</div>
+
+
+<script>
+  // Variable to store right-clicked element
+  let rightClickedElement = null;
+  let contextMenu = null; // Reference to the context menu
+
+  // Prevent default context menu on right-click
+  document.addEventListener('contextmenu', function(event) {
+    event.preventDefault();
+  });
+
+  // Add event listener to targets-container for right-clicking
+  document.getElementById('targets-container').addEventListener('contextmenu', function(event) {
+    const targetElement = event.target.closest('.target-container');
+    
+    if (targetElement) {
+      rightClickedElement = targetElement;
+      showContextMenu(event, 'choose');
+    }
+  });
+
+  // Add event listener to toRank-container for right-clicking
+  document.getElementById('toRank-container').addEventListener('contextmenu', function(event) {
+    const targetElement = event.target.closest('.target-container');
+    
+    if (targetElement) {
+      rightClickedElement = targetElement;
+      showContextMenu(event, 'discard');
+    }
+  });
+
+  // Function to show context menu based on action type
+  function showContextMenu(event, action) {
+    // Remove any existing context menu
+    removeContextMenu();
+
+    // Create a temporary context menu
+    contextMenu = document.createElement('div');
+    contextMenu.style.position = 'fixed'; // Use fixed position for consistent placement
+    contextMenu.style.top = `${event.clientY}px`;
+    contextMenu.style.left = `${event.clientX}px`;
+    contextMenu.style.backgroundColor = 'white';
+    contextMenu.style.border = '1px solid #ccc';
+    contextMenu.style.padding = '5px';
+    contextMenu.style.cursor = 'pointer';
+    contextMenu.style.zIndex = '1000';
+    contextMenu.textContent = action === 'choose' ? 'Choose' : 'Discard';
+
+    // Define the click behavior for context menu
+    contextMenu.onclick = function() {
+      if (action === 'choose') {
+        moveToRank(rightClickedElement);
+      } else if (action === 'discard') {
+        moveToTargets(rightClickedElement);
+      }
+      removeContextMenu();
+    };
+
+    // Append context menu to body
+    document.body.appendChild(contextMenu);
+
+    // Remove context menu when clicking anywhere else
+    document.addEventListener('click', removeContextMenu, { once: true });
+  }
+
+  // Function to remove context menu
+  function removeContextMenu() {
+    if (contextMenu && document.body.contains(contextMenu)) {
+      document.body.removeChild(contextMenu);
+      contextMenu = null;
+    }
+  }
+
+  // Function to move a target to toRank-container
+  function moveToRank(element) {
+    const toRankContainer = document.getElementById('toRank-container');
+    if (toRankContainer.children.length < {{ query.B }}) {
+      toRankContainer.appendChild(element);
+      element.setAttribute('draggable', 'true'); // Enable dragging in toRank-container
+    } else {
+      alert(`You can only rank exactly {{ query.B }} targets.`);
+    }
+  }
+
+  // Function to move a target back to targets-container
+  function moveToTargets(element) {
+    const targetsContainer = document.getElementById('targets-container');
+    targetsContainer.appendChild(element);
+    element.setAttribute('draggable', 'false'); // Disable dragging in targets-container
+  }
+
+  // Add drag and drop functionality only within the toRank-container
+  const toRankContainer = document.getElementById('toRank-container');
+
+  toRankContainer.addEventListener('dragstart', function(event) {
+    const targetElement = event.target.closest('.target-container');
+    if (targetElement && toRankContainer.contains(targetElement)) {
+      draggedElement = targetElement;
+      event.target.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  });
+
+  toRankContainer.addEventListener('dragover', function(event) {
+    event.preventDefault();
+    const targetElement = event.target.closest('.target-container');
+    if (targetElement && targetElement !== draggedElement) {
+      targetElement.classList.add('over');
+    }
+  });
+
+  toRankContainer.addEventListener('drop', function(event) {
+    event.preventDefault();
+    const targetElement = event.target.closest('.target-container');
+
+    // Ensure drop within toRank-container
+    if (draggedElement && targetElement && targetElement !== draggedElement) {
+      const bounding = targetElement.getBoundingClientRect();
+      const offset = event.clientX - bounding.left;
+
+      // Insert before or after based on the drop position
+      if (offset < bounding.width / 2) {
+        toRankContainer.insertBefore(draggedElement, targetElement);
+      } else {
+        toRankContainer.insertBefore(draggedElement, targetElement.nextSibling);
+      }
+    } else if (draggedElement) {
+      // Append to the end if no specific target
+      toRankContainer.appendChild(draggedElement);
+    }
+
+    // Remove any highlighting
+    if (targetElement) {
+      targetElement.classList.remove('over');
+    }
+
+    draggedElement.classList.remove('dragging');
+    draggedElement = null;
+  });
+
+  toRankContainer.addEventListener('dragleave', function(event) {
+    const targetElement = event.target.closest('.target-container');
+    if (targetElement) {
+      targetElement.classList.remove('over');
+    }
+  });
+
+  function submitAnswer() {
+    const rankedTargets = Array.from(toRankContainer.querySelectorAll('.target-container'));
+    
+    // Check if the number of ranked targets matches query.B
+    if (rankedTargets.length !== {{ query.B }}) {
+      alert(`Please rank exactly {{ query.B }} targets.`);
+      return;
+    }
+    
+    // Collect the IDs of ranked targets in left-to-right order
+    const targetWinner = rankedTargets.map(function(target) {
+      return target.id.split('-')[1];
+    });
+
+    const anchorTarget = document.querySelector('.anchor-target').id.split('-')[1];
+    targetWinner.unshift(anchorTarget);
+
+    // Call processAnswer with the order of ranked targets
+    next_widget.processAnswer({"target_winner": targetWinner});
+    console.log("Submitted order: ", targetWinner);
+  }
+</script>

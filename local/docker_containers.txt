@@ -1,0 +1,12 @@
+CONTAINER ID   IMAGE                     COMMAND                  CREATED        STATUS                        PORTS     NAMES
+97b25a172458   hello-world               "/hello"                 21 hours ago   Exited (0) 21 hours ago                 affectionate_sinoussi
+eabc5f1f2c2e   hello-world               "/hello"                 23 hours ago   Exited (0) 23 hours ago                 dreamy_blackburn
+c4aeb474e239   local_nextbackenddocker   "gunicorn --worker-c…"   8 weeks ago    Exited (0) 10 minutes ago               c4aeb474e239_local_nextbackenddocker_1
+4e9c1860d07d   local_minionworker        "./next/broker/next_…"   8 weeks ago    Exited (137) 10 minutes ago             local_minionworker_1
+54829f982a13   local_rabbitmqredis       "docker-entrypoint.s…"   8 weeks ago    Exited (137) 10 minutes ago             local_rabbitmqredis_1
+4369483534bf   nginx:latest              "/docker-entrypoint.…"   8 weeks ago    Exited (0) 10 minutes ago               reverse_proxy
+bf2bdb5b7495   rabbitmq:3-management     "docker-entrypoint.s…"   8 weeks ago    Exited (0) 10 minutes ago               local_rabbitmq_1
+83633ee4be13   local_mongodb             "mongod --bind_ip_all"   8 weeks ago    Exited (0) 10 minutes ago               local_mongodb_1
+b847e3dd7cf5   redis                     "docker-entrypoint.s…"   8 weeks ago    Exited (0) 10 minutes ago               local_minionredis_1
+8cf14874051e   local_cadvisor            "/bin/sh /etc/cadvis…"   8 weeks ago    Exited (137) 10 minutes ago             local_cadvisor_1
+e4f605951b52   hello-world               "/hello"                 8 weeks ago    Exited (0) 8 weeks ago                  zealous_keller
