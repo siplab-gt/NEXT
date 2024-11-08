@@ -22,7 +22,7 @@ class MyApp:
 
         alg_data = {}
         algorithm_keys = ['A', 'B', 'n', 'd', 'failure_probability', 'burn_in_period'
-                          'down_sample_rate', 'mu']
+                          'down_sample_rate', 'mu', ' iteration']
         for key in algorithm_keys:
             if key in args:
                 alg_data[key] = args[key]
@@ -31,7 +31,8 @@ class MyApp:
         return args
 
     def getQuery(self, butler, alg, args):
-        alg_response = alg()
+        participant_uid = args.get('participant_uid', butler.exp_uid)
+        alg_response = alg({'participant_uid': participant_uid})
         exp_uid = butler.exp_uid
         target_indices = []
         for i in range(len(alg_response)):
@@ -57,9 +58,9 @@ class MyApp:
             butler.job('getModel', json.dumps({'exp_uid': butler.exp_uid, 'args': {
                        'alg_label': query['alg_label'], 'logging': True}}))
        
-
+        participant_uid = args.get('participant_uid', butler.exp_uid)
         alg({'target_winner': target_winner})
-        return {'target_winner': target_winner, 'targets': targets}
+        return {'target_winner': target_winner, 'targets': targets, 'participant_uid': participant_uid}
 
     def getModel(self, butler, alg, args):
         return alg()

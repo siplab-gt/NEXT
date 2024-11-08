@@ -15,6 +15,9 @@ initExp:
     failure_probability:
       description: Confidence of result
       type: num
+    iteration:
+      description: Overall iterations for InfoTuple
+      type: num
     burn_in_period:
       description: Burn_in period for InfoTuple
       type: num

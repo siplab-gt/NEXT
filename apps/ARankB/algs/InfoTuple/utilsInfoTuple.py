@@ -1,34 +1,8 @@
 import numpy as np
-import numpy as np
-from random import shuffle
-from scipy.stats import entropy
 from itertools import permutations
-from collections import defaultdict
 from scipy.spatial.distance import pdist
 import math
-import torch
 from functools import reduce
-
-from cblearn.datasets import LinearSubspace
-from cblearn.embedding import SOE
-import torch
-import numpy as np
-from functools import partial
-from tqdm import tqdm
-from sklearn.utils import check_random_state
-
-# InfoTuple Specific
-from infotuple.infotuple import primal_body_selector
-from infotuple.infotuple import probabilistic_mds
-from infotuple.infotuple import plackett_luce_data_oracle_generator, data_oracle_generator
-from infotuple.infotuple import selection_algorithm
-
-from cblearn.datasets import make_all_triplet_indices
-from cblearn.datasets import triplet_response
-from sklearn.metrics import pairwise
-from cblearn.metrics import procrustes_distance, query_accuracy
-
-import pandas as pd
 
 
 
@@ -158,7 +132,7 @@ def fast_mutual_information(X, head, body, n_samples, dist_std, mu):
 
     return information
 
-def primal_body_selector(M, tuples, __, rng, mu = 0.05, tuple_downsample_rate = 0.1):
+def primal_body_selector(M, tuples, rng, mu = 0.05, tuple_downsample_rate = 0.1):
     """
     Inner loop of Algorithm 1, this method selects the tuple body that maximizes our mutual information metric
     Used at each algorithm iteration to compute an optimal query to request, as described in section 3.1.
@@ -236,69 +210,4 @@ def random_tuple_sampler(n, tuple_size, random_state=None):
     sampled_tuples = result[:, :tuple_size]
     sampled_tuples = np.roll(sampled_tuples, 1, axis=0)
     return sampled_tuples
-
-#############################################################################################
-### selection algorithms file
-#############################################################################################
-"""
-    
-    This file contains code corresponding to a generalized version of Algorithm 1 from Section 3.4    
-    The parametrization of the crowd oracle, metric learner, and body selector is intended for the ease of 
-    Iterating over the different selection strategies tested in this paper.
-"""
-
-import numpy as np
-from scipy.spatial.distance import pdist, squareform
-from itertools import permutations
-from collections import defaultdict
-from tqdm import tqdm, trange
-
-def selection_algorithm(M, R, body_selector, rng, tuple_size=3, verbose_output=True):
-
-    """
-    Inputs:
-        M: An initial Nxd embedding from which an initial similarity matrix can be calculated
-        R: An initial number of ``burn-in'' iterations to initialize the similarity matrix
-        body_selector: A function that takes as input a set of candidate tuples and chooses one
-        tuple_size: The size of tuples to be considered
-    Returns:
-        M: An embedding that captures the selected ordinal constraints
-    """
-
-    n = range(len(M))
-
-    initial_constraints = []
-    #print(f"Starting Burnin")
-    for _ in range(R):
-        for h in range(len(M)):
-            candidate_tuple = [h]+list(rng.choice(n, tuple_size-1, replace=False))
-            
-            for i in range(len(oracle_sorted_tuple)-2):
-                pairwise_comparison = (oracle_sorted_tuple[0], oracle_sorted_tuple[i+1], oracle_sorted_tuple[i+2])
-                initial_constraints.append(pairwise_comparison)
-    previous_selections = defaultdict(list)
-
-    for constraint in initial_constraints:
-        head, body = constraint[0], constraint[1:]
-        previous_selections[head].append(constraint)
-
-    constraints = list(initial_constraints)
-    #print(f"Burn-in done, starting main loop")
-
-    for a in range(len(M)):
-    candidates = permutations(filter(lambda x: x is not a, n), tuple_size - 1)
-    tuples = map(lambda x: [a] + list(x), candidates)
-    # M_as_numpy = M.cpu().detach().numpy()
-    # selected_tuple, tuple_qualities, tuple_probabilities, intermediate_params = body_selector(a, M_as_numpy, tuples, previous_selections)
-    selected_tuple, tuple_qualities, tuple_probabilities, intermediate_params = body_selector(M_prime, tuples, previous_selections, rng=rng)
-
-    previous_selections[a].append(selected_tuple)
-    constraints.append(oracle_sorted_tuple)
-    new_constraints = []
-    for c in constraints:
-        for ix in range(len(oracle_sorted_tuple)-2):
-            pairwise_comparison = (c[0], c[ix+1], c[ix+2])
-            new_constraints.append(pairwise_comparison)
-    return M_prime
-
 ########################################################################################

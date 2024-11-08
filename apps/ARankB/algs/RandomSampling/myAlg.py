@@ -36,8 +36,9 @@ class MyAlg:
         #Optimizable with np.meshgrid 
         pairs = [(x, y) for i, x in enumerate(targets) for y in targets[i+1:]]
         triplets = [(x, y, anchor) for (x, y) in pairs]
-       
-        butler.algorithms.extend(key='S', value=triplets)
+        for triplet in triplets: 
+            butler.algorithms.append(key='S', value=triplet)
+        
         n = butler.algorithms.get(key='n')
         num_reported_answers = butler.algorithms.increment(
             key='num_reported_answers')
