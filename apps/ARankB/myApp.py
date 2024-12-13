@@ -21,8 +21,7 @@ class MyApp:
         del args['targets']
 
         alg_data = {}
-        algorithm_keys = ['A', 'B', 'n', 'd', 'failure_probability', 'burn_in_period'
-                          'down_sample_rate', 'mu', ' iteration']
+        algorithm_keys = ['A', 'B', 'n', 'd', 'failure_probability', 'burn_in', 'down_sample', 'mu', 'iteration']
         for key in algorithm_keys:
             if key in args:
                 alg_data[key] = args[key]
@@ -42,13 +41,14 @@ class MyApp:
         experiment = butler.experiment.get()
         A = experiment['args']['A']
         B = experiment['args']['B']
-        return {'target_indices': target_indices, 'A': A, 'B': B}
+        return {'target_indices': target_indices, 'A': A, 'B': B, 'participant_uid': participant_uid}
 
     def processAnswer(self, butler, alg, args):
         query = butler.queries.get(uid=args['query_uid'])
         targets = query['target_indices']
         target_winner = args['target_winner']
-        # make a getModel call ~ every n/4 queries - note that this query will NOT be included in the predict
+        participant_uid = args['participant_uid']
+    
         experiment = butler.experiment.get()
         num_reported_answers = butler.experiment.increment(
             key='num_reported_answers_for_' + query['alg_label'])
@@ -58,9 +58,8 @@ class MyApp:
             butler.job('getModel', json.dumps({'exp_uid': butler.exp_uid, 'args': {
                        'alg_label': query['alg_label'], 'logging': True}}))
        
-        participant_uid = args.get('participant_uid', butler.exp_uid)
-        alg({'target_winner': target_winner})
-        return {'target_winner': target_winner, 'targets': targets, 'participant_uid': participant_uid}
+        alg({'target_winner': target_winner, 'participant_uid': participant_uid})
+        return {'target_winner': target_winner, 'targets': targets}
 
     def getModel(self, butler, alg, args):
         return alg()

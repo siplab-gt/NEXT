@@ -378,7 +378,7 @@
     targetWinner.unshift(anchorTarget);
 
     // Call processAnswer with the order of ranked targets
-    next_widget.processAnswer({"target_winner": targetWinner});
+    next_widget.processAnswer({"target_winner": targetWinner, "participant_uid": '{{ query.participant_uid }}' });
     console.log("Submitted order: ", targetWinner);
   }
 </script>

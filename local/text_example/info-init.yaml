@@ -1,0 +1,34 @@
+app_id: ARankB
+args:
+  alg_list:
+    - {alg_id: InfoTuple, alg_label: InfoTuple, test_alg_label: Test}
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    - {alg_label: InfoTuple, proportion: 1}
+  d: 2
+  A: 2
+  B: 2
+  num_tries: 110
+  failure_probability: 0.0
+  iteration: 10
+  burn_in: 1
+  down_sample: 1
+  mu: 0.05
+  debrief: Test debrief
+  instructions: Test instructions
+  participant_to_algorithm_management: one_to_many
+  targets:
+    targetset:
+    - {primary_description: '0', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '1', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '2', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '3', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '4', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '5', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '6', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '7', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '8', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '9', alt_description: '', primary_type: 'text', alt_type: ''}
+
+   

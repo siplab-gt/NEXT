@@ -60,7 +60,7 @@ services:
       - CELERY_THREADS_PER_DASHBOARD_WORKER=2
       - CELERY_DASHBOARD_WORKER_PREFETCH=1
       - CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=True
-      - GIT_HASH=939548c1eca7e13d6392135beed582d4ddaae1c5
+      - GIT_HASH=d27aeaf0e46972db917d868660eb58673d0c337d
       - PYTHONPATH=:/next_backend
       - HOSTNAME=localhost
     networks:
@@ -76,6 +76,7 @@ services:
     command: gunicorn --worker-class=gevent -R --log-level=debug --logger-class=simple --reload -b 0.0.0.0:8000 -w 1 next.api.api:app
     volumes:
      - /home/ubuntu/NEXT:/next_backend
+     - /home/ubuntu/NEXT:/opt/miniconda3
     working_dir: /next_backend
     ports:
       - "0.0.0.0:8000:8000"

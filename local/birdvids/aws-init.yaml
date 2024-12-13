@@ -1,61 +1,32 @@
-# app_id: PoolBasedTripletMDS
-# args:
-#   alg_list:
-#     - {alg_id: CrowdKernel, alg_label: Test, test_alg_label: Test}
-#     - {alg_id: STE, alg_label: STE, test_alg_label: Test}
-#     - {alg_id: RandomSampling, alg_label: RandomSampling, test_alg_label: Test}
-#     - {alg_id: UncertaintySampling, alg_label: UncertaintySampling, test_alg_label: Test}
-#   algorithm_management_settings:
-#     mode: fixed_proportions
-#     params:
-#     - {alg_label: Test, proportion: 0.25}
-#     - {alg_label: STE, proportion: 0.25}
-#     - {alg_label: RandomSampling, proportion: 0.25}
-#     - {alg_label: UncertaintySampling, proportion: 0.25}
-#   d: 2
-#   debrief: Test debrief
-#   failure_probability: 0.01
-#   instructions: Test instructions
-#   participant_to_algorithm_management: one_to_many
-#   targets:
-#     targetset:
-#     - {primary_description: 'http://54.221.145.103/media/video01.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-#     - {primary_description: 'http://54.221.145.103/media/video02.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-#     - {primary_description: 'http://54.221.145.103/media/video03.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-#     - {primary_description: 'http://54.221.145.103/media/video04.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-#     - {primary_description: 'http://54.221.145.103/media/video05.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-#     - {primary_description: 'http://54.221.145.103/media/video06.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-#     - {primary_description: 'http://54.221.145.103/media/video07.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-#     - {primary_description: 'http://54.221.145.103/media/video08.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-#     - {primary_description: 'http://54.221.145.103/media/video09.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-#     - {primary_description: 'http://54.221.145.103/media/video10.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
 app_id: ARankB
 args:
   alg_list:
-    - {alg_id: RandomSampling, alg_label: RandomSampling, test_alg_label: Test}
+    - {alg_id: InfoTuple, alg_label: InfoTuple, test_alg_label: Test}
   algorithm_management_settings:
     mode: fixed_proportions
     params:
-    # - {alg_label: Test, proportion: 0.25}
-    # - {alg_label: STE, proportion: 0.25}
-    - {alg_label: RandomSampling, proportion: 1}
-    # - {alg_label: UncertaintySampling, proportion: 0.25}
+    - {alg_label: InfoTuple, proportion: 1}
   d: 2
-  A: 6
+  A: 4
   B: 2
-  debrief: Test debrief
+  num_tries: 10
   failure_probability: 0.01
+  iteration: 2
+  burn_in: 1
+  down_sample: 0.1
+  mu: 0.05
+  debrief: Test debrief
   instructions: Test instructions
   participant_to_algorithm_management: one_to_many
   targets:
     targetset:
-    - {primary_description: 'http://54.221.145.103/media/video01.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-    - {primary_description: 'http://54.221.145.103/media/video02.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-    - {primary_description: 'http://54.221.145.103/media/video03.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-    - {primary_description: 'http://54.221.145.103/media/video04.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-    - {primary_description: 'http://54.221.145.103/media/video05.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-    - {primary_description: 'http://54.221.145.103/media/video06.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-    - {primary_description: 'http://54.221.145.103/media/video07.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-    - {primary_description: 'http://54.221.145.103/media/video08.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-    - {primary_description: 'http://54.221.145.103/media/video09.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
-    - {primary_description: 'http://54.221.145.103/media/video10.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video01.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video02.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video03.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video04.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video05.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video06.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video07.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video08.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video09.mp4', alt_description: '', primary_type: 'video', alt_type: ''}
+    - {primary_description: 'http://54.227.62.49/media/video10.mp4', alt_description: '', primary_type: 'video', alt_type: ''}

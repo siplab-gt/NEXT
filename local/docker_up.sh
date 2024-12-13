@@ -60,6 +60,8 @@ git_hash="$(git rev-parse HEAD)"
 sed -i -e 's|{{NEXT_DIR}}|'"$dir"'|g' docker-compose.yml
 sed -i -e 's|{{GIT_HASH}}|'"$git_hash"'|g' docker-compose.yml
 
+
+
 echo "Stopping any existing machines..."
 docker-compose stop
 

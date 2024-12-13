@@ -42,7 +42,7 @@ initExp:
         num_tries:
           description: The number of queries the participant will answer before seeing the debrief.
           type: num
-          default: 20
+          default: 25
           optional: true
 
         algorithm_management_settings:

@@ -34,10 +34,10 @@ initExp:
         iteration:
           description: Overall iterations for InfoTuple
           type: num
-        burn_in_period:
+        burn_in:
           description: Burn_in period for InfoTuple
           type: num
-        down_sample_rate:
+        down_sample:
           description: Downsample rate for InfoTuple
           type: num
         mu:
@@ -55,5 +55,6 @@ processAnswer:
           values:
             type: num
             description: id
-        
-
+        participant_uid:
+          description: A list of IDs of the targets reranked from the query
+          type: string 

@@ -1,0 +1,42 @@
+app_id: BinarySentimentWordClassificationRankOne
+args:
+  alg_list:
+  - alg_id: ReadCSV
+    alg_label: ReadCSV
+    test_alg_label: Test
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    - alg_label: ReadCSV
+      proportion: 1
+  d: 2
+  debrief: Test debrief
+  failure_probability: 0.01
+  instructions: THIS IS AN EXAMPLE INSTRUCTION TEXT.
+  num_tries: 5
+  participant_to_algorithm_management: one_to_many
+  targets:
+    targetset:
+    - alt_description: ''
+      alt_type: ''
+      primary_description: 1 army demanded
+      primary_type: text
+    - alt_description: ''
+      alt_type: ''
+      primary_description: 2 experiences difficult believed fuck lock school mixed
+      primary_type: text
+    - alt_description: ''
+      alt_type: ''
+      primary_description: 3 hanging few collect sheriff accident landed expensive
+        aids isolated
+      primary_type: text
+    - alt_description: ''
+      alt_type: ''
+      primary_description: 4 side ben vincent knight picture features tour fame identify
+        kerry
+      primary_type: text
+    - alt_description: ''
+      alt_type: ''
+      primary_description: 5 reaction opera throat gained civilization lonely many
+        ensure
+      primary_type: text
