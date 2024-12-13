@@ -90,4 +90,20 @@
 
 - **Embedding Functionality:** Investigate why embeddings are not updating despite successful updates with random matrices. Focus on error handling, response validation, timeout settings, and random state management.
   
-- **Random State (`rng`):** Address issues with f
+- **Random State (`rng`):** Address issues with fixed seeds causing duplicate tuple selections by exploring dynamic seeding or alternative approaches.
+  
+- **Selection Algorithm Errors:** Resolve zero-division and index out-of-bound errors by reviewing the `fast_mutual_information/selection_algorithm` logic.
+  
+- **Front-End Design Improvements:** Enhance user interactions and ensure seamless submission processes. Additionally, manage participant information requirements effectively.
+
+---
+
+## Additional Notes
+
+- **Error Handling:** Ensure that all try-except blocks are correctly capturing and handling exceptions to prevent silent failures.
+  
+- **Testing:** Implement comprehensive testing scenarios to replicate and identify issues reliably.
+  
+- **Documentation:** Keep the documentation updated with any changes made during the debugging process for future reference.
+
+---
