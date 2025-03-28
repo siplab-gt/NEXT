@@ -21,7 +21,9 @@ class MyApp:
         del args['targets']
 
         alg_data = {}
-        algorithm_keys = ['A', 'B', 'n', 'd', 'failure_probability', 'burn_in', 'down_sample', 'mu', 'iteration']
+        algorithm_keys = ['A', 'B', 'n', 'd', 'failure_probability', 
+                          'random_seed', 'burn_in', 'down_sample', 
+                          'mu', 'iteration', 'debug']
         for key in algorithm_keys:
             if key in args:
                 alg_data[key] = args[key]

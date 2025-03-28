@@ -9,7 +9,10 @@ import next.utils as utils
 
 
 class MyAlg:
-    def initExp(self, butler, A, B, n, d, failure_probability):
+    def initExp(self, butler, A, B, n, d 
+                ,random_seed, failure_probability
+                ,iteration, burn_in, down_sample, mu
+                , debug):
         X = numpy.random.randn(n, d)
         
         #Set parameters A, B in bulter.algo
@@ -24,13 +27,13 @@ class MyAlg:
         return True
 
 
-    def getQuery(self, butler):
+    def getQuery(self, butler, participant_uid):
         X = numpy.array(butler.algorithms.get(key='X'))
         A = numpy.array(butler.algorithms.get(key='A'))
         q, score = utilsMDS.getRandomQuery(X, A+1)
         return q
 
-    def processAnswer(self, butler, target_winner):
+    def processAnswer(self, butler, target_winner, participant_uid):
         anchor = target_winner[0]
         targets = target_winner[1:]
         #Optimizable with np.meshgrid 

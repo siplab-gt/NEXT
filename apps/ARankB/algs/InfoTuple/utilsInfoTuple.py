@@ -64,7 +64,8 @@ def mutual_information(X, head, body, n_samples, dist_std, mu, rng):
     returns:
         information: Mutual information as specified in (9) in Section 3.1
     """
-    n_samples = int(n_samples)
+    n_samples = min(int(n_samples), 1)
+    
     nrank = math.factorial(len(body))
     # print(f"nrank: {nrank}")
     # print(f"n_samples: {n_samples}")

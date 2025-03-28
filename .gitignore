@@ -36,9 +36,9 @@ nohup.out
 # vim
 *.swp
 
-apps/BinarySentimentWordClassificationRankN
-apps/BinarySentimentWordClassificationRankOne
-local/csv
+# apps/BinarySentimentWordClassificationRankN
+# apps/BinarySentimentWordClassificationRankOne
+# local/csv
 
-local/docker-compose.yml
-Miniconda3-latest-Linux-x86_64.sh
+# local/docker-compose.yml
+# Miniconda3-latest-Linux-x86_64.sh

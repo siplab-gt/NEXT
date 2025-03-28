@@ -31,6 +31,9 @@ initExp:
           description: Confidence value of result. 
           type: num
         # For InfoTuple 
+        random_seed:
+          description: Random Seed
+          type: num
         iteration:
           description: Overall iterations for InfoTuple
           type: num
@@ -43,6 +46,9 @@ initExp:
         mu:
           description: Regularization parameter for InfoTuple
           type: num
+        debug:
+          description: Whether to use butler to schedule full_embedding_update
+          type: bool
 
 processAnswer:
   args:

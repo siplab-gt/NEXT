@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Select and Rank Targets</title>
+  <style>
+    /* Reset default margins and paddings */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .main-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 90%;
+      max-width: 1200px;
+    }
+
+    /* Instruction Text */
+    .instruction-text {
+      text-align: center;
+      font-size: large;
+      margin-bottom: 20px;
+      color: #333;
+      max-width: 800px;
+    }
+
+    /* Targets Container */
+    .targets-container {
+      display: grid;
+      gap: 20px;
+      padding: 20px;
+      border: 2px solid #67b1ce;
+      border-radius: 10px;
+      background-color: white;
+      width: 100%;
+      max-width: 800px;
+      justify-content: center; /* Center the grid horizontally */
+      align-content: center;   /* Center the grid vertically */
+    }
+
+    .target-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      border: 2px solid #67b1ce;
+      border-radius: 10px;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+      cursor: pointer;
+      transition: background-color 0.3s, border-color 0.3s;
+      user-select: none;
+      background-color: #fff;
+      min-width: 100px;
+      min-height: 100px;
+    }
+
+    .target-container:hover {
+      background-color: #e0f7fa;
+    }
+
+    .target-container.selected {
+      background-color: #c8e6c9;
+      border-color: #388e3c;
+    }
+
+    .target-text {
+      font-size: 1.2em;
+      color: #333;
+      text-align: center;
+    }
+
+    /* Actions Container */
+    .actions-container {
+      margin-top: 30px;
+      display: flex;
+      gap: 20px;
+    }
+
+    .action-btn {
+      padding: 15px 30px;
+      background-color: #67b1ce;
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-size: 1em;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      user-select: none;
+    }
+
+    .action-btn:hover {
+      background-color: #55899b;
+    }
+
+    .action-btn.selected {
+      background-color: #388e3c;
+    }
+
+    /* Submit Button */
+    .submit-container {
+      margin-top: 30px;
+      text-align: center;
+    }
+
+    .submit-btn {
+      padding: 10px 20px;
+      background-color: #67b1ce;
+      border: none;
+      border-radius: 10px;
+      color: white;
+      cursor: pointer;
+      font-size: large;
+      transition: background-color 0.3s;
+    }
+
+    .submit-btn:hover {
+      background-color: #55899b;
+    }
+
+    /* Responsive Grid Adjustments */
+    @media (max-width: 600px) {
+      .target-container {
+        min-width: 80px;
+        min-height: 80px;
+        padding: 15px;
+      }
+
+      .target-text {
+        font-size: 1em;
+      }
+
+      .action-btn {
+        padding: 10px 20px;
+        font-size: 0.9em;
+      }
+
+      .submit-btn {
+        padding: 8px 16px;
+        font-size: medium;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="main-container">
+    <!-- Instruction Text -->
+    <div class="instruction-text">
+      Click on a target to select or deselect it. Then, choose either the Positive or Negative key below.
+      <br><br>
+      Do not move the mouse until you are ready to make your first selection.
+    </div>
+
+    <!-- Targets Container -->
+    <div class="targets-container" id="targets-container">
+      {% for word in (query.text_query.primary_description).split(' ')[1:] %}
+      <div class="target-container" id="target-{{ word }}">
+        <div class="target-text">{{ word | safe }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Actions Container -->
+    <div class="actions-container">
+      <button class="action-btn" id="positive-btn">Positive</button>
+      <button class="action-btn" id="negative-btn">Negative</button>
+    </div>
+
+    <!-- Submit Button -->
+    <div class="submit-container">
+      <button class="submit-btn" onclick="submitAnswer()">Submit</button>
+    </div>
+  </div>
+
+  <script>
+    // Initialize variables to store selected target and action
+    let selectedTarget = null;
+    let selectedAction = null;
+
+    // Time tracking variables
+    let readingStartTime = Date.now(); // Time when the page loads
+    let firstClickTime = null;         // Time when the first click occurs
+
+    const targetsContainer = document.getElementById('targets-container');
+    const positiveBtn = document.getElementById('positive-btn');
+    const negativeBtn = document.getElementById('negative-btn');
+
+    // Function to calculate grid dimensions (rows and columns)
+    function calculateGridDimensions(numItems) {
+      const cols = Math.ceil(Math.sqrt(numItems));
+      const rows = Math.ceil(numItems / cols);
+      return { rows, cols };
+    }
+
+    // Function to set grid layout
+    function setGridLayout() {
+      const numItems = targetsContainer.children.length;
+      const { rows, cols } = calculateGridDimensions(numItems);
+      targetsContainer.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      // No need to set rows explicitly as grid will auto-flow
+    }
+
+    setGridLayout()
+
+    // Call setGridLayout on window load and resize
+    // window.addEventListener('load', setGridLayout);
+    // window.addEventListener('resize', setGridLayout);
+
+    // Add click event to each target
+    Array.from(targetsContainer.children).forEach(target => {
+      target.addEventListener('click', function() {
+        if (selectedTarget === this) {
+          this.classList.remove('selected');
+          selectedTarget = null;
+        } else {
+          if (selectedTarget) {
+            selectedTarget.classList.remove('selected');
+          }
+
+          selectedTarget = this;
+          selectedTarget.classList.add('selected');
+        }
+
+        const currentTime = Date.now();
+
+        if (!firstClickTime) {
+          firstClickTime = currentTime;
+        }
+      });
+    });
+
+    // Add click events to action buttons
+    positiveBtn.addEventListener('click', function() {
+      if (!selectedTarget) {
+        alert('Please select a target first.');
+        return;
+      }
+
+      // Toggle selection
+      if (selectedAction === positiveBtn) {
+        positiveBtn.classList.remove('selected');
+        selectedAction = null;
+      } else {
+        // Deselect previous action
+        if (selectedAction) {
+          selectedAction.classList.remove('selected');
+        }
+        // Select positive
+        positiveBtn.classList.add('selected');
+        selectedAction = positiveBtn;
+      }
+    });
+
+    negativeBtn.addEventListener('click', function() {
+      if (!selectedTarget) {
+        alert('Please select a target first.');
+        return;
+      }
+
+      // Toggle selection
+      if (selectedAction === negativeBtn) {
+        negativeBtn.classList.remove('selected');
+        selectedAction = null;
+      } else {
+        // Deselect previous action
+        if (selectedAction) {
+          selectedAction.classList.remove('selected');
+        }
+        // Select negative
+        negativeBtn.classList.add('selected');
+        selectedAction = negativeBtn;
+      }
+    });
+
+    function submitAnswer() {
+      if (!selectedTarget) {
+        alert('Please select a target.');
+        return;
+      }
+
+      if (!selectedAction) {
+        alert('Please select either Positive or Negative.');
+        return;
+      }
+
+      const currentTime = Date.now();
+
+      const readingTime = firstClickTime - readingStartTime;
+      const decisionTime = currentTime - firstClickTime;
+
+      const label = selectedAction === positiveBtn ? 'positive' : 'negative';
+      const word = selectedTarget.id.split('-')[1];
+
+      // Prepare data to send
+      const dataToSend = {
+        "word_selected": word,
+        "label": label,
+        "reading_time": readingTime,      
+        "decision_time": decisionTime    
+      };
+      
+      next_widget.processAnswer(dataToSend);
+     
+      console.log("Submitted: ", dataToSend);
+
+      if (selectedTarget) {
+        selectedTarget.classList.remove('selected');
+        selectedTarget = null;
+      }
+      if (selectedAction) {
+        selectedAction.classList.remove('selected');
+        selectedAction = null;
+      }
+
+      // Reset timers
+      firstClickTime = null;
+      readingStartTime = Date.now(); 
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+app_id: ARankB
+args:
+  alg_list:
+    # alg_id can be RandomSampling or InfoTuple. 
+    # name your own alg_lable and test_alg_label
+    # add as many entries as you like.
+    - {alg_id: InfoTuple, alg_label: InfoTuple, test_alg_label: Test}
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    # You can mix in RandomSampling here and adjust the proportion so they add up to 1.
+    # - {alg_label: RandomSampling, proportion: 0.5}
+    # - {alg_label: InfoTuple, proportion: 0.5}
+    - {alg_label: InfoTuple, proportion: 1}
+  d: 2 # embedding dimension
+  A: 100 # how many targets in total
+  B: 100 # how many targets among all that a participant needs to rank
+  random_seed: 102 # 
+  num_tries: 1000 # Will be 25 be default if this field is missing.
+  #----------------------------InfoTuple Exclusive------------------------#
+  failure_probability: 0.01
+  iteration: 2
+  burn_in: 1
+  down_sample: 1  
+  mu: 0.05 
+  debug: true # please set to true at the moment
+  #-----------------------------------------------------------------------#
+  debrief: Test debrief # text to display when a participant finishes all the query
+  instructions: Test instructions # text to display when a participant opens up query page
+  participant_to_algorithm_management: one_to_many
+  targets:
+     # Allocate your resource locally and fill in the primary_description field with directory to each resource. 
+     # e.g. 'http://44.223.248.38"/media/video01.mp4' make sure to change the primary_type field accordingly
+     # and use the correct Instance IP
+    targetset:
+    - {primary_description: '0', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '1', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '2', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '3', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '4', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '5', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '6', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '7', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '8', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '9', alt_description: '', primary_type: 'text', alt_type: ''}
+    

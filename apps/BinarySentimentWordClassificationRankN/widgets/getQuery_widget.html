@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Rank Targets with Draggable Slider</title>
+  <style>
+    /* Reset default margins and paddings */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .main-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 90%;
+      max-width: 1200px;
+    }
+
+    /* Instruction Text */
+    .instruction-text {
+      text-align: center;
+      font-size: large;
+      margin-bottom: 20px;
+      color: #333;
+      max-width: 800px;
+    }
+
+    /* Targets Container */
+    .targets-container {
+      display: flex;
+      flex-wrap: wrap; /* Allow targets to wrap into multiple rows */
+      gap: 20px;
+      padding: 20px;
+      border: 2px solid #67b1ce;
+      border-radius: 10px;
+      background-color: white;
+      width: 100%;
+      max-width: 800px;
+      justify-content: center; /* Center the targets horizontally */
+      align-items: center;     /* Center the targets vertically */
+      min-height: 150px;       /* Ensure a minimum height */
+      overflow: auto;          /* Allow scrolling if necessary */
+    }
+
+    /* To Rank Container */
+    .toRank-container {
+      position: relative; /* To position the slider absolutely within */
+      display: flex;
+      gap: 10px;
+      border: 2px solid green;
+      border-radius: 10px;
+      padding: 20px;
+      background-color: #e8f5e9;
+      width: 100%;
+      max-width: 800px;
+      min-height: 150px;
+      justify-content: center; /* Center the targets horizontally */
+      align-items: center;     /* Center the targets vertically */
+      overflow: auto; /* Allow horizontal scrolling if needed */
+      margin-top: 20px;
+    }
+
+    /* Slider Styling */
+    .slider {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background-color: black;
+      cursor: ew-resize;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100; /* Ensure slider is above targets */
+    }
+
+    /* Draggable Handle for Slider */
+    .slider-handle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 16px;
+      height: 16px;
+      background-color: #67b1ce;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      cursor: pointer;
+      z-index: 101; /* Above the slider */
+    }
+
+    .target-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      border: 2px solid #67b1ce;
+      border-radius: 10px;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+      cursor: pointer;
+      transition: background-color 0.3s, border-color 0.3s;
+      user-select: none;
+      background-color: #fff;
+      min-width: 100px;
+      min-height: 100px;
+    }
+
+    .target-container:hover {
+      background-color: #e0f7fa;
+    }
+
+    .target-text {
+      font-size: 1.2em;
+      color: #333;
+      text-align: center;
+    }
+
+    /* Submit Button */
+    .button-container {
+      margin-top: 30px;
+      text-align: center;
+    }
+
+    .submit-btn,.clear-btn {
+      padding: 10px 20px;
+      background-color: #67b1ce;
+      border: none;
+      border-radius: 10px;
+      color: white;
+      cursor: pointer;
+      font-size: large;
+      transition: background-color 0.3s;
+    }
+
+    .submit-btn:hover {
+      background-color: #55899b;
+    }
+
+    .clear-btn {
+      background-color: #e57373;
+    }
+
+    .clear-btn:hover {
+      background-color: #c62828;
+    }
+
+    /* Responsive Grid Adjustments */
+    @media (max-width: 600px) {
+      .target-container {
+        min-width: 80px;
+        min-height: 80px;
+        padding: 15px;
+      }
+
+      .target-text {
+        font-size: 1em;
+      }
+
+      .submit-btn, .clear-btn{
+        padding: 8px 16px;
+        font-size: medium;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="main-container">
+
+    <!-- Targets Container -->
+    <div class="targets-container" id="targets-container">
+      {% for word in (query.text_query.primary_description).split(' ')[1:] %}
+      <div class="target-container" id="target-{{ word }}">
+        <div class="target-text">{{ word | safe }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- To Rank Container -->
+    <div class="toRank-container" id="toRank-container">
+      <!-- Slider Div -->
+      <div class="slider" id="slider">
+        <div class="slider-handle" id="slider-handle"></div>
+      </div>
+    </div>
+
+    <!-- Submit Button -->
+    <div class="button-container">
+      <button class="submit-btn" onclick="submitAnswer()">Submit</button>
+      <button class="clear-btn" onclick="clearRanked()">Clear</button>
+    </div>
+
+  </div>
+
+  <script>
+    // Initialize variables to store selected targets and actions
+    const B = {{ query.text_query.primary_description.split(' ')}}.length - 1;
+
+    // Time tracking variables
+    let readingStartTime = Date.now(); // Time when the page loads
+    let firstClickTime = null;         // Time when the first click occurs
+    let decisionStartTime = null;      // Time when decision time starts
+    let clearClicked = 0; // 0 = not clicked, 1 = clicked
+    const targetsContainer = document.getElementById('targets-container');
+    const toRankContainer = document.getElementById('toRank-container');
+    const slider = document.getElementById('slider');
+    const sliderHandle = document.getElementById('slider-handle');
+
+
+    // Function to calculate grid dimensions (rows and columns)
+    function calculateGridDimensions(numItems) {
+      const cols = Math.ceil(Math.sqrt(numItems));
+      const rows = Math.ceil(numItems / cols);
+      return { rows, cols };
+    }
+
+    // Function to set grid layout
+    function setGridLayout() {
+      const numItems = targetsContainer.children.length;
+      const { rows, cols } = calculateGridDimensions(numItems);
+      targetsContainer.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      // No need to set rows explicitly as grid will auto-flow
+    }
+
+    setGridLayout()
+
+
+    function clearRanked() {
+      const rankedTargets = Array.from(toRankContainer.querySelectorAll('.target-container'));
+      rankedTargets.forEach(target => {
+        moveToTargets(target);
+      });
+      clearClicked = 1; // Record that clear was clicked
+    }
+
+    // Function to move target to toRank-container
+    function moveToRank(target) {
+      toRankContainer.appendChild(target);
+    }
+
+    // Function to move target back to targets-container
+    function moveToTargets(target) {
+      targetsContainer.appendChild(target);
+    }
+
+    // Add click event to each target for moving between containers
+    function addTargetClickEvent(target) {
+      target.addEventListener('click', function() {
+        // Handle time tracking
+        const currentTime = Date.now();
+
+        if (!firstClickTime) {
+          // First click: calculate reading time
+          firstClickTime = currentTime;
+          const readingTime = firstClickTime - readingStartTime;
+  
+          // Start tracking decision time
+          decisionStartTime = currentTime;
+        }
+
+        if (toRankContainer.contains(target)) {
+          // If target is in toRank-container, move it back to targets-container
+          moveToTargets(target);
+        } else {
+          // Else, move it to toRank-container
+          moveToRank(target);
+        }
+      });
+    }
+
+    // Initialize click events for existing targets
+    Array.from(targetsContainer.children).forEach(target => {
+      addTargetClickEvent(target);
+    });
+
+ 
+
+    // Slider Dragging Implementation
+    let isDragging = false;
+
+    sliderHandle.addEventListener('mousedown', function(event) {
+      event.preventDefault();
+      isDragging = true;
+      document.addEventListener('mousemove', dragSlider);
+      document.addEventListener('mouseup', stopDragSlider);
+    });
+
+    function dragSlider(event) {
+      if (!isDragging) return;
+
+      // Get bounding rectangle of toRankContainer
+      const containerRect = toRankContainer.getBoundingClientRect();
+
+      // Calculate new left position relative to container
+      let newLeft = event.clientX - containerRect.left;
+
+      // Clamp the new left position within container
+      newLeft = Math.max(0, Math.min(newLeft, containerRect.width));
+
+      // Set the slider's left position
+      slider.style.left = `${newLeft}px`;
+    }
+
+    function stopDragSlider(event) {
+      isDragging = false;
+      document.removeEventListener('mousemove', dragSlider);
+      document.removeEventListener('mouseup', stopDragSlider);
+    }
+
+    // Function to submit the answer with 'P-' and 'N-' prefixes
+    function submitAnswer() {
+      const rankedTargets = Array.from(toRankContainer.querySelectorAll('.target-container'));
+      if (rankedTargets.length !== B) {
+        alert(`Please rank exactly ${B} targets.`);
+        return;
+      }
+
+      // Calculate reading time and decision time
+      const currentTime = Date.now();
+      const readingTime = firstClickTime - readingStartTime;        // in milliseconds
+      const decisionTime = currentTime - firstClickTime;            // in milliseconds
+
+
+      // Determine slider position
+      const sliderRect = slider.getBoundingClientRect();
+      const containerRect = toRankContainer.getBoundingClientRect();
+      const sliderX = sliderRect.left - containerRect.left + slider.offsetWidth / 2;
+
+      // Prepare words_rank array with prefixes based on slider position
+      const rank = rankedTargets.flatMap(target => {
+        const targetRect = target.getBoundingClientRect();
+        const targetX = targetRect.left - containerRect.left + targetRect.width / 2;
+
+        return [target.id.split('-')[1], (targetX < sliderX ? 'P-' : 'N-')];
+      });
+
+      // Call processAnswer with the selected targets and timings
+
+      next_widget.processAnswer({
+          "rank": rank,
+          "reading_time": readingTime,      // in milliseconds
+          "decision_time": decisionTime,     // in milliseconds
+          'delete_flag': clearClicked
+        });
+    
+
+
+      // Reset timers
+      firstClickTime = null;
+      decisionStartTime = null;
+      readingStartTime = Date.now();
+
+      // Reset slider to center
+      slider.style.left = '50%';
+      sliderHandle.style.left = '50%';
+    }
+
+    // Optional: Prevent text selection during slider dragging
+    document.addEventListener('dragstart', function(event) {
+      event.preventDefault();
+    });
+  </script>
+</body>
+</html>

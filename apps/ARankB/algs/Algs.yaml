@@ -12,6 +12,9 @@ initExp:
     d:
       description: Dimension of embedding
       type: num
+    random_seed:
+      description: random seed
+      type: num
     failure_probability:
       description: Confidence of result
       type: num
@@ -27,6 +30,9 @@ initExp:
     mu:
       description: Regularization parameter for InfoTuple
       type: num
+    debug:
+      description: Whether to use butler to schedule full_embedding_update
+      type: bool
   rets:
     type: bool
     description: A boolean indicating success

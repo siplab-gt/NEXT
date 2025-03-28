@@ -1,0 +1,29 @@
+app_id: ARankB_static
+args:
+  alg_list:
+    - {alg_id: ARankB_static, alg_label: ARankB_static, test_alg_label: Test}
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    - {alg_label: ARankB_static, proportion: 1}
+  debrief: Test debrief
+  instructions: Test instructions
+  participant_to_algorithm_management: one_to_many
+  targets:
+    # Allocate your resource locally. Since the user is passing in each query, please stick the following format
+    # so that the front-end system knows how to parse it. [#]space[item]space[item]...
+    # e.g. 1 army demanded 
+    # if type is not text, use resource address for [item]: 'http://44.223.248.38"/media/video01.mp4' 
+    # make sure to change the primary_type field accordingly and use the correct Instance IP
+    # 
+    targetset:
+    - {primary_description: '0', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '1', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '2', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '3', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '4', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '5', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '6', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '7', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '8', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '9', alt_description: '', primary_type: 'text', alt_type: ''}
