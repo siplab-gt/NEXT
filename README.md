@@ -127,7 +127,7 @@ In order to launch experiments from the terminal, you will need to have a Python
   - ``` sudo apt update ```
   - ``` sudo apt install python3.10-venv ``` 
   
-  Now you can create virtual environments to install Python packages. Cd into the ``` NEXT/local/`` and run the following:
+  Now you can create virtual environments to install Python packages. Cd into the ``` NEXT/local/``` and run the following:
   - ``` python3 -m venv local-venv ```
   - ``` source local-venv/bin/activate ```
   - ``` pip install -r requirements.txt ```
@@ -142,7 +142,16 @@ You now have created and activated a Python environment named local-venv. You ha
 ### 3.2. Execution
 - **Launch Experiment** 
   - Copy and paste your customized yaml file to ```Next/local ```
-  - Under the same directory, run ```./docker_up.sh``` to start the NEXT application. Now, you should be able to access the platform via ```Instance_IP_address/home ```
+  - Run ```docker-compose --version ```. If this command is not found, run:
+    ``` 
+    sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 
+    ```
+    ```
+    sudo chmod +x /usr/local/bin/docker-compose
+    ```
+
+  - Under the same directory, run ```./docker_up.sh``` to start the NEXT application. Now, you should be able to access the platform via 
+  ```Instance_IP_address/home ```
   - Note that you may run into some premission error sometimes due to group membership not getting updated immediately and user may not have permission to access docker's Unix Socker. 
   - Run ```grep docker /etc/group``` and you should see some output similar to ```docker:x:999:ubunut```.
   - Run ```newgrp docker``` to force group membership update and run ```id -nG```. 

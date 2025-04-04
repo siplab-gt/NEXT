@@ -13,14 +13,14 @@ args:
     # - {alg_label: InfoTuple, proportion: 0.5}
     - {alg_label: InfoTuple, proportion: 1}
   d: 2 # embedding dimension
-  A: 100 # how many targets in total
-  B: 100 # how many targets among all that a participant needs to rank
+  A: 10 # how many targets in total
+  B: 5 # how many targets among all that a participant needs to rank
   random_seed: 102 # 
-  num_tries: 1000 # Will be 25 be default if this field is missing.
+  num_tries: 30 # Will be 25 be default if this field is missing. Make sure this value equals to (burn_in + iteration) * A
   #----------------------------InfoTuple Exclusive------------------------#
   failure_probability: 0.01
-  iteration: 2
-  burn_in: 1
+  iteration: 2 # each cycle of normal iteration involves every target being the head once
+  burn_in: 1 # each cycle of burn-in iteration involves every target being the head once
   down_sample: 1  
   mu: 0.05 
   debug: true # please set to true at the moment
