@@ -60,7 +60,7 @@
 ### 2.1. AWS Instance Setup
 This section describes how to set up an AWS instance to host the NEXT ML platform. Instructions for how to run the system locally can be found in the README.md of the local directory in the NEXT github repository. We assume that you have an AWS account and are familiar with computer systems, linux, SSH and the terminal.
 - **Instance Type** - We suggest at minimum using an instance type of t2.2xlarge to run the NEXT system. This may need to be increased depending on the scale of your experiments. It is a good idea to monitor system performance during the experiments. This will inform you about the resources needed and can help determine the optimal instance type. You should select ubuntu 22.04 LTS as your operating system. This operating system is stable and has been tested with the NEXT implementation.
-![instance](instance_spec.png) 
+![instance](picRef/instance_spec.png) 
 - **Key Pair** -
 In order to SSH into the system, you will need to use a pre-existing key pair that you have on AWS, or create a new one. We recommend creating a new one as a good security practice. Select create key pair and then do the following:
   - name it, i.e NEXT
