@@ -80,7 +80,7 @@ Since NEXT is a web facing application, you will need to create a security group
 ![Security Group](picRef/SecurityGroup.png) 
 - **Disk Space** -
 To launch an AWS instance, you will need hard drive space. Select the amount of space you need. The maximum amount of free tier space should suffice for your needs. Once you finish experiments, you can always download the data and remove the Dockers and rebuild your Docker environment. This will clear old data.
-![Disk Storage]('picRef/DiskStorage.png') 
+![DiskStorage](picRef/DiskStorage.png) 
 ### 2.2. Launch Instance  
 Now you are ready to launch your instance. Simply click Launch instance. Wait for all the checks to pass and then you are ready to SSH into the system. Make sure to take note of the public dns address and the public ip under instance information. You will need them for SSH and nginx respectively.
 Note: We have included a web server (nginx) into the Docker environment so that you do not need to set up the reverse proxy yourself. You will only need to add the ip address in the nginx.conf file before spinning up the dockers.
