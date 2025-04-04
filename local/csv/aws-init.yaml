@@ -1,4 +1,4 @@
-app_id: BinarySentimentWordClassificationRankOne
+app_id: BinarySentimentWordClassificationRankN
 args:
   alg_list:
   - alg_id: ReadCSV

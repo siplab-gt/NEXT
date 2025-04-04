@@ -9,7 +9,7 @@
 ### 1.2. Supported Query Types
 ## A Rank B 
 - **Overview:** Given $A$ number of items, participants choose $B < A$ out and rank them based on some anchor item. 
-- **Query Interface:** ![2 Rank 2]('picRef/ARankB_UI.png')
+- **Query Interface:** ![2 Rank 2](picRef/ARankB_UI.png)
   - The red box displays the full pool of items. 
   - The green box is where the $B$ items that a participant intends to rank are placed.
   - Clicking on an item in the red box transfers it to the green box, while clicking on an item in the green box returns it to the red box.
@@ -25,10 +25,10 @@
 
 ## Binary Sentiment Word Classification Rank One and Rank N
 - **Overview:** Given $n$ words, participants needs to choose the most positive word(Rank One)/ rank from most positive to most negative(Rank N).
-- **Query Interface for Rank One:** ![Rank One]('picRef/BSWCRO_UI.png') 
+- **Query Interface for Rank One:** ![Rank One](picRef/BSWCRO_UI.png) 
   - The central box displays the full pool of words. 
   - Clicking on a word will highlight it to indicate choice.
-- **Query Interface for Rank N:** ![Rank N]('pic/RefBSWCRN_UI.png') 
+- **Query Interface for Rank N:** ![Rank N](picRef/BSWCRN_UI.png) 
   - The central box displays the full pool of words. 
   - Clicking on an word will highlight it to indicate choice.
   - A participant can only submit their response when exactly one word is clicked.
@@ -39,7 +39,7 @@
 
 ## Pool Based Triplets(By Neuromatch)
 - **Overview:** Given an item triplet. Participants need to choose one item out of two give an anchor.
-- **Query Interface:** ![Pool Based Triplet]('picRef/PBT_UI.png') 
+- **Query Interface:** ![Pool Based Triplet](picRef/PBT_UI.png) 
   - The top box displays the anchor item.
   - Clicking one of the item on the bottom to suggest preference. 
   - Next query will automatically load after clicking. 
@@ -60,22 +60,24 @@
 ### 2.1. AWS Instance Setup
 This section describes how to set up an AWS instance to host the NEXT ML platform. Instructions for how to run the system locally can be found in the README.md of the local directory in the NEXT github repository. We assume that you have an AWS account and are familiar with computer systems, linux, SSH and the terminal.
 - **Instance Type** - We suggest at minimum using an instance type of t2.2xlarge to run the NEXT system. This may need to be increased depending on the scale of your experiments. It is a good idea to monitor system performance during the experiments. This will inform you about the resources needed and can help determine the optimal instance type. You should select ubuntu 22.04 LTS as your operating system. This operating system is stable and has been tested with the NEXT implementation.
-![instance]('instance_spec.png') 
+![instance](instance_spec.png) 
 - **Key Pair** -
 In order to SSH into the system, you will need to use a pre-existing key pair that you have on AWS, or create a new one. We recommend creating a new one as a good security practice. Select create key pair and then do the following:
   - name it, i.e NEXT
   - use ed25519 (more secure)
   - select .pem as the file type and download the .pem
   - add the key file (i.e NEXT.pem) to your SSH key folder (i.e .ssh)
-  - change the file permissions for the .pem file to allows access for your local user only
-![KP]('picRef/KeyPair.png') 
+  - change the file permissions for the .pem file to allows access for your local user only 
+    - ``` chmod 400 your_key.pem ```
+
+![KP](picRef/KeyPair.png) 
 - **Security Group** -
 Since NEXT is a web facing application, you will need to create a security group to allow HTTP/HTTPS and SSH traffic to be routed to your instance. Otherwise, AWS will block requests to those standard ports. If you do not already have a group setup for this, you can create one while creating your instance. Simply:
   - allow HTTP traffic from all IP addresses
   - allow HTTPS traffic from all IP addresses
   - allow SSH traffic
     - You can restrict this traffic to be solely from your IP address (or list of addresses) to increase security of your instance.
-![Security Group]('picRef/SecurityGroup.png') 
+![Security Group](picRef/SecurityGroup.png) 
 - **Disk Space** -
 To launch an AWS instance, you will need hard drive space. Select the amount of space you need. The maximum amount of free tier space should suffice for your needs. Once you finish experiments, you can always download the data and remove the Dockers and rebuild your Docker environment. This will clear old data.
 ![Disk Storage]('picRef/DiskStorage.png') 
@@ -158,7 +160,7 @@ You now have created and activated a Python environment named local-venv. You ha
   - At the same dashboard page, you can spot ***Participant data*** that contains all the participant-related information including participant ID, response, decision_time, etc (actual content depends on types of query). You can download it in JSON or in CSV format. 
 - **Tips on Customize Static Sampling Process with Example** 
   - In  ```Next/local/csv ``` folder, a example CSV file is provided as well as other simple python scripts that are used to extract information from the CSV file.
-  It serves as an example of how you could transform each query from your source of file to dictionary format in ```*-init.yaml```.
+  It serves as an example of how you could transform each query from your source of file to dictionary format in ```*-init.yaml```. Files in this folder extract queries and initialize a Binary Word Sentinement Classfication task introduced in section one. Set configs in ```config.yaml``` and launch experiment by running ```python easy_launch.py ```.
 - **Monitor System Performance**
   - It is always a good idea to monitor and test system performance. This can inform you about the needs of your system and about which processes or services are consuming resources. 
     - **Cadvisor** allows you to monitor cpu, memory, and disk usage on the system wide level, as well as per process and per container. We have implemented a password protected version for you. The default user and password is admin and password. To change these, simply change the content in the ```cadvisor_user.txt``` and ```cadvisor_password.txt``` files respectively. The docker environment will use these to set the username and password for cadvisor. To sign into cadvisor, go to this url: ``` instance-public-ipaddress/cadvisor ```

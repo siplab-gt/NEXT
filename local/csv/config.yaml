@@ -2,4 +2,4 @@ input_csv: /home/ubuntu/NEXT/local/csv/example_input.csv
 instruction_text: THIS IS AN EXAMPLE INSTRUCTION TEXT.
 number_of_queries: 5
 # O indicates Rank 1 & else indicates Rank N
-type_of_query: 1
+type_of_query: 200
