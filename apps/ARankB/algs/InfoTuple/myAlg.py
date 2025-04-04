@@ -32,8 +32,6 @@ class MyAlg:
         butler.algorithms.set(key='B', value=B) #answer length
         butler.algorithms.set(key='delta', value=failure_probability)
         butler.algorithms.set(key='num_reported_answers', value=0)
-        
-        # X = np.random.rand(n,  d)
         X = rng.rand(n, d)
         butler.algorithms.set(key='X', value=X)
        
@@ -52,16 +50,11 @@ class MyAlg:
         rng.set_state(restored_rng_state)
         
         if not butler.participants.exists(uid = participant_uid, key='embedding'):
-            # X_part = np.random.rand(n,  d)
             X_part = rng.rand(n, d)
             butler.participants.set(uid=participant_uid, key='embedding', value=X_part)
             butler.participants.set(uid=participant_uid, key='head', value=0)
             butler.participants.set(uid=participant_uid, key='responses', value=list()) #store all personal responses
             butler.participants.set(uid=participant_uid, key='curr_iteration', value=0)
-            # For testing participant embedding
-            # butler.algorithms.set(key=f'{participant_uid}_embedding', value=[])
-        
-        
 
         selected_tuple = None
         h = butler.participants.get(uid=participant_uid, key='head')
@@ -77,32 +70,12 @@ class MyAlg:
             X_part = np.array(butler.participants.get(uid=participant_uid, key='embedding'))
             selected_tuple, _, _ = utilsInfoTuple.primal_body_selector(X_part, tuples, rng, mu, down_sample)
         selected_tuple = list(map(lambda x: int(x), selected_tuple))
-        
-        
         # Set rng state
         rng_state = rng.get_state()
         serializable_rng_state = (rng_state[0], rng_state[1].tolist(), *rng_state[2:])
         butler.algorithms.set(key='rng_state', value=serializable_rng_state)
-        
-        
         return selected_tuple
-        # Test tuples are a list of tuples selected by a trial in the original infotuple repo
-        # test_init_tuples = [(0, 0, 5), (1, 1, 5), (2, 5, 4), (3, 1, 2), (4, 4, 7), (5, 1, 7), (6, 9, 5), (7, 8, 3), (8, 8, 1), (9, 9, 4)]
-        # test_tuples = [[0, 5, 6], [1, 2, 7], [2, 5, 0], [3, 7, 8], [4, 0, 7], [5, 8, 3], [6, 2, 7], [7, 1, 3], [8, 9, 3], [9, 5, 4], [0, 7, 4], [1, 7, 4], [2, 0, 8], [3, 1, 0],
-        #             [4, 0, 1], [5, 9, 0], [6, 5, 3], [7, 9, 1], [8, 9, 6], [9, 0, 8], [0, 8, 2], [1, 4, 7], [2, 1, 6], [3, 8, 4], [4, 7, 9], 
-        #             [5, 6, 8], [6, 2, 3], [7, 2, 8], [8, 3, 1], [9, 4, 5], [0, 3, 5], [1, 3, 8], [2, 0, 1], [3, 9, 1], [4, 3, 0], [5, 9, 1], [6, 5, 9], [7, 3, 5],
-        #             [8, 9, 5], [9, 4, 2], [0, 8, 3], [1, 9, 8], [2, 3, 1], [3, 8, 2], [4, 6, 9], [5, 6, 7], [6, 7, 5], [7, 8, 2], [8, 3, 1], 
-        #             [9, 4, 6], [0, 2, 6], [1, 0, 4], [2, 0, 5], [3, 4, 8], [4, 3, 9], [5, 8, 0], [6, 0, 1], [7, 8, 4], [8, 1, 4], [9, 1, 3], [0, 8, 4], 
-        #             [1, 2, 5], [2, 5, 6], [3, 8, 5], [4, 1, 2], [5, 7, 6], [6, 0, 2], [7, 8, 5], [8, 4, 5], [9, 7, 6], [0, 5, 9], [1, 8, 5], [2, 9, 0], [3, 7, 1], 
-        #             [4, 0, 8], [5, 8, 6], [6, 0, 1], [7, 6, 1], [8, 2, 3], [9, 7, 5], [0, 2, 9], [1, 0, 9], [2, 5, 0], [3, 7, 8], [4, 6, 8], [5, 8, 4], [6, 5, 0], 
-        #             [7, 6, 5], [8, 7, 6], [9, 8, 0], [0, 3, 8], [1, 0, 5], [2, 3, 6], [3, 9, 1], [4, 2, 5], [5, 6, 0], [6, 1, 2], [7, 0, 6], [8, 7, 5], [9, 7, 8]]
-        # if curr_iteration < burn_in:
-        #     idx = n * curr_iteration + h
-        #     selected_tuple = test_init_tuples[idx]
-        # else: 
-        #     idx = n * (curr_iteration - burn_in) + h
-        #     selected_tuple = test_tuples[idx]
-        # return list(selected_tuple)
+    
 
     def processAnswer(self, butler, target_winner, participant_uid):
         #Gather necessary parameters for processAnswer
@@ -136,14 +109,6 @@ class MyAlg:
         else:
             butler.participants.increment(uid=participant_uid, key='head')
             
-            
-        # Temporarily updating full embedding every n time
-        # if h == n - 1:
-        #     butler.job('full_embedding_update', {}, time_limit=30)
-        #     butler.participants.set(uid=participant_uid, key='head', value=0)
-        #     butler.participants.increment(uid=participant_uid, key='curr_iteration')
-        # else:
-        #     butler.participants.increment(uid=participant_uid, key='head')
         return True
 
     def getModel(self, butler):
@@ -162,8 +127,6 @@ class MyAlg:
         #while (time.time()-t_start < 0.5*t_max):
         X = embedder.fit_transform(responses, n_objects=n, init=X)
         butler.participants.set(uid=participant_uid, key='embedding', value=X.tolist())
-        # For testing participant embedding
-        # butler.algorithms.append(key=f'{participant_uid}_embedding', value=X.tolist())
 
     def full_embedding_update(self, butler, args):
         X = np.array(butler.algorithms.get(key='X'))
