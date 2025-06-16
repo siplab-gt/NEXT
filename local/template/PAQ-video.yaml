@@ -1,0 +1,32 @@
+app_id: PAQ_any
+args:
+  alg_list:
+    # alg_id can be RandomSampling. 
+    # name your own alg_lable and test_alg_label
+    # add as many entries as you like.
+    - {alg_id: VideoMorph, alg_label: VideoMorph, test_alg_label: Test}
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    # You can mix in RandomSampling here and adjust the proportion so they add up to 1.
+    - {alg_label: VideoMorph, proportion: 1}
+  num_tries: 2
+  #-----------------------------------------------------------------------#
+  startItems: []
+  referenceItems: []   
+  endItems: [] 
+  tickFlag: true
+  queryType: video
+  tickNum: 20
+  #-----------------------------------------------------------------------#
+  debrief: Test debrief # text to display when a participant finishes all the query
+  instructions: Drag the slider until the color on the right matches the color on the left. # text to display when a participant opens up query page
+  participant_to_algorithm_management: one_to_many
+  targets:
+     # Allocate your resource locally and fill in the primary_description field with directory to each resource. 
+     # e.g. 'http://44.223.248.38"/media/video01.mp4' make sure to change the primary_type field accordingly
+     # and use the correct Instance IP
+    targetset: 
+    - {primary_description: '0', alt_description: 'http://44.223.248.38/media/video01.mp4', primary_type: 'video', alt_type: ''}
+    - {primary_description: '1', alt_description: 'http://44.223.248.38/media/video02.mp4', primary_type: 'video', alt_type: ''}
+    

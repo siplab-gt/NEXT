@@ -92,11 +92,11 @@ initExp:
                   primary_type:
                     type: str
                     description: The type of target
-                    values: [text,image,audio,video,video-controls]
+                    values: [color, text,image,audio,video,video-controls]
                   alt_type:
                     type: str
                     description: The description of the target
-                    values: [text,image,audio,video,video-controls]
+                    values: [color, text,image,audio,video,video-controls]
             n:
               description: Number of targets.
               type: num

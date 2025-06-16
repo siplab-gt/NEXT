@@ -63,3 +63,5 @@ zope.event~=5.0
 zope.interface~=6.3
 cblearn==0.3.0
 scikit-learn==1.5.1
+colormath
+opencv-python

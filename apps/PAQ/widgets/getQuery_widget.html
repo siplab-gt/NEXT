@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic Sample Slider</title>
+<style>
+  body      { font-family: Arial, sans-serif; margin:0; padding:20px; }
+  .row      { display:flex; gap:4%; }
+  .cell     { position:relative; flex:1 1 48%; border:1px solid #ccc; aspect-ratio:16/9; overflow:hidden; }
+  .cell > * { width:100%; height:100%; }
+  .cell p   { display:flex; align-items:center; justify-content:center; margin:0; font-size:1.25rem; }
+  .cell audio { width:100%; height:auto; }
+  .cell video { object-fit:cover; }
+  .cell img   { object-fit:contain; }
+  .colorFill { position:absolute; inset:0; }
+
+  #sliderBox{ text-align:center; margin:40px 0 20px; position: relative; }
+  #ticks    { position:relative; margin-top:8px; height: 30px; }
+  
+  .tickContainer {
+    position: absolute;
+    left: 0;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none; /* Allow mouse events to pass through container */
+  }
+  
+  .tickSymbol { 
+    width: 8px;
+    height: 8px;
+    background: #666;
+    border-radius: 50%;
+    cursor: pointer;
+    pointer-events: auto; /* Re-enable mouse events for the symbol */
+  }
+  
+  .tickTooltip {
+    position: absolute;
+    top: 12px; /* Position below the tick */
+    background: black;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    white-space: nowrap;
+    display: none;
+    pointer-events: none; /* Prevent tooltip from interfering with hover */
+  }
+  
+  .tickSymbol:hover + .tickTooltip {
+    display: block;
+  }
+  
+  .tickSymbol.active {
+    background: #000;
+  }
+  
+  /* Hide tooltip when slider is being dragged */
+  #slider:active ~ #ticks .tickTooltip {
+    display: none !important;
+  }
+  
+  #submitBtn{ display:block; margin:40px auto 0; padding:8px 24px; font-size:1rem; }
+</style>
+</head>
+<body>
+
+<p>{{ query.instruction }}</p>
+
+<div class="row">
+  <div id="containerA" class="cell">
+    {% if query.queryType == "text" %}
+      <p>{{ query.referenceItem }}</p>
+    {% elif query.queryType == "color" %}
+      <div class="colorFill" style="background:{{ query.referenceItem }};"></div>
+    {% elif query.queryType == "audio" %}
+      <audio controls src="{{ query.referenceItem }}"></audio>
+    {% elif query.queryType == "video" %}
+      <video controls src="{{ query.referenceItem }}"></video>
+    {% elif query.queryType == "image" %}
+      <img src="{{ query.referenceItem }}" alt="image"/>
+    {% endif %}
+  </div>
+
+  <div id="containerSample" class="cell"></div>
+</div>
+
+<div id="sliderBox">
+  <!-- step="any" lets the thumb move freely; we will snap on pointerup/change -->
+  <input id="slider" type="range" min="0" max="{{ query.targetItems | length - 1 }}" step="1" value="0" style="width:100%;">
+  <div id="ticks"></div>
+</div>
+
+<button id="submitBtn">Submit</button>
+
+<script>
+const targetItems = {{ query.targetItems | tojson }};
+const tickItems = {{ query.tickItems | tojson }};
+const tickFlag = {{ query.tickFlag | tojson }};
+const tickType = {{ query.tickType | tojson }};
+const queryType = {{ query.queryType | tojson }};
+const slider = document.getElementById('slider');
+const ticks = document.getElementById('ticks');
+const sampleC = document.getElementById('containerSample');
+
+console.log('Initial data:', {
+  targetItems,
+  tickItems,
+  tickFlag,
+  tickType,
+  queryType
+});
+
+function render(res, target) {
+  target.innerHTML = '';
+  if (queryType === 'text') {
+    const p = document.createElement('p');
+    p.textContent = res;
+    target.appendChild(p);
+  } else if (queryType === 'color') {
+    const d = document.createElement('div');
+    d.className = 'colorFill';
+    d.style.background = res;
+    target.appendChild(d);
+  } else if (queryType === 'audio') {
+    const a = document.createElement('audio');
+    a.controls = true;
+    a.src = res;
+    target.appendChild(a);
+  } else if (queryType === 'video') {
+    const v = document.createElement('video');
+    v.controls = true;
+    v.src = res;
+    target.appendChild(v);
+  } else if (queryType === 'image') {
+    const img = document.createElement('img');
+    img.src = res;
+    img.alt = 'image';
+    target.appendChild(img);
+  }
+}
+
+function buildTicks() {
+  ticks.innerHTML = '';
+  if (!tickFlag) {
+    ticks.style.display = 'none';
+    return;
+  }
+
+  console.log('Building ticks with values:', tickItems);
+
+  for (let i = 0; i < tickItems.length; i++) {
+    const tickContainer = document.createElement('div');
+    tickContainer.className = 'tickContainer';
+    const position = (i / (tickItems.length - 1)) * 100;
+    tickContainer.style.left = `${position}%`;
+    
+    const tickSymbol = document.createElement('div');
+    tickSymbol.className = 'tickSymbol';
+    tickSymbol.dataset.index = i;
+    tickSymbol.dataset.value = tickItems[i];
+    
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tickTooltip';
+    const tickValue = String(tickItems[i]);
+    tooltip.textContent = tickValue;
+    
+    // Debug: Log the created elements
+    console.log(`Created tick ${i}:`, {
+      position,
+      value: tickValue,
+      container: tickContainer,
+      symbol: tickSymbol,
+      tooltip: tooltip
+    });
+    
+    // Add click handler
+    tickSymbol.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const index = parseInt(this.dataset.index);
+      slider.value = index;
+      updateDisplay();
+    });
+    
+    tickContainer.appendChild(tickSymbol);
+    tickContainer.appendChild(tooltip);
+    ticks.appendChild(tickContainer);
+  }
+  
+  // Debug: Log the final ticks container
+  console.log('Final ticks container:', ticks);
+  console.log('Number of tick containers:', ticks.children.length);
+  
+  // Add click handler to document
+  document.addEventListener('click', function() {
+    document.querySelectorAll('.tickSymbol').forEach(tick => {
+      tick.classList.remove('active');
+    });
+  });
+}
+
+function updateDisplay() {
+  const idx = parseInt(slider.value, 10);
+  if (idx >= 0 && idx < targetItems.length) {
+    render(targetItems[idx], sampleC);
+    
+    // Update active state of ticks
+    document.querySelectorAll('.tickSymbol').forEach(tick => {
+      const tickIndex = parseInt(tick.dataset.index);
+      if (tickIndex === idx) {
+        tick.classList.add('active');
+      } else {
+        tick.classList.remove('active');
+      }
+    });
+  }
+}
+
+function submitAnswer() {
+  const idx = parseInt(slider.value, 10);
+  if (idx >= 0 && idx < tickItems.length) {
+    console.log('Submitted value:', tickItems[idx]);
+    next_widget.processAnswer({answer: tickItems[idx]});
+  }
+}
+
+// Initialize
+buildTicks();
+updateDisplay();
+
+// Event listeners
+slider.addEventListener('input', updateDisplay);  // Update while dragging
+slider.addEventListener('change', updateDisplay); // Update on release
+document.getElementById('submitBtn').onclick = submitAnswer;
+</script>
+</body>
+</html>

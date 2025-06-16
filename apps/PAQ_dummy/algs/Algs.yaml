@@ -1,0 +1,72 @@
+initExp:
+  args:
+    resourceA:
+      description: Resource of the anchor
+      type: list
+      values:
+        type: num
+    resourceSample: 
+      description: Resource of the sample
+      type: list
+      values:
+        type: list
+        values:
+          type: num # Size of the sample
+    resourceTicks:
+      description: Resource of the ticks
+      type: list
+      values:
+        type: list
+        values:
+          type: num # Size of the ticks
+    tickFlag:
+      description: Flag to indicate if the ticks are to be shown
+      type: bool    
+  rets:
+    type: bool
+    description: A boolean indicating success
+    values: true
+
+getQuery:
+  rets:
+    description: The dictionary of the query
+    type: dict
+    values:
+      A:
+        description: The anchor
+        type: num
+      sample:
+        description: The sample
+        type: list
+        values:
+          type: num
+      ticks:
+        description: The ticks
+        type: list
+        values:
+          type: num 
+      tickFlag:
+        description: The flag to indicate if the ticks are to be shown
+        type: bool
+      
+processAnswer:
+  args:
+    answer:
+      description: The answer
+      type: num
+  rets:
+      type: bool
+      description: A boolean indicating success
+      values: true
+
+getModel:
+  rets:
+    type: dict
+    description: The current state 
+    values:
+      # X:
+      #   description: The embedding
+      #   type: stuff
+      num_reported_answers:
+        description: How many answers have been reported (for this algorithm)
+        type: num

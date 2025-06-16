@@ -107,6 +107,7 @@ dependencies:
       - nvidia-nvjitlink-cu12==12.6.68
       - nvidia-nvtx-cu12==12.1.105
       - overrides==7.7.0
+      - opencv-python==4.9.0.80
       - packaging==24.1
       - pandas==2.2.2
       - pandocfilters==1.5.1
@@ -160,3 +161,5 @@ dependencies:
       - webencodings==0.5.1
       - websocket-client==1.8.0
       - widgetsnbextension==4.0.13
+      - colormath==4.1.0
+      - opencv-python==4.9.0.80

@@ -1,0 +1,35 @@
+app_id: PAQ_any
+args:
+  alg_list:
+    # alg_id can be RandomSampling. 
+    # name your own alg_lable and test_alg_label
+    # add as many entries as you like.
+    - {alg_id: Color, alg_label: Color, test_alg_label: Test}
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    # You can mix in RandomSampling here and adjust the proportion so they add up to 1.
+    - {alg_label: Color, proportion: 1}
+  num_tries: 2
+  #-----------------------------------------------------------------------#
+  startItems: [[0.0960, 0.0745, 0.3946], [0.3058, 0.1604, 0.0576]]
+  referenceItems: [[0.2304, 0.2402, 0.6440], [0.4152, 0.3082, 0.0499]]   
+  endItems: [[0.4932, 0.5620, 0.9869], [0.6554, 0.6986, 0.1003]] 
+  tickFlag: true
+  queryType: color
+  tickNum: 20
+  #-----------------------------------------------------------------------#
+  debrief: Test debrief # text to display when a participant finishes all the query
+  instructions: Drag the slider until the color on the right matches the color on the left. # text to display when a participant opens up query page
+  participant_to_algorithm_management: one_to_many
+  targets:
+     # Allocate your resource locally and fill in the primary_description field with directory to each resource. 
+     # e.g. 'http://44.223.248.38"/media/video01.mp4' make sure to change the primary_type field accordingly
+     # and use the correct Instance IP
+    targetset: 
+    - {primary_description: '0', alt_description: '#0047AB', primary_type: 'color', alt_type: ''}
+    - {primary_description: '1', alt_description: '#DC143C', primary_type: 'color', alt_type: ''}
+    - {primary_description: '2', alt_description: '#438AD2', primary_type: 'color', alt_type: ''}
+    - {primary_description: '3', alt_description: '#ED751E', primary_type: 'color', alt_type: ''}
+    - {primary_description: '4', alt_description: '#87CEFA', primary_type: 'color', alt_type: ''}
+    - {primary_description: '5', alt_description: '#FFD700', primary_type: 'color', alt_type: ''}

@@ -25,6 +25,7 @@ RUN echo "deb http://security.debian.org/debian-security buster/updates main" >>
 RUN apt-get update -y && apt-get upgrade -y
 RUN apt-get install -y libssl1.1
 RUN apt-get install -y mongodb-org
+RUN apt-get install -y libgl1-mesa-glx  # Install OpenGL libraries for video processing
 
 # Install python dependencies for next_backend
 RUN python -m pip install --upgrade pip

@@ -60,7 +60,7 @@ services:
       - CELERY_THREADS_PER_DASHBOARD_WORKER=2
       - CELERY_DASHBOARD_WORKER_PREFETCH=1
       - CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=True
-      - GIT_HASH=eb436abfa19f99c9ba862adb394aebf04cf4c9c5
+      - GIT_HASH=4f30302d6b71ed3e809759d2832c0c958ff9b272
       - PYTHONPATH=:/next_backend
       - HOSTNAME=localhost
     networks:

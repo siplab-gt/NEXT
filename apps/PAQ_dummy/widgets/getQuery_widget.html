@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic Sample Slider</title>
+<style>
+  body      { font-family: Arial, sans-serif; margin:0; padding:20px; }
+  .row      { display:flex; gap:4%; }
+  .cell     { position:relative; flex:1 1 48%; border:1px solid #ccc; aspect-ratio:16/9; overflow:hidden; }
+  .cell > * { width:100%; height:100%; }
+  .cell p   { display:flex; align-items:center; justify-content:center; margin:0; font-size:1.25rem; }
+  .cell audio { width:100%; height:auto; }
+  .cell video { object-fit:cover; }
+  .cell img   { object-fit:contain; }
+  .colorFill { position:absolute; inset:0; }
+
+  #sliderBox{ text-align:center; margin:40px 0 20px; }
+  #ticks    { display:flex; justify-content:space-between; margin-top:8px; }
+  .tickLbl  { width:40px; text-align:center; font-size:.8rem; display:flex; flex-direction:column; align-items:center; }
+  .tickLbl .colorTiny { width:24px; height:24px; border:1px solid #000; margin-bottom:4px; }
+  .tickLbl video,.tickLbl img,.tickLbl audio { width:40px; height:24px; object-fit:cover; margin-bottom:4px; }
+  #submitBtn{ display:block; margin:40px auto 0; padding:8px 24px; font-size:1rem; }
+</style>
+</head>
+<body>
+
+<p>{{ query.instruction }}</p>
+
+<div class="row">
+  <div id="containerA" class="cell">
+    {% set _res  = query.A %}
+    {% if _res.primary_type == "text" %}
+      <p>{{ _res.alt_description }}</p>
+    {% elif _res.primary_type == "color" %}
+      <div class="colorFill" style="background:{{ _res.alt_description }};"></div>
+    {% elif _res.primary_type == "audio" %}
+      <audio controls src="{{ _res.alt_description }}"></audio>
+    {% elif _res.primary_type == "video" %}
+      <video controls src="{{ _res.alt_description }}"></video>
+    {% elif _res.primary_type == "image" %}
+      <img src="{{ _res.alt_description }}" alt="image"/>
+    {% endif %}
+  </div>
+
+  <div id="containerSample" class="cell"></div>
+</div>
+
+<div id="sliderBox">
+  <!-- step="any" lets the thumb move freely; we will snap on pointerup/change -->
+  <input id="slider" type="range" min="0" max="{{ query.ticks | length - 1 }}" step="any" value="0" style="width:100%;">
+  <div id="ticks"></div>
+</div>
+
+<button id="submitBtn">Submit</button>
+
+<script>
+const sampleList   = {{ query.sample | tojson }};
+const tickResources= {{ query.ticks | tojson }};
+const tickFlag     = {{ query.tickFlag | tojson }};
+
+const slider  = document.getElementById('slider');
+const ticks   = document.getElementById('ticks');
+const sampleC = document.getElementById('containerSample');
+
+function render(res,target){
+  target.innerHTML='';
+  if(res.primary_type ==='text'){
+    const p=document.createElement('p'); p.textContent=res.alt_description; target.appendChild(p);
+  }else if(res.primary_type==='color'){
+    const d=document.createElement('div'); d.className='colorFill'; d.style.background=res.alt_description; target.appendChild(d);
+  }else if(res.primary_type==='audio'){
+    const a=document.createElement('audio'); a.controls=true; a.src=res.alt_description; target.appendChild(a);
+  }else if(res.primary_type==='video'){
+    const v=document.createElement('video'); v.controls=true; v.src=res.alt_description; target.appendChild(v);
+  }else if(res.primary_type==='image'){
+    const img=document.createElement('img'); img.src=res.alt_description; img.alt='image'; target.appendChild(img);
+  }
+}
+
+function buildTicks(){
+  ticks.innerHTML='';
+  for(let i=0;i<tickResources.length;i++){
+    const lbl=document.createElement('div'); lbl.className='tickLbl';
+    const res=tickResources[i].alt_description;
+    if(tickResources[i].primary_type==='color'){
+      const sw=document.createElement('div'); sw.className='colorTiny'; sw.style.background=res; lbl.appendChild(sw);
+    }else if(tickResources[i].primary_type==='text'){
+      lbl.textContent=res;
+    }else if(tickResources[i].primary_type==='audio'){
+      const a=document.createElement('audio'); a.src=res; a.controls=true; a.style.width='40px'; a.style.height='24px'; lbl.appendChild(a);
+    }else if(tickResources[i].primary_type==='video'){
+      const v=document.createElement('video'); v.src=res; v.muted=true; v.loop=true; v.autoplay=true; v.playsInline=true; lbl.appendChild(v);
+    }else if(tickResources[i].primary_type==='image'){
+      const img=document.createElement('img'); img.src=res; img.alt='img'; lbl.appendChild(img);
+    }
+    ticks.appendChild(lbl);
+  }
+  if(!tickFlag){ ticks.style.display='none'; }
+}
+
+function snapToNearest(){
+  // round to nearest integer tick, clamp between 0 and max
+  const idx=Math.round(parseFloat(slider.value));
+  slider.value=idx;
+  render(sampleList[idx], sampleC);
+}
+
+function submitAnswer(){
+  console.log('Submitted order:', slider.value);
+  next_widget.processAnswer({answer: slider.value});
+}
+
+buildTicks();
+render(sampleList[0], sampleC);
+
+// When the user releases the thumb, 'change' fires (also on keyboard), good for snapping
+slider.addEventListener('change', snapToNearest);
+// Mobile Safari only fires pointerup reliably, so also listen for that
+slider.addEventListener('pointerup', snapToNearest);
+
+document.getElementById('submitBtn').onclick=submitAnswer;
+</script>
+</body>
+</html>
