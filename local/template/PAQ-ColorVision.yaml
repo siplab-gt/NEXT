@@ -4,18 +4,17 @@ args:
     # alg_id can be RandomSampling. 
     # name your own alg_lable and test_alg_label
     # add as many entries as you like.
-    - {alg_id: Color, alg_label: Color, test_alg_label: Test}
+    - {alg_id: ColorVision, alg_label: ColorVision, test_alg_label: Test}
   algorithm_management_settings:
     mode: fixed_proportions
     params:
     # You can mix in RandomSampling here and adjust the proportion so they add up to 1.
-    - {alg_label: Color, proportion: 1}
-  num_tries: 2
+    - {alg_label: ColorVision, proportion: 1}
+  num_tries: 1
   #-----------------------------------------------------------------------#
-  startItems: [[0.0960, 0.0745, 0.3946], [0.3058, 0.1604, 0.0576]]
-  referenceItems: [[0.2304, 0.2402, 0.6440], [0.4152, 0.3082, 0.0499]]   
-  endItems: [[0.4932, 0.5620, 0.9869], [0.6554, 0.6986, 0.1003]] 
-  tickFlag: true
+  referenceItems: [[0.33, 0.40]]   
+  directionalItems: [[0.05, 0.15]]
+  tickFlag: false
   queryType: color
   tickNum: 20
   #-----------------------------------------------------------------------#
