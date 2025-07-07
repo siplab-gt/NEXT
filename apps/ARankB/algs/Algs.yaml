@@ -33,6 +33,28 @@ initExp:
     debug:
       description: Whether to use butler to schedule full_embedding_update
       type: bool
+    setTrap:
+      description: Whether to set trap questions
+      type: bool
+      default: false
+      optional: true    
+    expel:
+      description: Whether to expel participants immediately if exceeds tolerance
+      type: bool
+      optional: true
+    tolerance:
+      description: Tolerance for the trap question
+      type: num
+      optional: true
+    trapRatio:
+      description: Frequency of the trap question
+      type: num
+      optional: true
+    num_trap_questions:
+      description: Number of trap questions available
+      type: num
+      optional: true
+      
   rets:
     type: bool
     description: A boolean indicating success
@@ -43,8 +65,8 @@ getQuery:
     description: The list of targets to ask about
     type: list # Size A
     values:
-        type: num
-        description: The ID of the target in the query
+      type: num
+      description: The ID of the target
       
 processAnswer:
     args:
@@ -57,6 +79,9 @@ processAnswer:
       participant_uid:
         description: A list of IDs of the targets reranked from the query
         type: string 
+      disregard_candidate:
+        description: Whether to disregard the candidate
+        type: bool
     rets:
       type: bool
       description: A boolean indicating success

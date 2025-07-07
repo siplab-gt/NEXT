@@ -134,65 +134,86 @@
 </style>
 
 <!-- Anchor Section -->
+{% if not query.isTrap %}
 <div class="anchor-container">
   <div class="anchor-label">Anchor</div>
-  <div class="anchor-target" id="target-{{ query.target_indices[0].target_id }}">
-    {% if query.target_indices[0].primary_type == "image" or query.target_indices[0].primary_type == "img" %}
-    <img src="{{ query.target_indices[0].primary_description }}" alt="Target Image">
+  <div class="anchor-target" id="target-{{ query.target_items[0].target_id }}">
+    {% if query.target_items[0].primary_type == "image" or query.target_items[0].primary_type == "img" %}
+    <img src="{{ query.target_items[0].primary_description }}" alt="Target Image">
     
-    {% elif query.target_indices[0].primary_type == "text" %}
-    <div class="target-text">{{ query.target_indices[0].primary_description|safe }}</div>
+    {% elif query.target_items[0].primary_type == "text" %}
+    <div class="target-text">{{ query.target_items[0].primary_description|safe }}</div>
     
-    {% elif query.target_indices[0].primary_type == "video" %}
+    {% elif query.target_items[0].primary_type == "video" %}
     <video controls autoplay loop>
-      <source src="{{ query.target_indices[0].primary_description }}" type="video/mp4">
+      <source src="{{ query.target_items[0].primary_description }}" type="video/mp4">
       Your browser does not support the video tag.
     </video>
     
-    {% elif query.target_indices[0].primary_type == "audio" %}
+    {% elif query.target_items[0].primary_type == "audio" %}
     <audio controls>
-      <source src="{{ query.target_indices[0].primary_description }}" type="audio/mpeg">
+      <source src="{{ query.target_items[0].primary_description }}" type="audio/mpeg">
       Your browser does not support the audio tag.
     </audio>
     {% endif %}
   </div>
 </div>
+{% endif %}
 
 <!-- Instruction Text -->
-<div class="instruction-text">
-  Here is a list of {{ query.A }} targets. <br>
-  Click and choose exactly {{ query.B }} targets.
+<div class="instruction-text" id="instruction-text">
+  {% if query.isTrap and query.target_items|length > 0 and query.target_items[0].alt_description %}
+  {{ query.target_items[0].alt_description }}
+  {% else %}
+  Here is a list of <span id="display-A">{{ query.A }}</span> targets. <br>
+  Click and choose exactly <span id="display-B">{{ query.B }}</span> targets.
+  {% endif %}
 </div>
 
 <!-- Second Row with Red Border around all Non-Anchor Targets -->
 <div class="targets-container" id="targets-container">
-  {% for target in query.target_indices[1:] %}
-  <div class="target-container" id="target-{{ target.target_id }}"
-       draggable="true"
-       ondragstart="dragStart(event)"
-       ondragover="dragOver(event)"
-       ondragleave="dragLeave(event)"
-       ondrop="drop(event)">
-    {% if target.primary_type == "image" or target.primary_type == "img" %}
-    <img src="{{ target.primary_description }}" alt="Target Image">
-    
-    {% elif target.primary_type == "text" %}
-    <div class="target-text">{{ target.primary_description|safe }}</div>
-    
-    {% elif target.primary_type == "video" %}
-    <video controls autoplay loop>
-      <source src="{{ target.primary_description }}" type="video/mp4">
-      Your browser does not support the video tag.
-    </video>
-    
-    {% elif target.primary_type == "audio" %}
-    <audio controls>
-      <source src="{{ target.primary_description }}" type="audio/mpeg">
-      Your browser does not support the audio tag.
-    </audio>
-    {% endif %}
-  </div>
-  {% endfor %}
+  {% if query.isTrap %}
+    {% set words = query.target_items[0].primary_description.split(', ') %}
+    {% for word in words %}
+    <div class="target-container" id="trap-word-{{ loop.index0 }}"
+         draggable="true"
+         ondragstart="dragStart(event)"
+         ondragover="dragOver(event)"
+         ondragleave="dragLeave(event)"
+         ondrop="drop(event)"
+         data-correct-answer="{{ words[0] if loop.index0 == 0 else '' }}">
+      <div class="target-text">{{ word }}</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    {% for target in query.target_items[1:] %}
+    <div class="target-container" id="target-{{ target.target_id }}"
+         draggable="true"
+         ondragstart="dragStart(event)"
+         ondragover="dragOver(event)"
+         ondragleave="dragLeave(event)"
+         ondrop="drop(event)">
+      {% if target.primary_type == "image" or target.primary_type == "img" %}
+      <img src="{{ target.primary_description }}" alt="Target Image">
+      
+      {% elif target.primary_type == "text" %}
+      <div class="target-text">{{ target.primary_description|safe }}</div>
+      
+      {% elif target.primary_type == "video" %}
+      <video controls autoplay loop>
+        <source src="{{ target.primary_description }}" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+      
+      {% elif target.primary_type == "audio" %}
+      <audio controls>
+        <source src="{{ target.primary_description }}" type="audio/mpeg">
+        Your browser does not support the audio tag.
+      </audio>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% endif %}
 </div>
 
 <div class="toRank-container-text">
@@ -210,6 +231,182 @@
 </div>
 
 <script>
+  // Global variables
+  let isTrapQuestion = {{ 'true' if query.isTrap else 'false' }};
+  let correctAnswer = '';
+  let toRankContainer = null;
+  let draggedElement = null;
+  // For trap questions, A should be the number of words, B should be 1
+  let trapA = {{ query.A }};
+  let trapB = {{ query.B }};
+
+  // Debug logging
+  console.log('=== DEBUG INFO ===');
+  console.log('isTrapQuestion:', isTrapQuestion);
+  console.log('query object:', {{ query|tojson }});
+  console.log('query.isTrap:', {{ 'true' if query.isTrap else 'false' }});
+  console.log('query.A:', {{ query.A }});
+  console.log('query.B:', {{ query.B }});
+  console.log('query.target_items:', {{ query.target_items|tojson }});
+  console.log('Number of target_items:', {{ query.target_items|length }});
+  
+  if (isTrapQuestion) {
+    console.log('TRAP QUESTION DETECTED');
+    console.log('First target item:', {{ query.target_items[0]|tojson if query.target_items else 'null' }});
+    console.log('Second target item:', {{ query.target_items[1]|tojson if query.target_items and query.target_items|length > 1 else 'null' }});
+  } else {
+    console.log('REGULAR QUESTION DETECTED');
+  }
+  console.log('=== END DEBUG INFO ===');
+
+  // Initialize
+  toRankContainer = document.getElementById('toRank-container');
+
+  // For trap questions, get the correct answer and shuffle the words
+  if (isTrapQuestion) {
+    // Set B to 1 for trap questions
+    trapB = 1;
+    
+    const firstTarget = document.querySelector('.target-container');
+    if (firstTarget) {
+      correctAnswer = firstTarget.getAttribute('data-correct-answer');
+      // Only shuffle if we have a valid correct answer
+      if (correctAnswer && correctAnswer.trim() !== '') {
+        shuffleTrapWords();
+        // Update the displayed A and B values for trap questions
+        const displayA = document.getElementById('display-A');
+        const displayB = document.getElementById('display-B');
+        if (displayA && displayB) {
+          displayA.textContent = trapA;
+          displayB.textContent = trapB;
+        }
+      } else {
+        console.warn('Trap question detected but no valid correct answer found');
+        // Fall back to regular question behavior
+        isTrapQuestion = false;
+      }
+    } else {
+      console.warn('Trap question detected but no target containers found');
+      // Fall back to regular question behavior
+      isTrapQuestion = false;
+    }
+  }
+
+  function shuffleTrapWords() {
+    console.log('=== shuffleTrapWords called ===');
+    const targetsContainer = document.getElementById('targets-container');
+    if (!targetsContainer) {
+      console.error('No targets-container found');
+      return;
+    }
+    
+    const targetContainers = Array.from(targetsContainer.querySelectorAll('.target-container'));
+    console.log('targetsContainer:', targetsContainer);
+    console.log('targetContainers length:', targetContainers.length);
+    
+    if (targetContainers.length === 0) {
+      console.error('No target containers found');
+      return;
+    }
+    
+    // Get all words from the target containers
+    const words = [];
+    targetContainers.forEach(container => {
+      const targetText = container.querySelector('.target-text');
+      if (targetText && targetText.textContent.trim() !== '') {
+        words.push(targetText.textContent.trim());
+      }
+    });
+    
+    console.log('words array:', words);
+    
+    if (words.length < 2) {
+      console.error('Not enough words to shuffle (need at least 2)');
+      return;
+    }
+    
+    // Update A to be the number of words and B to be 1 for trap questions
+    trapA = words.length;
+    trapB = 1;
+    console.log('Updated trapA:', trapA, 'trapB:', trapB);
+    
+    // Shuffle the words (excluding the first one which is the correct answer)
+    const shuffledOptions = words.slice(1);
+    console.log('shuffledOptions before shuffle:', shuffledOptions);
+    
+    for (let i = shuffledOptions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+    }
+    
+    console.log('shuffledOptions after shuffle:', shuffledOptions);
+    
+    // Add the correct answer at a random position
+    const insertIndex = Math.floor(Math.random() * (shuffledOptions.length + 1));
+    const shuffledWords = [...shuffledOptions.slice(0, insertIndex), correctAnswer, ...shuffledOptions.slice(insertIndex)];
+    console.log('final shuffledWords:', shuffledWords);
+    
+    // Update each target container with a shuffled word
+    targetContainers.forEach((container, index) => {
+      if (index < shuffledWords.length) {
+        const targetText = container.querySelector('.target-text');
+        if (targetText) {
+          targetText.textContent = shuffledWords[index];
+          console.log(`Updated container ${index} with:`, shuffledWords[index]);
+        }
+      }
+    });
+    console.log('=== shuffleTrapWords completed ===');
+  }
+
+  // Drag and drop functions
+  function dragStart(event) {
+    const targetElement = event.target.closest('.target-container');
+    if (targetElement && toRankContainer && toRankContainer.contains(targetElement)) {
+      draggedElement = targetElement;
+      event.target.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  }
+
+  function dragOver(event) {
+    event.preventDefault();
+    const targetElement = event.target.closest('.target-container');
+    if (targetElement && targetElement !== draggedElement) {
+      targetElement.classList.add('over');
+    }
+  }
+
+  function dragLeave(event) {
+    const targetElement = event.target.closest('.target-container');
+    if (targetElement) {
+      targetElement.classList.remove('over');
+    }
+  }
+
+  function drop(event) {
+    event.preventDefault();
+    const targetElement = event.target.closest('.target-container');
+    if (draggedElement && targetElement && targetElement !== draggedElement) {
+      const bounding = targetElement.getBoundingClientRect();
+      const offset = event.clientX - bounding.left;
+      if (offset < bounding.width / 2) {
+        toRankContainer.insertBefore(draggedElement, targetElement);
+      } else {
+        toRankContainer.insertBefore(draggedElement, targetElement.nextSibling);
+      }
+    } else if (draggedElement) {
+      toRankContainer.appendChild(draggedElement);
+    }
+    if (targetElement) {
+      targetElement.classList.remove('over');
+    }
+    if (draggedElement) {
+      draggedElement.classList.remove('dragging');
+      draggedElement = null;
+    }
+  }
+
   // Remove context menu functionality by not preventing the default click events.
   
   // Toggle target between containers on left click.
@@ -230,12 +427,15 @@
   // Function to move a target to the toRank-container
   function moveToRank(element) {
     const toRankContainer = document.getElementById('toRank-container');
-    if (toRankContainer.children.length < {{ query.B }}) {
+    // For trap questions, use trapB (which should be 1), otherwise use the original B value
+    const maxTargets = isTrapQuestion ? trapB : {{ query.B }};
+    if (toRankContainer.children.length < maxTargets) {
       toRankContainer.appendChild(element);
       // Re-enable dragging within the ranking container
       element.setAttribute('draggable', 'true');
     } else {
-      alert(`You can only rank exactly {{ query.B }} targets.`);
+      const message = isTrapQuestion ? `You can only select exactly ${trapB} target.` : `You can only rank exactly {{ query.B }} targets.`;
+      alert(message);
     }
   }
 
@@ -247,10 +447,7 @@
     element.setAttribute('draggable', 'false');
   }
 
-  // Drag and drop functionality within the toRank-container remains unchanged.
-  let draggedElement = null;
-  const toRankContainer = document.getElementById('toRank-container');
-
+  // Drag and drop functionality within the toRank-container
   toRankContainer.addEventListener('dragstart', function(event) {
     const targetElement = event.target.closest('.target-container');
     if (targetElement && toRankContainer.contains(targetElement)) {
@@ -301,22 +498,69 @@
   function submitAnswer() {
     const rankedTargets = Array.from(toRankContainer.querySelectorAll('.target-container'));
     
-    // Check if the number of ranked targets matches query.B
-    if (rankedTargets.length !== {{ query.B }}) {
-      alert(`Please rank exactly {{ query.B }} targets.`);
-      return;
+    // For trap questions, check if exactly 1 target is selected
+    if (isTrapQuestion) {
+      if (rankedTargets.length !== trapB) {
+        alert(`Please select exactly ${trapB} target.`);
+        return;
+      }
+      
+      // Get the selected answer
+      const selectedTarget = rankedTargets[0];
+      const targetText = selectedTarget.querySelector('.target-text');
+      
+      if (!targetText) {
+        console.error('No target-text element found in selected target');
+        alert('Error: Invalid target structure');
+        return;
+      }
+      
+      const selectedText = targetText.textContent.trim();
+      
+      // Check if we have a valid correct answer
+      if (!correctAnswer || correctAnswer.trim() === '') {
+        console.error('No valid correct answer found for trap question');
+        alert('Error: Invalid trap question configuration');
+        return;
+      }
+      
+      // Check if the answer is correct
+      const isCorrect = selectedText === correctAnswer;
+      
+      // For trap questions, we need to create a target_winner array with the selected answer
+      const targetWinner = [0];
+      
+      // Call processAnswer with trap question data
+      next_widget.processAnswer({
+        "target_winner": targetWinner, 
+        "participant_uid": '{{ query.participant_uid }}',
+        "trapped": !isCorrect  // trapped is true if the answer is incorrect
+      });
+      
+      console.log("Trap question submitted. Correct answer:", correctAnswer, "Selected answer:", selectedText, "Is correct:", isCorrect);
+    } else {
+      // Handle regular question submission
+      // Check if the number of ranked targets matches query.B
+      if (rankedTargets.length !== {{ query.B }}) {
+        alert(`Please rank exactly {{ query.B }} targets.`);
+        return;
+      }
+      
+      // Collect the IDs of ranked targets in left-to-right order
+      const targetWinner = rankedTargets.map(function(target) {
+        return target.id.split('-')[1];
+      });
+
+      const anchorTarget = document.querySelector('.anchor-target').id.split('-')[1];
+      targetWinner.unshift(anchorTarget);
+
+      // Call processAnswer with the order of ranked targets
+      next_widget.processAnswer({
+        "target_winner": targetWinner, 
+        "participant_uid": '{{ query.participant_uid }}',
+        "trapped": false  // Regular questions are not trap questions
+      });
+      console.log("Submitted order: ", targetWinner);
     }
-    
-    // Collect the IDs of ranked targets in left-to-right order
-    const targetWinner = rankedTargets.map(function(target) {
-      return target.id.split('-')[1];
-    });
-
-    const anchorTarget = document.querySelector('.anchor-target').id.split('-')[1];
-    targetWinner.unshift(anchorTarget);
-
-    // Call processAnswer with the order of ranked targets
-    next_widget.processAnswer({"target_winner": targetWinner, "participant_uid": '{{ query.participant_uid }}' });
-    console.log("Submitted order: ", targetWinner);
   }
 </script>

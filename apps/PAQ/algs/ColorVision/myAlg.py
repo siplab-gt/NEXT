@@ -20,7 +20,7 @@ class MyAlg:
         return True
 
 
-    def getQuery(self, butler, source, query_id):
+    def getQuery(self, butler, ref, start, end, query_id):
         # prepare query
         ticknum = butler.algorithms.get(key='tickNum')
         tickFlag = butler.algorithms.get(key='tickFlag')

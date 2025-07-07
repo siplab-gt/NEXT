@@ -1,4 +1,3 @@
-
 from celery import Celery
 
 
@@ -15,6 +14,12 @@ app.conf.update(
     redis_socket_timeout=30,
     redis_retry_on_timeout=True,
     redis_socket_connect_timeout=10,
+    
+    # Timeout settings to prevent gateway timeouts
+    task_soft_time_limit=300,  # 5 minutes soft limit
+    task_time_limit=360,       # 6 minutes hard limit
+    worker_max_memory_per_child=1000000,  # 1GB per worker
+    worker_max_tasks_per_child=5,         # Restart worker after 5 tasks
 )
 
 if __name__ == '__main__':

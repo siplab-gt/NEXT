@@ -1,23 +1,23 @@
-app_id: PAQ_any
+app_id: PAQ
 args:
   alg_list:
     # alg_id can be RandomSampling. 
     # name your own alg_lable and test_alg_label
     # add as many entries as you like.
-    - {alg_id: VideoMorph, alg_label: VideoMorph, test_alg_label: Test}
+    - {alg_id: ImageTransformation, alg_label: ImageTransformation, test_alg_label: Test}
   algorithm_management_settings:
     mode: fixed_proportions
     params:
     # You can mix in RandomSampling here and adjust the proportion so they add up to 1.
-    - {alg_label: VideoMorph, proportion: 1}
+    - {alg_label: ImageTransformation, proportion: 1}
   num_tries: 2
   #-----------------------------------------------------------------------#
-  startItems: []
-  referenceItems: []   
-  endItems: [] 
+  startItems: [0, 1]
+  referenceItems: [2, 3] 
+  endItems: [4, 5] 
   tickFlag: true
-  queryType: video
-  tickNum: 20
+  queryType: image
+  tickNum: 5
   #-----------------------------------------------------------------------#
   debrief: Test debrief # text to display when a participant finishes all the query
   instructions: Drag the slider until the color on the right matches the color on the left. # text to display when a participant opens up query page
@@ -27,6 +27,10 @@ args:
      # e.g. 'http://44.223.248.38"/media/video01.mp4' make sure to change the primary_type field accordingly
      # and use the correct Instance IP
     targetset: 
-    - {primary_description: '0', alt_description: 'http://44.223.248.38/media/video01.mp4', primary_type: 'video', alt_type: ''}
-    - {primary_description: '1', alt_description: 'http://44.223.248.38/media/video02.mp4', primary_type: 'video', alt_type: ''}
+    - {primary_description: '0', alt_description: 'http://44.223.248.38/media/cats/cat01.png', primary_type: 'image', alt_type: ''}
+    - {primary_description: '1', alt_description: 'http://44.223.248.38/media/cats/cat02.png', primary_type: 'image', alt_type: ''}
+    - {primary_description: '2', alt_description: 'http://44.223.248.38/media/cats/cat03.png', primary_type: 'image', alt_type: ''}
+    - {primary_description: '3', alt_description: 'http://44.223.248.38/media/cats/cat04.png', primary_type: 'image', alt_type: ''}
+    - {primary_description: '4', alt_description: 'http://44.223.248.38/media/cats/cat05.png', primary_type: 'image', alt_type: ''}
+    - {primary_description: '5', alt_description: 'http://44.223.248.38/media/cats/cat06.png', primary_type: 'image', alt_type: ''}
     

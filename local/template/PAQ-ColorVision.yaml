@@ -1,4 +1,4 @@
-app_id: PAQ_any
+app_id: PAQ
 args:
   alg_list:
     # alg_id can be RandomSampling. 

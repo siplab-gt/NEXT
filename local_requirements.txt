@@ -2,3 +2,4 @@ boto
 requests
 ply
 joblib
+scikit-image

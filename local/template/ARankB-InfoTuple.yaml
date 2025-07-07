@@ -16,7 +16,7 @@ args:
   A: 10 # how many targets in total
   B: 5 # how many targets among all that a participant needs to rank
   random_seed: 102 # 
-  num_tries: 30 # Will be 25 be default if this field is missing. Make sure this value equals to (burn_in + iteration) * A
+  num_tries: 50 # Will be 25 be default if this field is missing. Make sure this value equals to (burn_in + iteration) * A
   #----------------------------InfoTuple Exclusive------------------------#
   failure_probability: 0.01
   iteration: 2 # each cycle of normal iteration involves every target being the head once
@@ -24,13 +24,19 @@ args:
   down_sample: 1  
   mu: 0.05 
   debug: true # please set to true at the moment
+  #-----------------------------For Trap Questions------------------------------------#
+  setTrap: true # whether to set trap questions
+  expel: true # whether to expel participants immediately if exceeds tolerance
+  tolerance: 0.5 # tolerance for the trap question
+  trapRatio: 0.1 # the portion of normal questions to answer before a trap shows up if set to 0.0 all trap questions will be evenly spaced out
+  num_trap_questions: 3 # number of trap questions available
   #-----------------------------------------------------------------------#
-  debrief: Test debrief # text to display when a participant finishes all the query
-  instructions: Test instructions # text to display when a participant opens up query page
+  debrief: The experiment is over. Don't forget to copy paste your UseID shown on this screen and your ProlificID to the google form. # text to display at the end 
+  instructions: Test instructions # test instructions
   participant_to_algorithm_management: one_to_many
   targets:
      # Allocate your resource locally and fill in the primary_description field with directory to each resource. 
-     # e.g. 'http://44.223.248.38"/media/video01.mp4' make sure to change the primary_type field accordingly
+     # e.g. 'http://44.223.248.38/media/video01.mp4' make sure to change the primary_type field accordingly
      # and use the correct Instance IP
     targetset:
     - {primary_description: '0', alt_description: '', primary_type: 'text', alt_type: ''}
@@ -43,4 +49,8 @@ args:
     - {primary_description: '7', alt_description: '', primary_type: 'text', alt_type: ''}
     - {primary_description: '8', alt_description: '', primary_type: 'text', alt_type: ''}
     - {primary_description: '9', alt_description: '', primary_type: 'text', alt_type: ''}
-    
+    #--------------Resource after A number of targets are dedicated to trap questions------------------------------------#
+    # Primary description is the answers, alt_description is the question. The first option is the correct answer.
+    - {primary_description: 'Positive, Negativity, War, Peace', alt_description: 'Choose the option with the word positive in it.', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Running, sleeping, cleaning, eating', alt_description: 'Pick the option with no e in it.', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'yes, cleaning, running', alt_description: 'Are you paying attention?', primary_type: 'text', alt_type: ''}

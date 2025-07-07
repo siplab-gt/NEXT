@@ -10,16 +10,16 @@ from sklearn.utils import check_random_state
 class MyAlg:
     def initExp(self, butler, A, B, n, d 
                 ,random_seed, failure_probability
-                ,iteration, burn_in, down_sample, mu
-                , debug):
-        #Algo Specific
+                ,iteration, burn_in, down_sample, mu, debug,
+                setTrap, expel, tolerance, trapRatio, num_trap_questions):
+        #For InfoTuple
         butler.algorithms.set(key='debug_flag', value=debug)
         butler.algorithms.set(key='mu', value=mu)
         butler.algorithms.set(key='down_sample', value=down_sample)
         butler.algorithms.set(key='burn_in', value=burn_in)
         butler.algorithms.set(key='iteration', value=iteration)
         butler.algorithms.set(key='responses', value=list()) #store all responses in list
-        
+       
         rng = check_random_state(random_seed)
         rng_state = rng.get_state()
         serializable_rng_state = (rng_state[0], rng_state[1].tolist(), *rng_state[2:])
@@ -32,12 +32,23 @@ class MyAlg:
         butler.algorithms.set(key='B', value=B) #answer length
         butler.algorithms.set(key='delta', value=failure_probability)
         butler.algorithms.set(key='num_reported_answers', value=0)
-        X = rng.rand(n, d)
+        # Store the number of regular targets (A) separately from total targets (n)
+        butler.algorithms.set(key='num_regular_targets', value=A)
+        butler.algorithms.set(key='total_targets', value=n)
+        # Create embedding matrix only for regular targets (0 to A-1)
+        X = rng.rand(A, d)
         butler.algorithms.set(key='X', value=X)
-       
+
+        # To keep track of bad participants
+        butler.algorithms.set(key='bad_participants', value=list())
+        butler.algorithms.set(key='expel', value=expel)
         return True
 
-    def getQuery(self, butler, participant_uid):
+    def getQuery(self, butler, participant_uid, isTrap=False):
+        # For trap questions, return empty list since trap targets are handled separately
+            
+        if isTrap:
+            return []
         #Gather necessary parameters for getQuery
         A = butler.algorithms.get(key='A')
         X = np.array(butler.algorithms.get(key='X'))
@@ -77,8 +88,15 @@ class MyAlg:
         return selected_tuple
     
 
-    def processAnswer(self, butler, target_winner, participant_uid):
-        #Gather necessary parameters for processAnswer
+    def processAnswer(self, butler, target_winner, participant_uid, disregard_candidate):
+        # Check if the participant is a bad participant
+        if disregard_candidate:
+            if participant_uid not in butler.algorithms.get(key='bad_participants'):
+                butler.algorithms.append(key='bad_participants', value=participant_uid) 
+            if butler.algorithms.get(key='expel'):
+                raise ValueError("Bad participant {} is expeled".format(participant_uid))
+            return True
+       
         X = np.array(butler.algorithms.get(key='X'))
         n, d = X.shape
         h = butler.participants.get(uid=participant_uid, key='head')

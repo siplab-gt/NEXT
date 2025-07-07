@@ -1,11 +1,12 @@
 import json
+import random
 import next.utils as utils
 import next.apps.SimpleTargetManager
 
 
 class MyApp:
     def __init__(self, db):
-        self.app_id = 'PAQ'
+        self.app_id = 'DynamicPAQ'
         self.TargetManager = next.apps.SimpleTargetManager.SimpleTargetManager(
             db)
 
@@ -21,7 +22,8 @@ class MyApp:
         del args['targets']
 
         alg_data = {}
-        algorithm_keys = ['resourceA', 'resourceSample', 'resourceTicks', 'tickFlag']
+        algorithm_keys = ['startItems', 'referenceItems', 'endItems', 
+                          'tickFlag', 'tickNum', 'queryType', 'directionalItems']
         for key in algorithm_keys:
             if key in args:
                 alg_data[key] = args[key]
@@ -34,20 +36,20 @@ class MyApp:
         if not butler.participants.exists(uid = participant_uid, key='query_id'):
             butler.participants.set(uid=participant_uid, key='query_id', value=0)
         query_id = butler.participants.get(uid=participant_uid, key='query_id')
-        alg_response = alg({'query_id': query_id})
         exp_uid = butler.exp_uid
-        resources = {}
-        resources['A'] = self.TargetManager.get_target_item(exp_uid, alg_response['A'])
-        resources['sample'] = [self.TargetManager.get_target_item(exp_uid, i) for i in alg_response['sample']]
-        resources['ticks'] = [self.TargetManager.get_target_item(exp_uid, i) for i in alg_response['ticks']]
-        resources['tickFlag'] = alg_response['tickFlag']
+        experiment = butler.experiment.get()
+        n = experiment['args']['n']
+        startIdx, endIdx, refIdx = self.get_dynamic_items(n)
+        start = self.TargetManager.get_target_item(exp_uid, startIdx)['alt_description'] 
+        end = self.TargetManager.get_target_item(exp_uid, endIdx)['alt_description'] 
+        ref = self.TargetManager.get_target_item(exp_uid, refIdx)['alt_description'] 
+        alg_response = alg({'ref': ref, 'start': start, 'end': end,
+                            'query_id': query_id})
         butler.participants.increment(uid=participant_uid, key='query_id')
-        return resources
+        return alg_response
 
     def processAnswer(self, butler, alg, args):
         query = butler.queries.get(uid=args['query_uid'])
-    
-    
         experiment = butler.experiment.get()
         num_reported_answers = butler.experiment.increment(
             key='num_reported_answers_for_' + query['alg_label'])
@@ -60,3 +62,7 @@ class MyApp:
 
     def format_responses(self, responses):
         return [responses]
+
+    # Custom function to get dynamic items
+    def get_dynamic_items(self, n):
+        return random.randint(0, n-1), random.randint(0, n-1), random.randint(0, n-1)

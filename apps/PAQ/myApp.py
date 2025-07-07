@@ -22,7 +22,7 @@ class MyApp:
 
         alg_data = {}
         algorithm_keys = ['startItems', 'referenceItems', 'endItems', 
-                          'tickFlag', 'tickNum', 'queryType']
+                          'tickFlag', 'tickNum', 'queryType', 'directionalItems']
         for key in algorithm_keys:
             if key in args:
                 alg_data[key] = args[key]
@@ -36,10 +36,15 @@ class MyApp:
             butler.participants.set(uid=participant_uid, key='query_id', value=0)
         query_id = butler.participants.get(uid=participant_uid, key='query_id')
         exp_uid = butler.exp_uid
-        resources = {}
-        reference = self.TargetManager.get_target_item(exp_uid, query_id)
-        source = reference['alt_description'] if reference.get('primary_type') == 'color' else reference['primary_description']
-        alg_response = alg({'source': source, 'query_id': query_id})
+        experiment = butler.experiment.get()
+        startIdx = experiment['args']['startItems'][query_id]
+        endIdx = experiment['args']['endItems'][query_id]
+        refIdx = experiment['args']['referenceItems'][query_id]
+        start = self.TargetManager.get_target_item(exp_uid, startIdx)['alt_description'] 
+        end = self.TargetManager.get_target_item(exp_uid, endIdx)['alt_description'] 
+        ref = self.TargetManager.get_target_item(exp_uid, refIdx)['alt_description'] 
+        alg_response = alg({'ref': ref, 'start': start, 'end': end,
+                            'query_id': query_id})
         butler.participants.increment(uid=participant_uid, key='query_id')
         return alg_response
 

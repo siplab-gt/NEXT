@@ -35,6 +35,34 @@
 - **Static Sampling Algorithm:** 
   - Read CSV: Given a CSV file where each row represents the content of one query. Truncate the first *number_of_queries* rows off and naively present them as query.
     - A specific way of implementing static sampling explained previously. 
+
+
+   
+
+## PAQ (Perceptual Adjustment Query)
+- **Overview:** Given a reference item and a set of target items along a perceptual continuum, participants adjust a slider to match the reference item with the most similar target item. PAQ supports multiple media types including colors, images, text.
+- **Query Interface:** The interface consists of two main areas:
+  - The left area displays the reference item (color, image, text, audio, or video)
+  - The right area shows the target item that changes as participants move the slider
+  - A horizontal slider allows participants to adjust through the target items
+  - Optional tick marks can be displayed along the slider for precise positioning
+  - Participants submit their response by clicking the submit button
+- **Supported Query Types:**
+  - **Color PAQ:** Participants match a reference color by adjusting through a color gradient
+  - **Image PAQ:** Participants match a reference image by adjusting through morphed image transformations
+  - **Text PAQ:** Participants match a reference text by adjusting through text variations
+- **Algorithms:**
+  - **ColorVision:** Generates color gradients in xyY color space with directional sampling
+    - Users can configure reference colors, directional vectors, number of ticks, and tick visibility
+  - **ImageTransformation:** Creates image morphing between start and end images
+    - Users can configure start, reference, and end images, number of ticks, and tick visibility
+- **Dynamic Sampling Algorithm:** 
+  - **DynamicPAQ:** A dummy variant that dynamically selects items for each query rather than using predefined sequences
+    - Randomly selects start, reference, and end items from the available target set
+    - Currently supports ImageTransformation algorithm
+- **Configuration:** Users can modify parameters including reference items, directional items (for ColorVision), start/end items (for ImageTransformation), tick count, tick visibility, and query type (see templates ```NEXT/local/template/PAQ-ColorVision.yaml``` and ```NEXT/local/template/PAQ-ImageTransformation.yaml``` for configuration details).
+
+
    
 
 ## Pool Based Triplets(By Neuromatch)

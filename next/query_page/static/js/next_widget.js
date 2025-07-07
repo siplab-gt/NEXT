@@ -36,8 +36,8 @@ var next_widget = (function($){
 		_callbacks = callbacks;
 		_callbacks.getQuery_success(data);
 
-	    }).fail( function(error){
-		console.log("Failed to get widget data", error);
+	    }).fail( function(jqXHR, textStatus, errorThrown){
+		console.log("Failed to get widget data", jqXHR, textStatus, errorThrown);
 		callbacks.widget_failure();
 	    });
 	},	
@@ -54,8 +54,8 @@ var next_widget = (function($){
 		data: JSON.stringify(_args)
 	    }).done( function(data, textStatus,XHR){
 		_callbacks.processAnswer_success();
-	    } ).fail(function(error){
-		console.log("Error in communicating with next_backend",jqXHR, textStatus, errorThrown);
+	    } ).fail(function(jqXHR, textStatus, errorThrown){
+		console.log("Error in communicating with next_backend", jqXHR, textStatus, errorThrown);
 		_callbacks.widget_failure();
 	    });
 	},
