@@ -5,7 +5,7 @@ initExp:
       type: any
       optional: true
     directionalItems:
-      description: Resource of the direction colors in XYZ space
+      description: Resource of the direction vectors in XYZ space
       type: any
       optional: true
     referenceItems:

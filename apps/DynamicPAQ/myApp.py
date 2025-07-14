@@ -23,7 +23,7 @@ class MyApp:
 
         alg_data = {}
         algorithm_keys = ['startItems', 'referenceItems', 'endItems', 
-                          'tickFlag', 'tickNum', 'queryType', 'directionalItems']
+                          'tickFlag', 'tickNum', 'queryType']
         for key in algorithm_keys:
             if key in args:
                 alg_data[key] = args[key]

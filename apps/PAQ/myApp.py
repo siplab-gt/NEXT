@@ -37,12 +37,16 @@ class MyApp:
         query_id = butler.participants.get(uid=participant_uid, key='query_id')
         exp_uid = butler.exp_uid
         experiment = butler.experiment.get()
-        startIdx = experiment['args']['startItems'][query_id]
-        endIdx = experiment['args']['endItems'][query_id]
-        refIdx = experiment['args']['referenceItems'][query_id]
-        start = self.TargetManager.get_target_item(exp_uid, startIdx)['alt_description'] 
-        end = self.TargetManager.get_target_item(exp_uid, endIdx)['alt_description'] 
-        ref = self.TargetManager.get_target_item(exp_uid, refIdx)['alt_description'] 
+        start, end, ref = None, None, None
+        if 'startItems' in experiment['args']:
+            startIdx = experiment['args']['startItems'][query_id]
+            start = self.TargetManager.get_target_item(exp_uid, startIdx)['alt_description'] 
+        if 'endItems' in experiment['args']:        
+            endIdx = experiment['args']['endItems'][query_id]
+            end = self.TargetManager.get_target_item(exp_uid, endIdx)['alt_description'] 
+        if 'referenceItems' in experiment['args']:
+            refIdx = experiment['args']['referenceItems'][query_id]
+            ref = self.TargetManager.get_target_item(exp_uid, refIdx)['alt_description'] 
         alg_response = alg({'ref': ref, 'start': start, 'end': end,
                             'query_id': query_id})
         butler.participants.increment(uid=participant_uid, key='query_id')

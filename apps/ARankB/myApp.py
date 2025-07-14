@@ -83,23 +83,27 @@ class MyApp:
         num_reported_answers = butler.experiment.increment(
             key='num_reported_answers_for_' + query['alg_label'])
         # Handle trapped questions
-        disregard_candidate = False
+        if not butler.participants.exists(uid=participant_uid, key='participant_failed'):
+            butler.participants.set(uid=participant_uid, key='participant_failed', value=False)
         if not butler.participants.exists(uid=participant_uid, key='num_trapped'):
             butler.participants.set(uid=participant_uid, key='num_trapped', value=0)
         if trapped:
             butler.participants.increment(uid=participant_uid, key='num_trapped')
             num_trapped = butler.participants.get(uid=participant_uid, key='num_trapped')
             if num_trapped >= experiment['args']['tolerance'] * experiment['args']['num_trap_questions']:
-                disregard_candidate = True
+                butler.participants.set(uid=participant_uid, key='participant_failed', value=True)
         
         n = experiment['args']['n']
+        num_tries = experiment['args']['num_tries']
         if num_reported_answers % ((n+4)/4) == 0:
             butler.job('getModel', json.dumps({'exp_uid': butler.exp_uid, 'args': {
                        'alg_label': query['alg_label'], 'logging': True}}))
-       
+        participant_failed = butler.participants.get(uid=participant_uid, key='participant_failed')
+        if num_reported_answers >= num_tries and participant_failed:
+            raise ValueError("Participant {} failed".format(participant_uid))
         alg({'target_winner': target_winner, 'participant_uid': participant_uid, 
-             'disregard_candidate': disregard_candidate})
-        return {'target_winner': target_winner, 'targets': targets}
+             'disregard_candidate': participant_failed})
+        return {'target_winner': target_winner, 'targets': targets, 'participant_failed': participant_failed}
 
     def getModel(self, butler, alg, args):
         return alg()

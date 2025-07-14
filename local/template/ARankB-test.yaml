@@ -1,0 +1,75 @@
+app_id: ARankB
+args:
+  alg_list:
+    # alg_id can be RandomSampling or InfoTuple.
+    # name your own alg_lable and test_alg_label
+    # add as many entries as you like.
+    - {alg_id: InfoTuple, alg_label: InfoTuple, test_alg_label: Test}
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    # You can mix in RandomSampling here and adjust the proportion so they add up to 1.
+    # - {alg_label: RandomSampling, proportion: 0.5}
+    # - {alg_label: InfoTuple, proportion: 0.5}
+    - {alg_label: InfoTuple, proportion: 1}
+  d: 5 # embedding dimension
+  A: 2 # how many targets in total
+  B: 1 # how many targets among all that a participant needs to rank
+  random_seed: 102 #
+  num_tries: 30 # Will be 25 be default if this field is missing. Make sure this value equals to (burn_in + iteration) * A
+  #----------------------------InfoTuple Exclusive------------------------#
+  failure_probability: 0.01
+  iteration: 29 # each cycle of normal iteration involves every target being the head once
+  burn_in: 1 # each cycle of burn-in iteration involves every target being the head once
+  down_sample: 1
+  mu: 0.05
+  debug: true # please set to true at the moment
+#-----------------------------For Trap Questions------------------------------------#
+  setTrap: false # whether to set trap questions
+  expel: false # whether to expel participants immediately if exceeds tolerance
+  tolerance: 0.5 # tolerance for the trap question
+  trapRatio: 0.1 # the portion of normal questions to answer before a trap shows up if set to 0.0 all trap questions will be evenly spaced out
+  num_trap_questions: 3 # number of trap questions available
+  #-----------------------------------------------------------------------#
+  debrief: SUCCESS # text to display at the end if participant successfully answered all questions
+  debrief_fail: FAIL # text to display at the end if participant failed
+  debrief_link: https://www.amazon.com/ # link to display at the end if participant successfully answered all questions
+  debrief_link_fail: https://www.linkedin.com/ # link to display at the end if participant failed
+  #-----------------------------------------------------------------------#
+  instructions: Test instructions # text to display when a participant opens up query page
+  participant_to_algorithm_management: one_to_many
+  targets:
+     # Allocate your resource locally and fill in the primary_description field with directory to each resource.
+     # e.g. 'http://44.223.248.38"/media/video01.mp4' make sure to change the primary_type field accordingly
+     # and use the correct Instance IP
+    targetset:
+    - {primary_description: 'Eating a meal', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Going on a walk', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Catching up with old friends', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Scrubbing the dirty bathroom', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Taking an exam', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Participating in a meeting', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Swimming in the pool', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Painting a beautiful landscape', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Hiking in the mountains', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Knitting a winter scarf', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Driving to the hospital', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Delivering a presentation to strangers', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Engaging in small talk', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Mowing the overgrown lawn', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Cooking dinner', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Carrying heavy groceries', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Washing a pile of dishes', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Taking out the trash', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Competing in a sports match', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Doing a complex puzzle', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Practicing meditation for relaxation', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Playing a strategy game', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Reading an engaging novel', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Sprinting through the park', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Organizing a closet neatly', alt_description: '', primary_type: 'text', alt_type: ''}
+
+     # Primary description is the answers, alt_description is the question. The first option is the correct answer.
+    - {primary_description: 'Positive, Negativity, War, Peace', alt_description: 'Choose the option with the word positive in it.', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Running, sleeping, cleaning, eating', alt_description: 'Pick the option with no e in it.', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'yes, cleaning, running', alt_description: 'Are you paying attention?', primary_type: 'text', alt_type: ''}

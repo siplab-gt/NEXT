@@ -103,6 +103,16 @@
     background-color: #55899b;
   }
 
+  .submit-btn:disabled {
+    background-color: #999 !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  .submit-btn:disabled:hover {
+    background-color: #999 !important;
+  }
+
   /* Instruction text */
   .instruction-text {
     text-align: center;
@@ -239,25 +249,8 @@
   // For trap questions, A should be the number of words, B should be 1
   let trapA = {{ query.A }};
   let trapB = {{ query.B }};
+  let isSubmitting = false; // Prevent multiple submissions
 
-  // Debug logging
-  console.log('=== DEBUG INFO ===');
-  console.log('isTrapQuestion:', isTrapQuestion);
-  console.log('query object:', {{ query|tojson }});
-  console.log('query.isTrap:', {{ 'true' if query.isTrap else 'false' }});
-  console.log('query.A:', {{ query.A }});
-  console.log('query.B:', {{ query.B }});
-  console.log('query.target_items:', {{ query.target_items|tojson }});
-  console.log('Number of target_items:', {{ query.target_items|length }});
-  
-  if (isTrapQuestion) {
-    console.log('TRAP QUESTION DETECTED');
-    console.log('First target item:', {{ query.target_items[0]|tojson if query.target_items else 'null' }});
-    console.log('Second target item:', {{ query.target_items[1]|tojson if query.target_items and query.target_items|length > 1 else 'null' }});
-  } else {
-    console.log('REGULAR QUESTION DETECTED');
-  }
-  console.log('=== END DEBUG INFO ===');
 
   // Initialize
   toRankContainer = document.getElementById('toRank-container');
@@ -293,7 +286,6 @@
   }
 
   function shuffleTrapWords() {
-    console.log('=== shuffleTrapWords called ===');
     const targetsContainer = document.getElementById('targets-container');
     if (!targetsContainer) {
       console.error('No targets-container found');
@@ -301,8 +293,6 @@
     }
     
     const targetContainers = Array.from(targetsContainer.querySelectorAll('.target-container'));
-    console.log('targetsContainer:', targetsContainer);
-    console.log('targetContainers length:', targetContainers.length);
     
     if (targetContainers.length === 0) {
       console.error('No target containers found');
@@ -318,8 +308,6 @@
       }
     });
     
-    console.log('words array:', words);
-    
     if (words.length < 2) {
       console.error('Not enough words to shuffle (need at least 2)');
       return;
@@ -328,23 +316,18 @@
     // Update A to be the number of words and B to be 1 for trap questions
     trapA = words.length;
     trapB = 1;
-    console.log('Updated trapA:', trapA, 'trapB:', trapB);
     
     // Shuffle the words (excluding the first one which is the correct answer)
     const shuffledOptions = words.slice(1);
-    console.log('shuffledOptions before shuffle:', shuffledOptions);
     
     for (let i = shuffledOptions.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
     }
     
-    console.log('shuffledOptions after shuffle:', shuffledOptions);
-    
     // Add the correct answer at a random position
     const insertIndex = Math.floor(Math.random() * (shuffledOptions.length + 1));
     const shuffledWords = [...shuffledOptions.slice(0, insertIndex), correctAnswer, ...shuffledOptions.slice(insertIndex)];
-    console.log('final shuffledWords:', shuffledWords);
     
     // Update each target container with a shuffled word
     targetContainers.forEach((container, index) => {
@@ -352,11 +335,9 @@
         const targetText = container.querySelector('.target-text');
         if (targetText) {
           targetText.textContent = shuffledWords[index];
-          console.log(`Updated container ${index} with:`, shuffledWords[index]);
         }
       }
     });
-    console.log('=== shuffleTrapWords completed ===');
   }
 
   // Drag and drop functions
@@ -496,71 +477,110 @@
   });
 
   function submitAnswer() {
-    const rankedTargets = Array.from(toRankContainer.querySelectorAll('.target-container'));
+    // Prevent multiple submissions
+    if (isSubmitting) {
+      return;
+    }
     
-    // For trap questions, check if exactly 1 target is selected
-    if (isTrapQuestion) {
-      if (rankedTargets.length !== trapB) {
-        alert(`Please select exactly ${trapB} target.`);
-        return;
-      }
+    // Check if next_widget exists
+    if (typeof next_widget === 'undefined' || !next_widget || !next_widget.processAnswer) {
+      console.error('next_widget or next_widget.processAnswer is not available');
+      alert('Error: Widget not properly initialized. Please refresh the page.');
+      return;
+    }
+    
+    isSubmitting = true;
+    
+    // Update button to show processing state
+    const submitBtn = document.getElementById('submit');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      submitBtn.style.backgroundColor = '#999';
+    }
+    
+    try {
+      const rankedTargets = Array.from(toRankContainer.querySelectorAll('.target-container'));
       
-      // Get the selected answer
-      const selectedTarget = rankedTargets[0];
-      const targetText = selectedTarget.querySelector('.target-text');
-      
-      if (!targetText) {
-        console.error('No target-text element found in selected target');
-        alert('Error: Invalid target structure');
-        return;
-      }
-      
-      const selectedText = targetText.textContent.trim();
-      
-      // Check if we have a valid correct answer
-      if (!correctAnswer || correctAnswer.trim() === '') {
-        console.error('No valid correct answer found for trap question');
-        alert('Error: Invalid trap question configuration');
-        return;
-      }
-      
-      // Check if the answer is correct
-      const isCorrect = selectedText === correctAnswer;
-      
-      // For trap questions, we need to create a target_winner array with the selected answer
-      const targetWinner = [0];
-      
-      // Call processAnswer with trap question data
-      next_widget.processAnswer({
-        "target_winner": targetWinner, 
-        "participant_uid": '{{ query.participant_uid }}',
-        "trapped": !isCorrect  // trapped is true if the answer is incorrect
-      });
-      
-      console.log("Trap question submitted. Correct answer:", correctAnswer, "Selected answer:", selectedText, "Is correct:", isCorrect);
-    } else {
-      // Handle regular question submission
-      // Check if the number of ranked targets matches query.B
-      if (rankedTargets.length !== {{ query.B }}) {
-        alert(`Please rank exactly {{ query.B }} targets.`);
-        return;
-      }
-      
-      // Collect the IDs of ranked targets in left-to-right order
-      const targetWinner = rankedTargets.map(function(target) {
-        return target.id.split('-')[1];
-      });
+      // For trap questions, check if exactly 1 target is selected
+      if (isTrapQuestion) {
+        if (rankedTargets.length !== trapB) {
+          alert(`Please select exactly ${trapB} target.`);
+          resetSubmitButton();
+          return;
+        }
+        
+        // Get the selected answer
+        const selectedTarget = rankedTargets[0];
+        const targetText = selectedTarget.querySelector('.target-text');
+        
+        if (!targetText) {
+          console.error('No target-text element found in selected target');
+          alert('Error: Invalid target structure');
+          resetSubmitButton();
+          return;
+        }
+        
+        const selectedText = targetText.textContent.trim();
+        
+        // Check if we have a valid correct answer
+        if (!correctAnswer || correctAnswer.trim() === '') {
+          console.error('No valid correct answer found for trap question');
+          alert('Error: Invalid trap question configuration');
+          resetSubmitButton();
+          return;
+        }
+        
+        // Check if the answer is correct
+        const isCorrect = selectedText === correctAnswer;
+        
+        // For trap questions, we need to create a target_winner array with the selected answer
+        const targetWinner = [0];
+        
+        // Call processAnswer with trap question data
+        next_widget.processAnswer({
+          "target_winner": targetWinner, 
+          "participant_uid": '{{ query.participant_uid }}',
+          "trapped": !isCorrect  // trapped is true if the answer is incorrect
+        });
+      } else {
+        // Handle regular question submission
+        // Check if the number of ranked targets matches query.B
+        if (rankedTargets.length !== {{ query.B }}) {
+          alert(`Please rank exactly {{ query.B }} targets.`);
+          resetSubmitButton();
+          return;
+        }
+        
+        // Collect the IDs of ranked targets in left-to-right order
+        const targetWinner = rankedTargets.map(function(target) {
+          return target.id.split('-')[1];
+        });
 
-      const anchorTarget = document.querySelector('.anchor-target').id.split('-')[1];
-      targetWinner.unshift(anchorTarget);
+        const anchorTarget = document.querySelector('.anchor-target').id.split('-')[1];
+        targetWinner.unshift(anchorTarget);
 
-      // Call processAnswer with the order of ranked targets
-      next_widget.processAnswer({
-        "target_winner": targetWinner, 
-        "participant_uid": '{{ query.participant_uid }}',
-        "trapped": false  // Regular questions are not trap questions
-      });
-      console.log("Submitted order: ", targetWinner);
+        // Call processAnswer with the order of ranked targets
+        next_widget.processAnswer({
+          "target_winner": targetWinner, 
+          "participant_uid": '{{ query.participant_uid }}',
+          "trapped": false  // Regular questions are not trap questions
+        });
+      }
+    } catch (error) {
+      console.error('Error in submitAnswer:', error);
+      alert('An error occurred while submitting your answer. Please try again.');
+      resetSubmitButton();
+    }
+  }
+  
+  function resetSubmitButton() {
+    isSubmitting = false;
+    const submitBtn = document.getElementById('submit');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit';
+      submitBtn.style.backgroundColor = '#67b1ce';
     }
   }
 </script>

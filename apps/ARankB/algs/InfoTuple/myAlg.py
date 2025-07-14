@@ -94,7 +94,7 @@ class MyAlg:
             if participant_uid not in butler.algorithms.get(key='bad_participants'):
                 butler.algorithms.append(key='bad_participants', value=participant_uid) 
             if butler.algorithms.get(key='expel'):
-                raise ValueError("Bad participant {} is expeled".format(participant_uid))
+                raise ValueError("Bad participant {} is expelled".format(participant_uid))
             return True
        
         X = np.array(butler.algorithms.get(key='X'))
@@ -103,10 +103,12 @@ class MyAlg:
         iteration = butler.algorithms.get(key='iteration')
         curr_iteration = butler.participants.get(uid=participant_uid, key='curr_iteration')
         
-        for i in range(len(target_winner)-2):
-            pairwise_comparison = (int(target_winner[0]),int(target_winner[i+1]), int(target_winner[i+2]))
-            butler.participants.append(uid=participant_uid, key='responses', value=pairwise_comparison)
-            butler.algorithms.append(key='responses', value=pairwise_comparison)
+        # Check if target_winner has enough elements for pairwise comparisons
+        if len(target_winner) >= 3:
+            for i in range(len(target_winner)-2):
+                pairwise_comparison = (int(target_winner[0]),int(target_winner[i+1]), int(target_winner[i+2]))
+                butler.participants.append(uid=participant_uid, key='responses', value=pairwise_comparison)
+                butler.algorithms.append(key='responses', value=pairwise_comparison)
         
         num_reported_answers = butler.algorithms.increment(
             key='num_reported_answers')
@@ -134,7 +136,12 @@ class MyAlg:
 
     def incremental_embedding_update(self, butler, participant_uid):
         responses = butler.participants.get(uid=participant_uid, key='responses')
-        seed = butler.algorithms.get(key='random_seed')
+        
+        # Check if there are any responses to process
+        if not responses:
+            return  # Skip embedding update if no responses available
+        
+        seed = butler.algorithms.get(key='seed')
         X = np.array(butler.participants.get(uid=participant_uid, key='embedding'))
         n, d = X.shape
         embedder = SOE(n_components=d, random_state=seed, n_init=10, backend='scipy', max_iter=20, margin=5) # Embedding algorithm to get the embeddings
@@ -143,15 +150,25 @@ class MyAlg:
         # take a single gradient step
         #t_start = time.time()
         #while (time.time()-t_start < 0.5*t_max):
-        X = embedder.fit_transform(responses, n_objects=n, init=X)
-        butler.participants.set(uid=participant_uid, key='embedding', value=X.tolist())
+        try:
+            X = embedder.fit_transform(responses, n_objects=n, init=X)
+            butler.participants.set(uid=participant_uid, key='embedding', value=X.tolist())
+        except Exception as e:
+            # Log the error but don't fail the entire process
+            print(f"Warning: Embedding update failed for participant {participant_uid}: {e}")
+            return
 
     def full_embedding_update(self, butler, args):
         X = np.array(butler.algorithms.get(key='X'))
         n, d = X.shape
         
         responses = butler.algorithms.get(key='responses')
-        seed = butler.algorithms.get(key='random_seed')
+        
+        # Check if there are any responses to process
+        if not responses:
+            return  # Skip embedding update if no responses available
+        
+        seed = butler.algorithms.get(key='seed')
         try:
             embedder = SOE(n_components=d, random_state=seed, n_init=10, backend='scipy', max_iter=20, margin=5)
             X = embedder.fit_transform(responses, n_objects=n, init=X)

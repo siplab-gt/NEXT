@@ -2,7 +2,7 @@ import next.utils as utils
 import numpy as np
 from typing import Dict, Any, List, Tuple
 import random
-from apps.PAQ_any.algs.ColorVision.paq_model import *
+from apps.PAQ.algs.ColorVision.paq_model import *
 
 class MyAlg:
     def initExp(self, butler, referenceItems, 

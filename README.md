@@ -21,6 +21,12 @@
     - Users can modify the input values for $A$, $B$, and the set of items to be ranked (see template ```NEXT/local/template/ArankB-init.yaml``` for all adjustable parameters).
   - Info-Tuple Sampling: Dynamically updates an embedding based on responses received in real time and selects the tuple of items expected to yield the highest information gain as the subsequent query.
     - In addition to the configurable options mentioned above, users can adjust a range of parameters unique to Info-Tuple Sampling, including the number of burn-in iterations, total iterations, down-sampling rate, and more (see template ```NEXT/local/template/ArankB-init.yaml``` for comprehensive configuration details and explanations for each parameter).
+- **Trap Question Mechanism:**
+  A Rank B includes a trap question system to ensure data quality by identifying inattentive or dishonest participants.
+  - **Purpose:** Trap questions are designed to catch participants who are not paying attention or are providing random responses, helping maintain the quality of collected data.
+  - **Implementation:** Users can configure trap questions with various parameters including frequency, tolerance thresholds, and expulsion policies. Trap questions are stored in the target set after the regular targets and consist of simple attention-check questions with clear correct answers.
+  - **Example:** A trap question might ask "Choose the option with the word positive in it" with options "Positive, Negativity, War, Peace" where "Positive" is the correct answer.
+  - **Configuration:** Users can modify trap question settings including enabling/disabling traps, setting frequency, tolerance levels, and expulsion policies. See template ```NEXT/local/template/ARankB-InfoTuple.yaml``` for detailed parameter explanations and configuration options.
 
 
 ## Binary Sentiment Word Classification Rank One and Rank N
@@ -40,27 +46,30 @@
    
 
 ## PAQ (Perceptual Adjustment Query)
-- **Overview:** Given a reference item and a set of target items along a perceptual continuum, participants adjust a slider to match the reference item with the most similar target item. PAQ supports multiple media types including colors, images, text.
-- **Query Interface:** The interface consists of two main areas:
+- **Overview:** Given a reference item and a set of target items along a perceptual continuum, participants adjust a slider to match the reference item with the most similar/dissimilar target item depending on the instruction. PAQ supports multiple media types including colors, images, text.
+- **Query Interface:** ![Color PAQ 1](picRef/PAQ_UI_1.png)
+  ![Color PAQ 2](picRef/PAQ_UI_2.png)
+  ![Color PAQ 3](picRef/PAQ_UI_3.png)
   - The left area displays the reference item (color, image, text, audio, or video)
   - The right area shows the target item that changes as participants move the slider
-  - A horizontal slider allows participants to adjust through the target items
-  - Optional tick marks can be displayed along the slider for precise positioning
+  - A horizontal slider allows participants to toggle and adjust the target item at some predefined range
+  - The number of queries along the slider can be determined by the developer. In general, the number can be taken as 100 for color vision to ensure numerical precision accuracy
   - Participants submit their response by clicking the submit button
 - **Supported Query Types:**
-  - **Color PAQ:** Participants match a reference color by adjusting through a color gradient
+  - **Color PAQ:** Participants match a reference color by adjusting through a continuously changing color path
   - **Image PAQ:** Participants match a reference image by adjusting through morphed image transformations
   - **Text PAQ:** Participants match a reference text by adjusting through text variations
 - **Algorithms:**
-  - **ColorVision:** Generates color gradients in xyY color space with directional sampling
+  - **ColorVision:** Generates color paths in xyY color space with directional sampling.  For more information about PAQ, see the paper: https://arxiv.org/abs/2309.04626.
     - Users can configure reference colors, directional vectors, number of ticks, and tick visibility
   - **ImageTransformation:** Creates image morphing between start and end images
     - Users can configure start, reference, and end images, number of ticks, and tick visibility
 - **Dynamic Sampling Algorithm:** 
-  - **DynamicPAQ:** A dummy variant that dynamically selects items for each query rather than using predefined sequences
+  - **DynamicPAQ:** Active learning in PAQ queries construction that dynamically selects items for each query rather than using predefined sequences
     - Randomly selects start, reference, and end items from the available target set
     - Currently supports ImageTransformation algorithm
-- **Configuration:** Users can modify parameters including reference items, directional items (for ColorVision), start/end items (for ImageTransformation), tick count, tick visibility, and query type (see templates ```NEXT/local/template/PAQ-ColorVision.yaml``` and ```NEXT/local/template/PAQ-ImageTransformation.yaml``` for configuration details).
+    - **Start, Reference, and End Items:** These are the key components of a PAQ query. The start item represents the beginning of the perceptual continuum, the reference item is what participants try to match, and the end item represents the end of the continuum. For example, in a color matching task, the start item might be a blue color, the reference item could be a specific shade of purple, and the end item might be a red color. The available target set contains all possible items that can be used as start, reference, or end items in the experiment.
+- **Configuration:** Users can modify parameters including reference items, directional vectors (for ColorVision), start/end items (for ImageTransformation), tick count, tick visibility, and query type (see templates ```NEXT/local/template/PAQ-ColorVision.yaml``` and ```NEXT/local/template/PAQ-ImageTransformation.yaml``` for configuration details).
 
 
    

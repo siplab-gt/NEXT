@@ -19,7 +19,7 @@ initExp:
           optional: true
         # For ColoVisionPAQ ------------------------------------------------
         directionalItems:
-          description: A list of directional items
+          description: A list of color vectors
           type: any
           optional: true
         # -----------------------------------------------------------------

@@ -4,6 +4,29 @@
 
 This guide explains how to create a new query called `newQuery` from scratch, following the hierarchical structure of the NEXT framework.
 
+### 🎯 **Developer Preparation Requirements**
+
+**Before starting development, you MUST prepare:**
+
+1. **Working UI Design**: Have a complete, tested UI design for your query interface. This includes:
+   - Wireframes or mockups of the user interface
+   - User interaction flow and state management
+   - Responsive design considerations
+   - Accessibility requirements
+
+2. **Algorithm Design** (if implementing active learning):
+   - Define your active learning strategy
+   - Specify how queries will be generated based on participant responses
+   - Design the model update mechanism
+   - Plan the convergence criteria
+
+3. **Resource Requirements**:
+   - Identify any media files (images, audio, video) your query will use
+   - Plan for file storage and delivery mechanisms
+   - Consider memory and processing constraints
+
+**⚠️ Critical Note**: The NEXT framework is designed for rapid experimentation. If you don't have a clear UI design and algorithm strategy, you will waste significant time during development.
+
 ### Overview
 
 The NEXT framework follows a hierarchical structure where parameters flow from YAML configuration files to Python implementation files:
@@ -148,6 +171,39 @@ processAnswer:
           optional: true
 ```
 
+### 1.2 Understanding YAML Structure
+
+**Key-Value Pairs Under `args`**: These define the parameters that are passed into the corresponding Python function. For example, under `getQuery: args:`, all parameters listed will be passed to the `getQuery()` function.
+
+**Key-Value Pairs Under `rets`**: These define the expected return structure from the Python function.
+
+**Important Keywords**:
+- `optional: true` - Parameter is not required
+- `type: any` - Parameter can be any data type
+- `type: list` - Parameter is a list; use `values:` to specify the type of list elements
+- `type: dict` - Parameter is a dictionary; use `values:` to specify the structure
+- `type: oneof` - Parameter can be one of several types; use `values:` to specify options
+
+**Example of List Type Specification**:
+```yaml
+my_list:
+  type: list
+  values:
+    type: str  # Each element in the list is a string
+```
+
+**Example of Dict Type Specification**:
+```yaml
+my_dict:
+  type: dict
+  values:
+    key1:
+      type: str
+    key2:
+      type: num
+      optional: true
+```
+
 ---
 
 ## Step 2: Create the App Structure
@@ -240,10 +296,15 @@ class MyApp:
         """
         Initialize the experiment.
         
+        This function is called once when the experiment is created. It sets up:
+        - Target management (loading targets from targetset or generating n targets)
+        - Algorithm initialization with experiment parameters
+        - Experiment-wide configuration
+        
         Args:
-            butler: Butler object for data management
-            init_algs: Function to initialize algorithms
-            args: Arguments from myApp.yaml
+            butler: Butler object for data management and storage
+            init_algs: Function to initialize algorithms with parameters
+            args: Arguments from myApp.yaml containing experiment configuration
         """
         exp_uid = butler.exp_uid
         
@@ -273,14 +334,19 @@ class MyApp:
         """
         Generate a query for the participant.
         
+        This function is called each time a participant requests a new query. It:
+        - Tracks participant progress (query count)
+        - Calls the algorithm to generate the query
+        - Returns the query data to be rendered by the widget
+        
         Args:
-            butler: Butler object for data management
-            alg: Algorithm instance
-            args: Arguments from getQuery request
+            butler: Butler object for data management and storage
+            alg: Algorithm instance that implements the query generation logic
+            args: Arguments from getQuery request (participant_uid, widget, etc.)
         """
         participant_uid = args.get('participant_uid', butler.exp_uid)
         
-        # Track participant's query count
+        # Track participant's query count using butler.participants
         if not butler.participants.exists(uid=participant_uid, key='query_id'):
             butler.participants.set(uid=participant_uid, key='query_id', value=0)
         
@@ -309,10 +375,15 @@ class MyApp:
         """
         Process the participant's answer.
         
+        This function is called when a participant submits an answer. It:
+        - Records the answer and response time
+        - Updates experiment statistics
+        - Calls the algorithm to process the answer (for active learning)
+        
         Args:
-            butler: Butler object for data management
-            alg: Algorithm instance
-            args: Arguments from processAnswer request
+            butler: Butler object for data management and storage
+            alg: Algorithm instance that implements answer processing logic
+            args: Arguments from processAnswer request (query_uid, answer, response_time)
         """
         query = butler.queries.get(uid=args['query_uid'])
         experiment = butler.experiment.get()
@@ -330,8 +401,14 @@ class MyApp:
         """
         Get the current model state.
         
+        This function is called to retrieve the current state of the algorithm/model.
+        Useful for:
+        - Monitoring experiment progress
+        - Debugging algorithm behavior
+        - Analyzing model convergence
+        
         Args:
-            butler: Butler object for data management
+            butler: Butler object for data management and storage
             alg: Algorithm instance
             args: Arguments from getModel request
         """
@@ -341,13 +418,63 @@ class MyApp:
         """
         Format responses for display.
         
+        This function is called to format raw response data for display in the
+        experiment dashboard or analysis tools.
+        
         Args:
-            responses: Raw response data
+            responses: Raw response data from the experiment
         """
         return [responses]
 ```
 
-### 2.4 Create `apps/NewQuery/__init__.py`
+### 2.4 Understanding the Butler System
+
+The **Butler** is a data management system that provides persistent storage for your experiment. It has several storage areas:
+
+**`butler.algorithms`**: Store algorithm-specific data that persists across queries
+```python
+# Store algorithm parameters
+butler.algorithms.set(key='custom_parameter_1', value='some_value')
+
+# Retrieve stored data
+value = butler.algorithms.get(key='custom_parameter_1')
+
+# Store complex data structures
+butler.algorithms.set(key='model_state', value={'weights': [1, 2, 3], 'bias': 0.5})
+```
+
+**`butler.participants`**: Store participant-specific data
+```python
+# Store participant progress
+butler.participants.set(uid=participant_uid, key='query_id', value=0)
+
+# Increment counters
+butler.participants.increment(uid=participant_uid, key='query_id')
+
+# Check if data exists
+if butler.participants.exists(uid=participant_uid, key='query_id'):
+    # Do something
+```
+
+**`butler.experiment`**: Store experiment-wide data
+```python
+# Get experiment configuration
+experiment = butler.experiment.get()
+
+# Increment experiment counters
+butler.experiment.increment(key='total_answers')
+```
+
+**`butler.queries`**: Store query-specific data
+```python
+# Store query data
+butler.queries.set(uid=query_uid, key='query_data', value=query_dict)
+
+# Retrieve query data
+query = butler.queries.get(uid=query_uid)
+```
+
+### 2.5 Create `apps/NewQuery/__init__.py`
 
 ```python
 from .myApp import MyApp
@@ -445,6 +572,11 @@ class MyAlg:
         """
         Initialize the algorithm.
         
+        This function is called once when the experiment is created. Use it to:
+        - Store algorithm parameters in butler.algorithms
+        - Initialize algorithm state
+        - Set up any data structures needed for query generation
+        
         Args:
             butler: Butler object for data management
             custom_parameter_1: Your first custom parameter
@@ -463,6 +595,11 @@ class MyAlg:
     def getQuery(self, butler, query_id, participant_uid):
         """
         Generate a query for the participant.
+        
+        This is where your core algorithm logic lives. For active learning:
+        - Use participant responses to determine the next best query
+        - Implement your query selection strategy
+        - Generate query data that will be rendered by the widget
         
         Args:
             butler: Butler object for data management
@@ -498,6 +635,11 @@ class MyAlg:
         """
         Process the participant's answer.
         
+        This function is called after each answer submission. For active learning:
+        - Update your model based on the answer
+        - Store the answer for future query generation
+        - Update algorithm state
+        
         Args:
             butler: Butler object for data management
             answer: The participant's answer
@@ -518,6 +660,12 @@ class MyAlg:
     def getModel(self, butler):
         """
         Get the current model state.
+        
+        This function returns the current state of your algorithm/model.
+        Useful for:
+        - Debugging algorithm behavior
+        - Monitoring convergence
+        - Analyzing experiment progress
         
         Args:
             butler: Butler object for data management
@@ -544,6 +692,8 @@ from .myAlg import MyAlg
 ### 5.1 Create `apps/NewQuery/widgets/getQuery.html`
 
 This is the final step where you create the user interface that renders your query. **Study existing widgets** like `apps/ARankB/widgets/getQuery.html`, `apps/PAQ/widgets/getQuery.html`, etc. for reference.
+
+**⚠️ Important Widget Integration Note**: Your widget is inserted into a larger frame created by `next/query_page`. When your implementation fails, the `widget_failure()` function in `next_widget.js` will be triggered, showing a pre-coded debrief screen. Study `next_widget.js` to understand the integration points and error handling.
 
 ```html
 <!DOCTYPE html>
@@ -690,7 +840,22 @@ This is the final step where you create the user interface that renders your que
 </html>
 ```
 
-### 5.2 Widget Development Tips
+### 5.2 Widget Integration with NEXT Framework
+
+Your widget is **not a standalone HTML page**. It's inserted into a larger frame created by `next/query_page`. Key integration points:
+
+1. **Template Variables**: Use `{{ variable_name | safe }}` to inject data from your algorithm
+2. **Error Handling**: If your widget fails, `widget_failure()` in `next_widget.js` will be triggered
+3. **Debrief Screen**: A pre-coded debrief screen will automatically show on failure
+4. **Navigation**: The framework handles navigation between queries and completion
+
+**Study `next_widget.js`** to understand:
+- How your widget is loaded and integrated
+- Error handling mechanisms
+- Communication with the backend
+- Navigation flow
+
+### 5.3 Widget Development Tips
 
 1. **Reference Existing Widgets**: Look at `apps/ARankB/widgets/getQuery.html`, `apps/PAQ/widgets/getQuery.html`, etc.
 2. **Template Variables**: Use `{{ variable_name | safe }}` to inject data from your algorithm
@@ -734,6 +899,27 @@ This is the final step where you create the user interface that renders your que
 - If you see "Parameter 'custom_parameter_1' not found", check that it's defined in both `myApp.yaml` and `Algs.yaml`
 - If you see "TypeError in getQuery", verify that the function signature matches the parameters defined in `Algs.yaml`
 - If you see memory issues, check that your query processing stays within the 5GB limit
+
+### 6.3 Memory Management and Video Processing
+
+**⚠️ Critical Memory Context**: During development of a video PAQ implementation, processing even a 3-second video consumed excessive memory, causing the entire instance to become unresponsive, including SSH access. This demonstrates the severe memory constraints of the system.
+
+**Memory Management Best Practices**:
+1. **Stay within 5GB limit** per Celery worker
+2. **Avoid video/audio processing** during query generation
+3. **Use file storage** for large media resources
+4. **Let frontend handle rendering** of media files
+
+**Future Solution for Video Processing**:
+For any active learning query involving video generation, the **only viable solution** is to:
+
+1. **Pre-generate all videos** before query time
+2. **Write videos to file storage** on the instance
+3. **Compress videos** (compressed videos take very little storage)
+4. **Rewrite backend application** to support file writing to the instance
+5. **Map pre-generated videos** to target sets
+
+This approach ensures that query generation remains fast and memory-efficient while still supporting video-based experiments.
 
 ---
 

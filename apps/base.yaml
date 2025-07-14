@@ -39,6 +39,24 @@ initExp:
           default: Thank you for participating
           optional: true
 
+        debrief_fail:
+          description: Debrief message that appears as a popup on the query page once the user has responded to num_tries queries.
+          type: str
+          default: Thank you for participating, too
+          optional: true
+        
+        debrief_link:
+          description: Link to display at the end if participant successfully answered all questions
+          type: str
+          default: https://www.amazon.com/
+          optional: true
+
+        debrief_link_fail:  
+          description: Link to display at the end if participant failed
+          type: str
+          default: https://www.linkedin.com/
+          optional: true
+
         num_tries:
           description: The number of queries the participant will answer before seeing the debrief.
           type: num

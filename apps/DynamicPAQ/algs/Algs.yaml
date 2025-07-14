@@ -4,10 +4,6 @@ initExp:
       description: Resource of the start colors in XYZ space
       type: any
       optional: true
-    directionalItems:
-      description: Resource of the direction colors in XYZ space
-      type: any
-      optional: true
     referenceItems:
       description: Resource of the reference colors in XYZ space
       type: any

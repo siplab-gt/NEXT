@@ -17,11 +17,6 @@ initExp:
         instructions:
           default: Sample Instructions
           optional: true
-        # For ColoVisionPAQ ------------------------------------------------
-        directionalItems:
-          description: A list of directional items
-          type: any
-          optional: true
         # -----------------------------------------------------------------
         startItems:
           description: A list of start items
