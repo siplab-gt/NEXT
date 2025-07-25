@@ -29,7 +29,7 @@ args:
   expel: false # whether to expel participants immediately if exceeds tolerance
   tolerance: 0.5 # tolerance for the trap question
   # the portion of normal questions to answer before a trap shows up 
-  # if set to 0.0 all trap questions will be evenly spaced out
+  # if set to 0.0 all available trap questions will be evenly spaced out and asked 
   trapRatio: 0.1 
   num_trap_questions: 3 # number of trap questions available
   #-----------------------------------------------------------------------#
@@ -51,6 +51,7 @@ args:
      # Allocate your resource locally and fill in the primary_description field with directory to each resource. 
      # e.g. 'http://44.223.248.38/media/video01.mp4' make sure to change the primary_type field accordingly
      # and use the correct Instance IP
+     # The trap questions should come after the normal questions within this set and its number should match the num_trap_questions field
     targetset:
     - {primary_description: '0', alt_description: '', primary_type: 'text', alt_type: ''}
     - {primary_description: '1', alt_description: '', primary_type: 'text', alt_type: ''}
