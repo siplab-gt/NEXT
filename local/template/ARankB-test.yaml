@@ -13,19 +13,19 @@ args:
     # - {alg_label: InfoTuple, proportion: 0.5}
     - {alg_label: InfoTuple, proportion: 1}
   d: 5 # embedding dimension
-  A: 2 # how many targets in total
-  B: 1 # how many targets among all that a participant needs to rank
+  A: 5 # number of targets per query
+  B: 2 # number of targets to rank per query
   random_seed: 102 #
-  num_tries: 30 # Will be 25 be default if this field is missing. Make sure this value equals to (burn_in + iteration) * A
+  num_tries: 25 # Will be 25 be default if this field is missing. Make sure this value equals to (burn_in + iteration) * num_targets
   #----------------------------InfoTuple Exclusive------------------------#
   failure_probability: 0.01
-  iteration: 29 # each cycle of normal iteration involves every target being the head once
+  iteration: 1 # each cycle of normal iteration involves every target being the head once
   burn_in: 1 # each cycle of burn-in iteration involves every target being the head once
   down_sample: 1
   mu: 0.05
   debug: true # please set to true at the moment
 #-----------------------------For Trap Questions------------------------------------#
-  setTrap: false # whether to set trap questions
+  setTrap: true # whether to set trap questions
   expel: false # whether to expel participants immediately if exceeds tolerance
   tolerance: 0.5 # tolerance for the trap question
   trapRatio: 0.1 # the portion of normal questions to answer before a trap shows up if set to 0.0 all trap questions will be evenly spaced out
@@ -53,21 +53,21 @@ args:
     - {primary_description: 'Painting a beautiful landscape', alt_description: '', primary_type: 'text', alt_type: ''}
     - {primary_description: 'Hiking in the mountains', alt_description: '', primary_type: 'text', alt_type: ''}
     - {primary_description: 'Knitting a winter scarf', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Driving to the hospital', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Delivering a presentation to strangers', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Engaging in small talk', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Mowing the overgrown lawn', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Cooking dinner', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Carrying heavy groceries', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Washing a pile of dishes', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Taking out the trash', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Competing in a sports match', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Doing a complex puzzle', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Practicing meditation for relaxation', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Playing a strategy game', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Reading an engaging novel', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Sprinting through the park', alt_description: '', primary_type: 'text', alt_type: ''}
-    - {primary_description: 'Organizing a closet neatly', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Driving to the hospital', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Delivering a presentation to strangers', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Engaging in small talk', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Mowing the overgrown lawn', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Cooking dinner', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Carrying heavy groceries', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Washing a pile of dishes', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Taking out the trash', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Competing in a sports match', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Doing a complex puzzle', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Practicing meditation for relaxation', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Playing a strategy game', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Reading an engaging novel', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Sprinting through the park', alt_description: '', primary_type: 'text', alt_type: ''}
+    # - {primary_description: 'Organizing a closet neatly', alt_description: '', primary_type: 'text', alt_type: ''}
 
      # Primary description is the answers, alt_description is the question. The first option is the correct answer.
     - {primary_description: 'Positive, Negativity, War, Peace', alt_description: 'Choose the option with the word positive in it.', primary_type: 'text', alt_type: ''}

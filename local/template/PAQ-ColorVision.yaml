@@ -12,11 +12,11 @@ args:
     - {alg_label: ColorVision, proportion: 1}
   num_tries: 1
   #-----------------------------------------------------------------------#
-  referenceItems: [[0.33, 0.40]]   
-  directionalItems: [[0.05, 0.15]]
-  tickFlag: false
-  queryType: color
-  tickNum: 20
+  referenceItems: [[0.33, 0.40], [0.33, 0.40]]  # color references
+  directionalItems: [[0.05, 0.15], [0.05, 0.15]]  # color vectors
+  tickFlag: false # whether to show tick marks
+  queryType: color 
+  tickNum: 20 # number of ticks
   #-----------------------------------------------------------------------#
   debrief: Test debrief # text to display when a participant finishes all the query
   instructions: Drag the slider until the color on the right matches the color on the left. # text to display when a participant opens up query page

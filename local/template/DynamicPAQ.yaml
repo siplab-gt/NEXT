@@ -12,7 +12,7 @@ args:
     - {alg_label: ImageTransformation, proportion: 1}
   num_tries: 2
   #-----------------------------------------------------------------------#
-  startItems: [0]
+  startItems: [0] 
   referenceItems: [1] 
   endItems: [2] 
   tickFlag: true

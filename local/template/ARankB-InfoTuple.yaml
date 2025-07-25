@@ -16,7 +16,7 @@ args:
   A: 10 # how many targets in total
   B: 5 # how many targets among all that a participant needs to rank
   random_seed: 102 # 
-  num_tries: 10 # Will be 25 be default if this field is missing. Make sure this value equals to (burn_in + iteration) * A
+  num_tries: 10 # Will be 25 be default if this field is missing. Make sure this value equals to (burn_in + iteration) * A 
   #----------------------------InfoTuple Exclusive------------------------#
   failure_probability: 0.01
   iteration: 2 # each cycle of normal iteration involves every target being the head once
@@ -28,15 +28,24 @@ args:
   setTrap: true # whether to set trap questions
   expel: false # whether to expel participants immediately if exceeds tolerance
   tolerance: 0.5 # tolerance for the trap question
-  trapRatio: 0.1 # the portion of normal questions to answer before a trap shows up if set to 0.0 all trap questions will be evenly spaced out
+  # the portion of normal questions to answer before a trap shows up 
+  # if set to 0.0 all trap questions will be evenly spaced out
+  trapRatio: 0.1 
   num_trap_questions: 3 # number of trap questions available
   #-----------------------------------------------------------------------#
-  debrief: SUCCESS # text to display at the end if participant successfully answered all questions
-  debrief_fail: FAIL # text to display at the end if participant failed
-  debrief_link: https://www.amazon.com/ # link to display at the end if participant successfully answered all questions
-  debrief_link_fail: https://www.linkedin.com/ # link to display at the end if participant failed
+  # text to display at the end if participant successfully answered all questions
+  debrief: SUCCESS 
+  # text to display at the end if participant failed
+  debrief_fail: FAIL 
+  # link to display at the end if participant successfully answered all questions
+  debrief_link: https://www.amazon.com/ 
+  # link to display at the end if participant failed
+  debrief_link_fail: https://www.linkedin.com/ 
   #-----------------------------------------------------------------------#
-  instructions: Test instructions # test instructions
+  # This is a generic instructions for the query page. To change other instructions, 
+  # please look for div elements with class name "xxx-text" in the html file at 
+  # apps/ARankB/widgets/getQuery_widget.html
+  instructions: Test instructions 
   participant_to_algorithm_management: one_to_many
   targets:
      # Allocate your resource locally and fill in the primary_description field with directory to each resource. 
