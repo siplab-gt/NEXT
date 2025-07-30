@@ -141,6 +141,44 @@
     margin-bottom: 20px;
     color: #333;
   }
+
+  /* Progress bar styling */
+  .progress-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 2px solid #67b1ce;
+    border-radius: 10px;
+    padding: 10px 15px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    min-width: 200px;
+  }
+
+  .progress-text {
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 8px;
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background-color: #67b1ce;
+    border-radius: 10px;
+    transition: width 0.3s ease;
+  }
 </style>
 
 <!-- Anchor Section -->
@@ -240,8 +278,17 @@
   <button class="submit-btn" id="submit" onclick="submitAnswer()">Submit</button>
 </div>
 
+<!-- Progress Bar -->
+<div class="progress-container">
+  <div class="progress-text" id="progress-text">{{ query.query_id }} / {{ query.total_queries }}</div>
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress-fill"></div>
+  </div>
+</div>
+
 <script>
   // Global variables
+
   let isTrapQuestion = {{ 'true' if query.isTrap else 'false' }};
   let correctAnswer = '';
   let toRankContainer = null;
@@ -254,6 +301,29 @@
 
   // Initialize
   toRankContainer = document.getElementById('toRank-container');
+
+  // Initialize progress bar
+  initializeProgressBar();
+
+  function initializeProgressBar() {
+    const currentQuery = {{ query.query_id }};
+    const totalQueries = {{ query.total_queries }};
+    
+    // Calculate progress percentage
+    const progressPercentage = (currentQuery / totalQueries) * 100;
+    
+    // Update progress fill width
+    const progressFill = document.getElementById('progress-fill');
+    if (progressFill) {
+      progressFill.style.width = progressPercentage + '%';
+    }
+    
+    // Update progress text
+    const progressText = document.getElementById('progress-text');
+    if (progressText) {
+      progressText.textContent = `${currentQuery} / ${totalQueries}`;
+    }
+  }
 
   // For trap questions, get the correct answer and shuffle the words
   if (isTrapQuestion) {
@@ -501,6 +571,8 @@
     
     try {
       const rankedTargets = Array.from(toRankContainer.querySelectorAll('.target-container'));
+      const targetsContainer = document.getElementById('targets-container');
+      const unrankedTargets = Array.from(targetsContainer.querySelectorAll('.target-container'));
       
       // For trap questions, check if exactly 1 target is selected
       if (isTrapQuestion) {
@@ -553,14 +625,20 @@
         }
         
         // Collect the IDs of ranked targets in left-to-right order
-        const targetWinner = rankedTargets.map(function(target) {
+        const rankedTargetIds = rankedTargets.map(function(target) {
           return target.id.split('-')[1];
         });
 
-        const anchorTarget = document.querySelector('.anchor-target').id.split('-')[1];
-        targetWinner.unshift(anchorTarget);
+        // Collect the IDs of unranked targets
+        const unrankedTargetIds = unrankedTargets.map(function(target) {
+          return target.id.split('-')[1];
+        });
 
-        // Call processAnswer with the order of ranked targets
+        // Create the final array: [anchor, ranked_targets..., unranked_targets...]
+        const anchorTarget = document.querySelector('.anchor-target').id.split('-')[1];
+        const targetWinner = [anchorTarget, ...rankedTargetIds, ...unrankedTargetIds];
+
+        // Call processAnswer with the complete array of all targets
         next_widget.processAnswer({
           "target_winner": targetWinner, 
           "participant_uid": '{{ query.participant_uid }}',

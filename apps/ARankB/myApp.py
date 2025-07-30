@@ -41,28 +41,43 @@ class MyApp:
         if not butler.participants.exists(uid=participant_uid, key='query_id'):
             butler.participants.set(uid=participant_uid, key='query_id', value=1)
         query_id = butler.participants.get(uid=participant_uid, key='query_id')
-        # Decide if the query shoud be a trap question
         
+        # Decide if the query shoud be a trap question
         experiment = butler.experiment.get()
-        A = experiment['args']['A']
-        B = experiment['args']['B']
+        n = experiment['args']['n'] # all entries in the targetset
+        
         setTrap = experiment['args']['setTrap']
         isTrap = False
         target_indices = []
+        num_trap_questions = experiment['args']['num_trap_questions']
+        num_targets = n - num_trap_questions
+        # num_queries = (experiment['args']['iteration'] + experiment['args']['burn_in']) * num_targets
+        num_queries = experiment['args']['num_tries']
+        total_queries = num_queries
+        
         if setTrap:
-            num_trap_questions = experiment['args']['num_trap_questions']
-            num_queries = (experiment['args']['iteration'] + experiment['args']['burn_in']) * A
             trapRatio = experiment['args']['trapRatio']
-            # if trapRatio > 0.0, then randomly choose a trap question when its turn for trap
-            if trapRatio > 0.0 and query_id % ((int)(trapRatio * num_queries)) == 0:
-                target_indices = [random.randint(0, num_trap_questions - 1) + A]
-                isTrap = True
-            # if trapRatio == 0.0, then evenly space out the trap questions
-            elif trapRatio == 0.0 and query_id % ((int)(num_trap_questions / num_queries)) == 0:
-                target_indices = [query_id / ((int)(num_trap_questions / num_queries)) - 1 + A]
+            
+            # Calculate total number of queries including trap questions
+            trap_count = int(trapRatio * num_queries) if trapRatio > 0 else num_trap_questions
+            total_queries = num_queries + trap_count
+            
+            # Calculate interval between trap questions
+            trap_interval = num_queries // trap_count + 1
+            
+            # Check if current query should be a trap
+            if query_id % trap_interval == 0:
+                if trapRatio > 0:
+                    # Random trap question
+                    target_indices = [random.randint(num_targets, n)]
+                else:
+                    # Evenly spaced trap question
+                    trap_index = (query_id // trap_interval - 1) + num_targets
+                    target_indices = [trap_index]
                 isTrap = True
         
         butler.participants.increment(uid=participant_uid, key='query_id')
+        # if isTrap is true, alg will return an empty list; else, alg will return a list of target indices
         target_indices.extend(alg({'participant_uid': participant_uid, 'isTrap': isTrap}))
         target_items = []
         for i in range(len(target_indices)):
@@ -70,8 +85,9 @@ class MyApp:
             cur['label'] = 'position_' + str(i)
             target_items.append(cur)
         
-        return {'target_items': target_items, 'A': A, 'B': B, 
-                'participant_uid': participant_uid, 'isTrap': isTrap}
+        return {'target_items': target_items, 'A': experiment['args']['A'], 'B': experiment['args']['B'], 
+                                                'participant_uid': participant_uid, 'isTrap': isTrap, 
+                                                'query_id': query_id, 'total_queries': total_queries}
 
     def processAnswer(self, butler, alg, args):
         query = butler.queries.get(uid=args['query_uid'])

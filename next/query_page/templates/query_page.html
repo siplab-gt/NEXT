@@ -103,10 +103,8 @@
 	  }
       };
       var callbacks = {
-        processAnswer_success: function(responseData) {
-          console.log("processAnswer_success called with responseData:", responseData);
-          if(tries > 1){
-            tries -=1;
+        processAnswer_success: function() {
+          if(tries > 0){
             next_widget.getQuery(div_id, args, callbacks);
           } else{
             $('#wrapper').hide();
@@ -117,7 +115,12 @@
           }
         },
 
-        getQuery_success: function(){
+        getQuery_success: function(data){
+          tries -=1;
+          if (data.args.isTrap){
+            // add one try back if it's a trap question
+            tries +=1;
+          }
           console.log("successfully got a query")
         },
 

@@ -19,11 +19,10 @@ MAINTAINER Konstantine Tsafatinos, konstantine.tsafatinos@neuromatch.io
 
 
 # Install MongoDB and its tools
-RUN wget -qO - https://www.mongodb.org/static/pgp/server-4.4.asc | apt-key add -
-RUN echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/debian buster/mongodb-org/4.4 main" | tee /etc/apt/sources.list.d/mongodb-org-4.4.list
-RUN echo "deb http://security.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list
+RUN wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | apt-key add -
+RUN echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list
 RUN apt-get update -y && apt-get upgrade -y
-RUN apt-get install -y libssl1.1
+RUN apt-get install -y libssl3
 RUN apt-get install -y mongodb-org
 RUN apt-get install -y libgl1-mesa-glx  # Install OpenGL libraries for video processing
 

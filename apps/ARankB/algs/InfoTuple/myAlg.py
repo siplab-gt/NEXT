@@ -36,7 +36,7 @@ class MyAlg:
         butler.algorithms.set(key='num_regular_targets', value=A)
         butler.algorithms.set(key='total_targets', value=n)
         # Create embedding matrix only for regular targets (0 to A-1)
-        X = rng.rand(A, d)
+        X = rng.rand(n - num_trap_questions, d)
         butler.algorithms.set(key='X', value=X)
 
         # To keep track of bad participants
@@ -46,7 +46,6 @@ class MyAlg:
 
     def getQuery(self, butler, participant_uid, isTrap=False):
         # For trap questions, return empty list since trap targets are handled separately
-            
         if isTrap:
             return []
         #Gather necessary parameters for getQuery
@@ -71,7 +70,7 @@ class MyAlg:
         h = butler.participants.get(uid=participant_uid, key='head')
         curr_iteration = butler.participants.get(uid=participant_uid, key='curr_iteration')
         if curr_iteration < burn_in:
-            selected_tuple = [h]+list(rng.choice(n, A, replace=False))
+            selected_tuple = [h]+list(rng.choice([i for i in range(n) if i != h], size=A, replace=False))
         else: 
             candidates = permutations(filter(lambda x: x is not h, range(n)), A)
             tuples = map(lambda x: [h] + list(x), candidates)
@@ -102,13 +101,28 @@ class MyAlg:
         h = butler.participants.get(uid=participant_uid, key='head')
         iteration = butler.algorithms.get(key='iteration')
         curr_iteration = butler.participants.get(uid=participant_uid, key='curr_iteration')
-        
-        # Check if target_winner has enough elements for pairwise comparisons
-        if len(target_winner) >= 3:
-            for i in range(len(target_winner)-2):
-                pairwise_comparison = (int(target_winner[0]),int(target_winner[i+1]), int(target_winner[i+2]))
-                butler.participants.append(uid=participant_uid, key='responses', value=pairwise_comparison)
-                butler.algorithms.append(key='responses', value=pairwise_comparison)
+        B = butler.algorithms.get(key='B')
+       
+        # target_winner consists of head, B ranked targets and A - B unranked targets
+        head_element = int(target_winner[0])
+        # Form explicit pairwise comparisons
+        explicit_targets = np.array(target_winner[1:B+1], dtype=int)
+        i, j = np.triu_indices(len(explicit_targets), k=1)
+        explicit_comparison = list(zip(explicit_targets[i], explicit_targets[j]))
+        explicit_comparison = [(head_element, int(i), int(j)) for i, j in explicit_comparison]
+        # Form implicit pairwise comparisons
+        implicit_targets = np.array(target_winner[B+1:], dtype=int)
+        X, Y = np.meshgrid(explicit_targets, implicit_targets, indexing='ij')
+        implicit_comparison = list(zip(X.flatten(), Y.flatten()))
+        implicit_comparison = [(head_element, int(i), int(j)) for i, j in implicit_comparison]
+        # Update participant responses
+        current_responses = butler.participants.get(uid=participant_uid, key='responses')
+        participant_responses = current_responses + explicit_comparison + implicit_comparison
+        butler.participants.set(uid=participant_uid, key='responses', value=participant_responses)
+        # Update algorithm responses
+        current_responses = butler.algorithms.get(key='responses')
+        algorithm_responses = current_responses + explicit_comparison + implicit_comparison 
+        butler.algorithms.set(key='responses', value=algorithm_responses)
         
         num_reported_answers = butler.algorithms.increment(
             key='num_reported_answers')
@@ -136,11 +150,6 @@ class MyAlg:
 
     def incremental_embedding_update(self, butler, participant_uid):
         responses = butler.participants.get(uid=participant_uid, key='responses')
-        
-        # Check if there are any responses to process
-        if not responses:
-            return  # Skip embedding update if no responses available
-        
         seed = butler.algorithms.get(key='seed')
         X = np.array(butler.participants.get(uid=participant_uid, key='embedding'))
         n, d = X.shape

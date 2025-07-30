@@ -53,7 +53,7 @@ var next_widget = (function($){
 		contentType: "application/json",
 		data: JSON.stringify(_args)
 	    }).done( function(data, textStatus,XHR){
-		_callbacks.processAnswer_success(data);
+		_callbacks.processAnswer_success();
 	    } ).fail(function(jqXHR, textStatus, errorThrown){
 		console.log("Error in communicating with next_backend", jqXHR, textStatus, errorThrown);
 		_callbacks.widget_failure();

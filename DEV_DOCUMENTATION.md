@@ -2,13 +2,19 @@
 
 ## Creating a New Query: Step-by-Step Guide
 
-This guide explains how to create a new query called `newQuery` from scratch, following the hierarchical structure of the NEXT framework.
+This guide explains how to create a new query called `newQuery` from scratch, following the hierarchical structure of the NEXT framework. 
 
 ### 🎯 **Developer Preparation Requirements**
 
 **Before starting development, you MUST prepare:**
+0. **User Documentation & Experience**:
+   - Complete the user documentation tutorials
+   - Successfully run 2-3 example experiments
+   - Understand the basic workflow of creating and managing experiments
+   - Familiarize yourself with the participant experience
+   - Be comfortable with the web interface and dashboard
 
-1. **Working UI Design**: Have a complete, tested UI design for your query interface. This includes:
+1. **Working UI Design**: Have a complete, tested UI design in Javascript for your query interface. This includes:
    - Wireframes or mockups of the user interface
    - User interaction flow and state management
    - Responsive design considerations
@@ -29,14 +35,21 @@ This guide explains how to create a new query called `newQuery` from scratch, fo
 
 ### Overview
 
-The NEXT framework follows a hierarchical structure where parameters flow from YAML configuration files to Python implementation files:
+The NEXT framework follows a hierarchical structure where data flows between endpoints in JSON format. Creating a new query involves establishing these endpoints to create a streamlined process that:
 
-1. **Template Level**: `newQuery.yaml` - Contains experiment-related flags and parameters
-2. **App Level**: `apps/NewQuery/myApp.yaml` → `apps/NewQuery/myApp.py`
-3. **Algorithm Level**: `apps/NewQuery/algs/Algs.yaml` → `apps/NewQuery/algs/NewAlgo/myAlg.py`
-4. **Widget Level**: `apps/NewQuery/widgets/getQuery.html` - Renders the query interface
+1. Initializes the experiment by storing essential parameters
+2. Generates queries dynamically for each participant
+3. Renders the user interface for participants to interact with
+4. Collects and processes participant responses
 
-At each layer, the YAML file defines the parameters that get passed to the corresponding functions in the Python files. **It's crucial that these align properly.**
+This endpoint-based architecture enables smooth data flow and experiment management throughout the query lifecycle. To facilitate your task, I will break down the work flow into levels and more specfically, files, that you would necessarily have to edit/rewrite:
+1. **Template Level**: A YAML file that contains experiment-related flags and parameters ([Step 1](#step-1-create-the-template-configuration))
+2. **App Level**: A YAML file that decides what arguments get passed into/return from which function in the following python file  -> A python file that fetches, processes those arguments and passes them onto a deeper, algo-level handler ([Step 2](#step-2-create-app-configuration--implementation))
+3. **Algorithm Level**: A YAML file that decides what arguments get passed into/return from which function in the following python file -> A python file that runs your algorithm to generate the actual query ([Step 3](#step-3-create-algorithm-configuration--implementation))
+4. **Widget Level**: A HTML file that renders the query interface based on the result generated from you algorithm ([Step 4](#step-4-create-the-widget-interface))
+![FlowChart](picRef/Flow_Chart.png)
+
+The following sections will provide concrete example for the above illustration. In most cases, since the YAML file defines the parameters that get passed to the corresponding functions in the Python files, **it's crucial that these align properly.** 
 
 ### 🚨 **Important Legacy Notes**
 
@@ -73,102 +86,32 @@ Before starting development, please note these critical system constraints and b
 Start by creating a new template file `newQuery.yaml` that extends the base configuration and defines your experiment-specific parameters:
 
 ```yaml
-extends: [base.yaml]
-
-initExp:
-  args:
-    app_id:
-      values: [NewQuery]
-    args:
-      values:
-        alg_list:
-          values:
-            values:
-              alg_id:
-                description: Supported algorithm types for NewQuery
-                values: [NewAlgo]
-              alg_label:
-                description: Label for the algorithm
-                type: str
-                default: "NewAlgo"
-              params:
-                description: Algorithm-specific parameters
-                type: dict
-                optional: true
-        
-        # Your custom experiment parameters
-        custom_parameter_1:
-          description: Description of your first custom parameter
-          type: str
-          default: "default_value"
-        
-        custom_parameter_2:
-          description: Description of your second custom parameter
-          type: num
-          default: 10
-        
-        # Required base parameters
-        instructions:
-          description: Instructions for participants
-          type: str
-          default: "Please complete the following task..."
-        
-        num_tries:
-          description: Number of queries per participant
-          type: num
-          default: 25
-        
-        targets:
-          description: Experiment targets
-          type: oneof
-          values:
-            targetset:
-              description: A target set
-              type: list
-              values:
-                type: dict
-                values:
-                  primary_description:
-                    type: str
-                    description: The description of the target
-                  alt_description:
-                    type: str
-                    description: Alternative description
-                  primary_type:
-                    type: str
-                    description: The type of target
-                    values: [text, image, audio, video]
-            n:
-              description: Number of targets
-              type: num
-
-getQuery:
-  args:
-    args:
-      values:
-        participant_uid:
-          description: Participant identifier
-          type: str
-          optional: true
-        widget:
-          description: Return HTML widget
-          type: boolean
-          default: false
-
-processAnswer:
-  args:
-    args:
-      values:
-        query_uid:
-          description: Query identifier
-          type: str
-        answer:
-          description: Participant's answer
-          type: any
-        response_time:
-          description: Time taken to respond
-          type: num
-          optional: true
+# Just like a dictionary, throw in your parameters in the form of key-val pair
+app_id: newQuery
+args:
+  alg_list:
+    - {alg_id: newAlgo, alg_label: newAlgo_1, test_alg_label: test}
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    - {alg_label: newAlgo, proportion: 1}
+  num_tries: 100
+  #--------Create args related to your exp--------------------------------#
+  your_arg_1: 25
+  your_flag_1: true
+  #-----------------------------------------------------------------------#
+  debrief: Test debrief 
+  instructions: Drag the slider until the color on the right matches the color on the left. 
+  participant_to_algorithm_management: one_to_many
+  # Where you store your resources. You can access them in app level when you see an object called target_manager. Don't have to use them tho.
+  targets:
+    targetset: 
+    - {primary_description: '0', alt_description: '#0047AB', primary_type: 'color', alt_type: ''}
+    - {primary_description: '1', alt_description: '#DC143C', primary_type: 'color', alt_type: ''}
+    - {primary_description: '2', alt_description: '#438AD2', primary_type: 'color', alt_type: ''}
+    - {primary_description: '3', alt_description: '#ED751E', primary_type: 'color', alt_type: ''}
+    - {primary_description: '4', alt_description: '#87CEFA', primary_type: 'color', alt_type: ''}
+    - {primary_description: '5', alt_description: '#FFD700', primary_type: 'color', alt_type: ''}
 ```
 
 ### 1.2 Understanding YAML Structure
@@ -210,14 +153,11 @@ my_dict:
 
 ### 2.1 Create Directory Structure
 
-```bash
-mkdir -p apps/NewQuery/algs/NewAlgo
-mkdir -p apps/NewQuery/widgets
-```
+Copy and paste any query folder inside `/home/ubuntu/NEXT/apps`. Rename it to  `newQuery`.
 
-### 2.2 Create `apps/NewQuery/myApp.yaml`
+### 2.2 Edit `apps/NewQuery/myApp.yaml`
 
-This file defines the app-specific parameters that will be passed to your `myApp.py`:
+This file defines the app-specific parameters that will be passed to the corresponding functions, `initExp`, `getQuery`, `processAnswer` in your `myApp.py`:
 
 ```yaml
 extends: [base.yaml]
@@ -278,9 +218,9 @@ processAnswer:
           optional: true
 ```
 
-### 2.3 Create `apps/NewQuery/myApp.py`
+### 2.3 Edit `apps/NewQuery/myApp.py`
 
-This is the main application logic that handles experiment initialization, query generation, and answer processing:
+This is the main application logic that handles experiment initialization, query generation, and answer processing. Notice how it is one level above algs. Therefore, it must call its algo-level counterpart by using ```alg()```(see under ```getQuery()```). In fact, NEXT backend needs to calculate performance metrics by tracking time lasted during running ```alg()```. So even if you are doing anything at alg-level, e.g. a dummy algorithm, make sure you call it to avoid backend exception. Additionally, function inside `myApp.py` should only complete tasks that are indifferent to algorithm types, e.g. fetching a specific argument (see under `initExp`), or grabbing the corresponding targets from targetset based on the value returned by calling ```alg()```.
 
 ```python
 import json
@@ -473,20 +413,13 @@ butler.queries.set(uid=query_uid, key='query_data', value=query_dict)
 # Retrieve query data
 query = butler.queries.get(uid=query_uid)
 ```
-
-### 2.5 Create `apps/NewQuery/__init__.py`
-
-```python
-from .myApp import MyApp
-```
-
 ---
 
-## Step 3: Create Algorithm Configuration
+## Step 3: Create Algorithm Configuration & Implementation
 
-### 3.1 Create `apps/NewQuery/algs/Algs.yaml`
+### 3.1 Edit `apps/NewQuery/algs/Algs.yaml`
 
-This file defines the parameters that will be passed to your algorithm's Python functions:
+Similarly, this file defines the parameters that will be passed to your algorithm's Python functions:
 
 ```yaml
 initExp:
@@ -548,19 +481,9 @@ getModel:
         optional: true
 ```
 
-### 3.2 Create `apps/NewQuery/algs/__init__.py`
+### 3.2 Edit `apps/NewQuery/algs/NewAlgo/myAlg.py`
 
-```python
-# Empty file to make the directory a Python package
-```
-
----
-
-## Step 4: Create Algorithm Implementation
-
-### 4.1 Create `apps/NewQuery/algs/NewAlgo/myAlg.py`
-
-This is where your core algorithm logic lives:
+This is where your core algorithm logic lives. Import any dependencies on the top of the file. Make sure to add new library under pip install at `/home/ubuntu/NEXT/next/base_docker_image/requirements.txt` so that you rebuild docker, these dependencies get installed.
 
 ```python
 import numpy as np
@@ -657,6 +580,7 @@ class MyAlg:
         
         return True
 
+    # Not essential but useful. Tells you when to report.
     def getModel(self, butler):
         """
         Get the current model state.
@@ -679,206 +603,33 @@ class MyAlg:
         }
 ```
 
-### 4.2 Create `apps/NewQuery/algs/NewAlgo/__init__.py`
-
-```python
-from .myAlg import MyAlg
-```
-
 ---
 
-## Step 5: Create the Widget Interface
+## Step 4: Create the Widget Interface
 
-### 5.1 Create `apps/NewQuery/widgets/getQuery.html`
+### 4.1 Edit `apps/NewQuery/widgets/getQuery_widget.html`
 
-This is the final step where you create the user interface that renders your query. **Study existing widgets** like `apps/ARankB/widgets/getQuery.html`, `apps/PAQ/widgets/getQuery.html`, etc. for reference.
+This is the final step where you intergrate the user interface that renders your query. It should be standard a HTML, CSS, Javascript all in one Jinja 2 template.To better explain how it would look like, an UI rendered by `apps/ARankB/widgets/getQuery.html` is attached below. ![ARankB_UI_Illustration](picRef/ARankB_UI_Illustration.png) Note that you do not have to understand the entire functionality of this particular file as your query will more than likely look and work very differently from it. The goal is to give you a big picture.
 
-**⚠️ Important Widget Integration Note**: Your widget is inserted into a larger frame created by `next/query_page`. When your implementation fails, the `widget_failure()` function in `next_widget.js` will be triggered, showing a pre-coded debrief screen. Study `next_widget.js` to understand the integration points and error handling.
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-    <title>NewQuery Experiment</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .query-container {
-            border: 1px solid #ddd;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-        }
-        .question {
-            font-size: 18px;
-            margin-bottom: 20px;
-        }
-        .options {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .option {
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 3px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .option:hover {
-            background-color: #f0f0f0;
-        }
-        .option.selected {
-            background-color: #007bff;
-            color: white;
-        }
-        .submit-btn {
-            background-color: #28a745;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-            margin-top: 20px;
-        }
-        .submit-btn:disabled {
-            background-color: #6c757d;
-            cursor: not-allowed;
-        }
-    </style>
-</head>
-<body>
-    <div class="query-container">
-        <div class="question" id="question"></div>
-        <div class="options" id="options"></div>
-        <button class="submit-btn" id="submit" disabled>Submit Answer</button>
-    </div>
-
-    <script>
-        // Get query data from the backend
-        const queryData = {{ query_data | safe }};
-        const metadata = {{ metadata | safe }};
-        
-        let selectedOption = null;
-        
-        // Populate the question
-        document.getElementById('question').textContent = queryData.question;
-        
-        // Create option elements
-        const optionsContainer = document.getElementById('options');
-        queryData.options.forEach((option, index) => {
-            const optionDiv = document.createElement('div');
-            optionDiv.className = 'option';
-            optionDiv.textContent = option;
-            optionDiv.onclick = () => selectOption(index, option);
-            optionsContainer.appendChild(optionDiv);
-        });
-        
-        function selectOption(index, option) {
-            // Remove previous selection
-            document.querySelectorAll('.option').forEach(opt => {
-                opt.classList.remove('selected');
-            });
-            
-            // Select new option
-            document.querySelectorAll('.option')[index].classList.add('selected');
-            selectedOption = option;
-            
-            // Enable submit button
-            document.getElementById('submit').disabled = false;
-        }
-        
-        // Handle form submission
-        document.getElementById('submit').onclick = function() {
-            if (selectedOption === null) return;
-            
-            // Disable submit button to prevent double submission
-            this.disabled = true;
-            
-            // Prepare answer data
-            const answerData = {
-                answer: selectedOption,
-                response_time: Date.now() - startTime
-            };
-            
-            // Submit answer to backend
-            fetch('/processAnswer', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    exp_uid: '{{ exp_uid }}',
-                    args: answerData
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Redirect to next query or completion page
-                    window.location.href = data.redirect_url || '/query';
-                } else {
-                    alert('Error submitting answer: ' + data.error);
-                    this.disabled = false;
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Error submitting answer');
-                this.disabled = false;
-            });
-        };
-        
-        // Track response time
-        const startTime = Date.now();
-    </script>
-</body>
-</html>
-```
-
-### 5.2 Widget Integration with NEXT Framework
-
-Your widget is **not a standalone HTML page**. It's inserted into a larger frame created by `next/query_page`. Key integration points:
-
-1. **Template Variables**: Use `{{ variable_name | safe }}` to inject data from your algorithm
-2. **Error Handling**: If your widget fails, `widget_failure()` in `next_widget.js` will be triggered
-3. **Debrief Screen**: A pre-coded debrief screen will automatically show on failure
-4. **Navigation**: The framework handles navigation between queries and completion
-
-**Study `next_widget.js`** to understand:
-- How your widget is loaded and integrated
-- Error handling mechanisms
-- Communication with the backend
-- Navigation flow
-
-### 5.3 Widget Development Tips
-
-1. **Reference Existing Widgets**: Look at `apps/ARankB/widgets/getQuery.html`, `apps/PAQ/widgets/getQuery.html`, etc.
-2. **Template Variables**: Use `{{ variable_name | safe }}` to inject data from your algorithm
-3. **Responsive Design**: Ensure your widget works on different screen sizes
-4. **Error Handling**: Include proper error handling for network requests
-5. **Accessibility**: Follow web accessibility guidelines
-6. **Memory Efficiency**: Keep the widget lightweight to avoid memory issues
-
+**⚠️ Key Takeway**: 
+1. Your UI is inserted into a larger frame created by `next/query_page`. When your implementation fails, the `widget_failure()` function in `next_widget.js` will be triggered, showing a pre-coded debrief screen. Study `next_widget.js` to understand the integration points and error handling.
+2.  To access an argument within the dictionary returned from `getQuery()` that you wrote at app level, use `{{query.your_arg]}}`.
+3. In your `submit()` function, make sure to call `next_widget.processAnser(participant_response)`.
 ---
 
-## Step 6: Testing Your Implementation
+## Step 5: Testing Your Implementation
 
-### 6.1 Start an Experiment
+### 5.1 Start an Experiment
 
 1. **Launch the experiment** using your `newQuery.yaml` template:
    ```bash
    cd examples/
-   python launch.py path/to/newQuery.yaml path/to/your/targets.zip
+   python launch.py path/to/newQuery.yaml 
    ```
 
 2. **Access the experiment** through the web interface at the provided URL.
 
-### 6.2 Debugging and Error Handling
+### 5.2 Debugging and Error Handling
 
 **All errors are displayed in the web interface:**
 
@@ -900,7 +651,7 @@ Your widget is **not a standalone HTML page**. It's inserted into a larger frame
 - If you see "TypeError in getQuery", verify that the function signature matches the parameters defined in `Algs.yaml`
 - If you see memory issues, check that your query processing stays within the 5GB limit
 
-### 6.3 Memory Management and Video Processing
+### 5.3 Memory Management and Video Processing
 
 **⚠️ Critical Memory Context**: During development of a video PAQ implementation, processing even a 3-second video consumed excessive memory, causing the entire instance to become unresponsive, including SSH access. This demonstrates the severe memory constraints of the system.
 
@@ -923,11 +674,11 @@ This approach ensures that query generation remains fast and memory-efficient wh
 
 ---
 
-## Step 7: Using stress_test.py
+## Step 6: Using stress_test.py
 
 The `stress_test.py` file is located in the `local/` directory and is used for load testing your experiments.
 
-### 7.1 Configuration
+### 6.1 Configuration
 
 Edit `local/stress_test.py` to configure your test:
 
@@ -945,7 +696,7 @@ n = 1000  # Up to 1000
 num_targets_in_query = 100  # Up to 100
 ```
 
-### 7.2 Running the Stress Test
+### 6.2 Running the Stress Test
 
 1. **Ensure Selenium is running** (if using remote WebDriver):
    ```bash
@@ -959,7 +710,7 @@ num_targets_in_query = 100  # Up to 100
    python stress_test.py
    ```
 
-### 7.3 What the Stress Test Does
+### 6.3 What the Stress Test Does
 
 The stress test:
 - Creates multiple headless Chrome browser instances
@@ -968,7 +719,7 @@ The stress test:
 - Measures performance under load
 - Helps identify bottlenecks and scalability issues
 
-### 7.4 Interpreting Results
+### 6.4 Interpreting Results
 
 - **Performance metrics**: Monitor response times and error rates
 - **Resource usage**: Check CPU, memory, and database load
