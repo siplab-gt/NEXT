@@ -227,6 +227,5 @@ You now have created and activated a Python environment named local-venv. You ha
   - Find the ```Instance state ``` radio button on the top and choose Stop instance.
 
 ## 5. Link to Media Instructions
-``` https://mediaspace.gatech.edu/media/NEXT%20tutorial%20part%20I/1_shurcpt7 ```
-``` https://mediaspace.gatech.edu/media/NEXT%20tutorial%20part%20II/1_txxp9uhu ```
-``` https://mediaspace.gatech.edu/media/NEXT%20tutorial%20part%20III/1_2bu3cqsd ```
+``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_1/1_p9fujklo ```
+``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_2/1_ucyud9f3```
