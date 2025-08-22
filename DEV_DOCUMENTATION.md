@@ -42,7 +42,7 @@ The NEXT framework follows a hierarchical structure where data flows between end
 3. Renders the user interface for participants to interact with
 4. Collects and processes participant responses
 
-This endpoint-based architecture enables smooth data flow and experiment management throughout the query lifecycle. To facilitate your task, I will break down the work flow into levels and more specfically, files, that you would necessarily have to edit/rewrite:
+This endpoint-based architecture enables smooth data flow and experiment management throughout the query lifecycle. To facilitate your task, I will break down the work flow into levels and more specispecficallyfically, files, that you would necessarily have to edit/rewrite:
 1. **Template Level**: A YAML file that contains experiment-related flags and parameters ([Step 1](#step-1-create-the-template-configuration))
 2. **App Level**: A YAML file that decides what arguments get passed into/return from which function in the following python file  -> A python file that fetches, processes those arguments and passes them onto a deeper, algo-level handler ([Step 2](#step-2-create-app-configuration--implementation))
 3. **Algorithm Level**: A YAML file that decides what arguments get passed into/return from which function in the following python file -> A python file that runs your algorithm to generate the actual query ([Step 3](#step-3-create-algorithm-configuration--implementation))
@@ -609,12 +609,12 @@ class MyAlg:
 
 ### 4.1 Edit `apps/NewQuery/widgets/getQuery_widget.html`
 
-This is the final step where you intergrate the user interface that renders your query. It should be standard a HTML, CSS, Javascript all in one Jinja 2 template.To better explain how it would look like, an UI rendered by `apps/ARankB/widgets/getQuery.html` is attached below. ![ARankB_UI_Illustration](picRef/ARankB_UI_Illustration.png) Note that you do not have to understand the entire functionality of this particular file as your query will more than likely look and work very differently from it. The goal is to give you a big picture.
+This is the final step where you integrate the user interface that renders your query. It should be standard a HTML, CSS, Javascript all in one Jinja 2 template.To better explain how it would look like, an UI rendered by `apps/ARankB/widgets/getQuery.html` is attached below. ![ARankB_UI_Illustration](picRef/ARankB_UI_Illustration.png) Note that you do not have to understand the entire functionality of this particular file as your query will more than likely look and work very differently from it. The goal is to give you a big picture.
 
-**⚠️ Key Takeway**: 
+**⚠️ Key Takeaway**: 
 1. Your UI is inserted into a larger frame created by `next/query_page`. When your implementation fails, the `widget_failure()` function in `next_widget.js` will be triggered, showing a pre-coded debrief screen. Study `next_widget.js` to understand the integration points and error handling.
 2.  To access an argument within the dictionary returned from `getQuery()` that you wrote at app level, use `{{query.your_arg]}}`.
-3. In your `submit()` function, make sure to call `next_widget.processAnser(participant_response)`.
+3. In your `submit()` function, make sure to call `next_widget.processAnswer(participant_response)`.
 ---
 
 ## Step 5: Testing Your Implementation
