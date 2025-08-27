@@ -1,0 +1,70 @@
+app_id: ARankB
+args:
+  alg_list:
+    # alg_id can be RandomSampling or InfoTuple. 
+    # name your own alg_lable and test_alg_label
+    # add as many entries as you like.
+    - {alg_id: InfoTuple, alg_label: InfoTuple, test_alg_label: Test}
+  algorithm_management_settings:
+    mode: fixed_proportions
+    params:
+    # You can mix in RandomSampling here and adjust the proportion so they add up to 1.
+    # - {alg_label: RandomSampling, proportion: 0.5}
+    # - {alg_label: InfoTuple, proportion: 0.5}
+    - {alg_label: InfoTuple, proportion: 1}
+  d: 2 # embedding dimension
+  A: 10 # how many targets in total
+  B: 5 # how many targets among all that a participant needs to rank
+  random_seed: 102 # 
+  num_tries: 10 # Will be 25 be default if this field is missing. Make sure this value equals to (burn_in + iteration) * A 
+  #----------------------------InfoTuple Exclusive------------------------#
+  failure_probability: 0.01
+  iteration: 2 # each cycle of normal iteration involves every target being the head once
+  burn_in: 1 # each cycle of burn-in iteration involves every target being the head once
+  down_sample: 1  
+  mu: 0.05 
+  debug: true # please set to true at the moment
+  #-----------------------------For Trap Questions------------------------------------#
+  setTrap: true # whether to set trap questions
+  expel: false # whether to expel participants immediately if exceeds tolerance
+  tolerance: 0.5 # tolerance for the trap question
+  # the portion of normal questions to answer before a trap shows up 
+  # if set to 0.0 all available trap questions will be evenly spaced out and asked 
+  trapRatio: 0.1 
+  num_trap_questions: 3 # number of trap questions available
+  #-----------------------------------------------------------------------#
+  # text to display at the end if participant successfully answered all questions
+  debrief: SUCCESS 
+  # text to display at the end if participant failed
+  debrief_fail: FAIL 
+  # link to display at the end if participant successfully answered all questions
+  debrief_link: https://www.amazon.com/ 
+  # link to display at the end if participant failed
+  debrief_link_fail: https://www.linkedin.com/ 
+  #-----------------------------------------------------------------------#
+  # This is a generic instructions for the query page. To change other instructions, 
+  # please look for div elements with class name "xxx-text" in the html file at 
+  # apps/ARankB/widgets/getQuery_widget.html
+  instructions: Test instructions 
+  participant_to_algorithm_management: one_to_many
+  targets:
+     # Allocate your resource locally and fill in the primary_description field with directory to each resource. 
+     # e.g. 'http://44.223.248.38/media/video01.mp4' make sure to change the primary_type field accordingly
+     # and use the correct Instance IP
+     # The trap questions should come after the normal questions within this set and its number should match the num_trap_questions field
+    targetset:
+    - {primary_description: '0', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '1', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '2', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '3', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '4', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '5', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '6', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '7', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '8', alt_description: '', primary_type: 'text', alt_type: ''}
+    - {primary_description: '9', alt_description: '', primary_type: 'text', alt_type: ''}
+    #--------------Resource after A number of targets are dedicated to trap questions------------------------------------#
+    # Primary description is the answers, alt_description is the question. The first option is the correct answer.
+    - {primary_description: 'Positive, Negativity, War, Peace', alt_description: 'Choose the option with the word positive in it.', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'Running, sleeping, cleaning, eating', alt_description: 'Pick the option with no e in it.', primary_type: 'text', alt_type: ''}
+    - {primary_description: 'yes, cleaning, running', alt_description: 'Are you paying attention?', primary_type: 'text', alt_type: ''}

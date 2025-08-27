@@ -36,7 +36,7 @@
     </script>
 
     <!-- debrief modal -->
-    <div class="modal fade" id="debrief" tabindex="-1" role="dialog" href="#">
+    <div class="modal fade" id="debrief" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header">
@@ -44,6 +44,10 @@
           </div>
           <div class="modal-body">
             <h4 id="debrief_text">{{experiment['args']['debrief']|safe}}</h4>
+            <br><br>
+            <div id="debrief_link_section" style="display: none;">
+              <p><a id="debrief_link" href="#" target="_blank" class="btn btn-primary">Continue</a></p>
+            </div>
             <br><br>
             User ID: <div id="participant_uid"></div>
           </div>
@@ -73,6 +77,14 @@
       var tries =  {{experiment['args']['num_tries']}};
       var div_id = "wrapper";
       var exp_uid = "{{exp_uid}}";
+      
+      // Store debrief messages in JavaScript variables
+      var debrief_success = "{{experiment['args']['debrief']|safe}}";
+      var debrief_fail = "{{experiment['args']['debrief_fail']|safe}}";
+      
+      // Store debrief links in JavaScript variables
+      var debrief_link_success = "{{experiment['args']['debrief_link']|safe}}";
+      var debrief_link_fail = "{{experiment['args']['debrief_link_fail']|safe}}";
 
       {% if participant_uid %}
       var participant_uid = "{{ participant_uid }}";
@@ -92,23 +104,31 @@
       };
       var callbacks = {
         processAnswer_success: function() {
-          if(tries > 1){
-            tries -=1;
+          if(tries > 0){
             next_widget.getQuery(div_id, args, callbacks);
           } else{
             $('#wrapper').hide();
-	      /*             $('#debrief').show(); */
+            $('#debrief_text').html(debrief_success);
+            $('#debrief_link_section').show();
+            $('#debrief_link').attr('href', debrief_link_success);
             $('#debrief').modal('show');
           }
         },
 
-        getQuery_success: function(){
+        getQuery_success: function(data){
+          tries -=1;
+          if (data.args.isTrap){
+            // add one try back if it's a trap question
+            tries +=1;
+          }
           console.log("successfully got a query")
         },
 
         widget_failure: function(){
-          $('#query').hide();
-          $('#debrief').show();
+          $('#wrapper').hide();
+          $('#debrief_text').html(debrief_fail);
+          $('#debrief_link_section').show();
+          $('#debrief_link').attr('href', debrief_link_fail);
           $('#debrief').modal('show');
         }
       }

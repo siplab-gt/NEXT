@@ -103,6 +103,16 @@
     background-color: #55899b;
   }
 
+  .submit-btn:disabled {
+    background-color: #999 !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  .submit-btn:disabled:hover {
+    background-color: #999 !important;
+  }
+
   /* Instruction text */
   .instruction-text {
     text-align: center;
@@ -131,68 +141,127 @@
     margin-bottom: 20px;
     color: #333;
   }
+
+  /* Progress bar styling */
+  .progress-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 2px solid #67b1ce;
+    border-radius: 10px;
+    padding: 10px 15px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    min-width: 200px;
+  }
+
+  .progress-text {
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 8px;
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background-color: #67b1ce;
+    border-radius: 10px;
+    transition: width 0.3s ease;
+  }
 </style>
 
 <!-- Anchor Section -->
+{% if not query.isTrap %}
 <div class="anchor-container">
   <div class="anchor-label">Anchor</div>
-  <div class="anchor-target" id="target-{{ query.target_indices[0].target_id }}">
-    {% if query.target_indices[0].primary_type == "image" or query.target_indices[0].primary_type == "img" %}
-    <img src="{{ query.target_indices[0].primary_description }}" alt="Target Image">
+  <div class="anchor-target" id="target-{{ query.target_items[0].target_id }}">
+    {% if query.target_items[0].primary_type == "image" or query.target_items[0].primary_type == "img" %}
+    <img src="{{ query.target_items[0].primary_description }}" alt="Target Image">
     
-    {% elif query.target_indices[0].primary_type == "text" %}
-    <div class="target-text">{{ query.target_indices[0].primary_description|safe }}</div>
+    {% elif query.target_items[0].primary_type == "text" %}
+    <div class="target-text">{{ query.target_items[0].primary_description|safe }}</div>
     
-    {% elif query.target_indices[0].primary_type == "video" %}
+    {% elif query.target_items[0].primary_type == "video" %}
     <video controls autoplay loop>
-      <source src="{{ query.target_indices[0].primary_description }}" type="video/mp4">
+      <source src="{{ query.target_items[0].primary_description }}" type="video/mp4">
       Your browser does not support the video tag.
     </video>
     
-    {% elif query.target_indices[0].primary_type == "audio" %}
+    {% elif query.target_items[0].primary_type == "audio" %}
     <audio controls>
-      <source src="{{ query.target_indices[0].primary_description }}" type="audio/mpeg">
+      <source src="{{ query.target_items[0].primary_description }}" type="audio/mpeg">
       Your browser does not support the audio tag.
     </audio>
     {% endif %}
   </div>
 </div>
+{% endif %}
 
 <!-- Instruction Text -->
-<div class="instruction-text">
-  Here is a list of {{ query.A }} targets. <br>
-  Click and choose exactly {{ query.B }} targets.
+<div class="instruction-text" id="instruction-text">
+  {% if query.isTrap and query.target_items|length > 0 and query.target_items[0].alt_description %}
+  {{ query.target_items[0].alt_description }}
+  {% else %}
+  Here is a list of <span id="display-A">{{ query.A }}</span> targets. <br>
+  Click and choose exactly <span id="display-B">{{ query.B }}</span> targets.
+  {% endif %}
 </div>
 
 <!-- Second Row with Red Border around all Non-Anchor Targets -->
 <div class="targets-container" id="targets-container">
-  {% for target in query.target_indices[1:] %}
-  <div class="target-container" id="target-{{ target.target_id }}"
-       draggable="true"
-       ondragstart="dragStart(event)"
-       ondragover="dragOver(event)"
-       ondragleave="dragLeave(event)"
-       ondrop="drop(event)">
-    {% if target.primary_type == "image" or target.primary_type == "img" %}
-    <img src="{{ target.primary_description }}" alt="Target Image">
-    
-    {% elif target.primary_type == "text" %}
-    <div class="target-text">{{ target.primary_description|safe }}</div>
-    
-    {% elif target.primary_type == "video" %}
-    <video controls autoplay loop>
-      <source src="{{ target.primary_description }}" type="video/mp4">
-      Your browser does not support the video tag.
-    </video>
-    
-    {% elif target.primary_type == "audio" %}
-    <audio controls>
-      <source src="{{ target.primary_description }}" type="audio/mpeg">
-      Your browser does not support the audio tag.
-    </audio>
-    {% endif %}
-  </div>
-  {% endfor %}
+  {% if query.isTrap %}
+    {% set words = query.target_items[0].primary_description.split(', ') %}
+    {% for word in words %}
+    <div class="target-container" id="trap-word-{{ loop.index0 }}"
+         draggable="true"
+         ondragstart="dragStart(event)"
+         ondragover="dragOver(event)"
+         ondragleave="dragLeave(event)"
+         ondrop="drop(event)"
+         data-correct-answer="{{ words[0] if loop.index0 == 0 else '' }}">
+      <div class="target-text">{{ word }}</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    {% for target in query.target_items[1:] %}
+    <div class="target-container" id="target-{{ target.target_id }}"
+         draggable="true"
+         ondragstart="dragStart(event)"
+         ondragover="dragOver(event)"
+         ondragleave="dragLeave(event)"
+         ondrop="drop(event)">
+      {% if target.primary_type == "image" or target.primary_type == "img" %}
+      <img src="{{ target.primary_description }}" alt="Target Image">
+      
+      {% elif target.primary_type == "text" %}
+      <div class="target-text">{{ target.primary_description|safe }}</div>
+      
+      {% elif target.primary_type == "video" %}
+      <video controls autoplay loop>
+        <source src="{{ target.primary_description }}" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+      
+      {% elif target.primary_type == "audio" %}
+      <audio controls>
+        <source src="{{ target.primary_description }}" type="audio/mpeg">
+        Your browser does not support the audio tag.
+      </audio>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% endif %}
 </div>
 
 <div class="toRank-container-text">
@@ -209,7 +278,186 @@
   <button class="submit-btn" id="submit" onclick="submitAnswer()">Submit</button>
 </div>
 
+<!-- Progress Bar -->
+<div class="progress-container">
+  <div class="progress-text" id="progress-text">{{ query.query_id }} / {{ query.total_queries }}</div>
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress-fill"></div>
+  </div>
+</div>
+
 <script>
+  // Global variables
+
+  let isTrapQuestion = {{ 'true' if query.isTrap else 'false' }};
+  let correctAnswer = '';
+  let toRankContainer = null;
+  let draggedElement = null;
+  // For trap questions, A should be the number of words, B should be 1
+  let trapA = {{ query.A }};
+  let trapB = {{ query.B }};
+  let isSubmitting = false; // Prevent multiple submissions
+
+
+  // Initialize
+  toRankContainer = document.getElementById('toRank-container');
+
+  // Initialize progress bar
+  initializeProgressBar();
+
+  function initializeProgressBar() {
+    const currentQuery = {{ query.query_id }};
+    const totalQueries = {{ query.total_queries }};
+    
+    // Calculate progress percentage
+    const progressPercentage = (currentQuery / totalQueries) * 100;
+    
+    // Update progress fill width
+    const progressFill = document.getElementById('progress-fill');
+    if (progressFill) {
+      progressFill.style.width = progressPercentage + '%';
+    }
+    
+    // Update progress text
+    const progressText = document.getElementById('progress-text');
+    if (progressText) {
+      progressText.textContent = `${currentQuery} / ${totalQueries}`;
+    }
+  }
+
+  // For trap questions, get the correct answer and shuffle the words
+  if (isTrapQuestion) {
+    // Set B to 1 for trap questions
+    trapB = 1;
+    
+    const firstTarget = document.querySelector('.target-container');
+    if (firstTarget) {
+      correctAnswer = firstTarget.getAttribute('data-correct-answer');
+      // Only shuffle if we have a valid correct answer
+      if (correctAnswer && correctAnswer.trim() !== '') {
+        shuffleTrapWords();
+        // Update the displayed A and B values for trap questions
+        const displayA = document.getElementById('display-A');
+        const displayB = document.getElementById('display-B');
+        if (displayA && displayB) {
+          displayA.textContent = trapA;
+          displayB.textContent = trapB;
+        }
+      } else {
+        console.warn('Trap question detected but no valid correct answer found');
+        // Fall back to regular question behavior
+        isTrapQuestion = false;
+      }
+    } else {
+      console.warn('Trap question detected but no target containers found');
+      // Fall back to regular question behavior
+      isTrapQuestion = false;
+    }
+  }
+
+  function shuffleTrapWords() {
+    const targetsContainer = document.getElementById('targets-container');
+    if (!targetsContainer) {
+      console.error('No targets-container found');
+      return;
+    }
+    
+    const targetContainers = Array.from(targetsContainer.querySelectorAll('.target-container'));
+    
+    if (targetContainers.length === 0) {
+      console.error('No target containers found');
+      return;
+    }
+    
+    // Get all words from the target containers
+    const words = [];
+    targetContainers.forEach(container => {
+      const targetText = container.querySelector('.target-text');
+      if (targetText && targetText.textContent.trim() !== '') {
+        words.push(targetText.textContent.trim());
+      }
+    });
+    
+    if (words.length < 2) {
+      console.error('Not enough words to shuffle (need at least 2)');
+      return;
+    }
+    
+    // Update A to be the number of words and B to be 1 for trap questions
+    trapA = words.length;
+    trapB = 1;
+    
+    // Shuffle the words (excluding the first one which is the correct answer)
+    const shuffledOptions = words.slice(1);
+    
+    for (let i = shuffledOptions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+    }
+    
+    // Add the correct answer at a random position
+    const insertIndex = Math.floor(Math.random() * (shuffledOptions.length + 1));
+    const shuffledWords = [...shuffledOptions.slice(0, insertIndex), correctAnswer, ...shuffledOptions.slice(insertIndex)];
+    
+    // Update each target container with a shuffled word
+    targetContainers.forEach((container, index) => {
+      if (index < shuffledWords.length) {
+        const targetText = container.querySelector('.target-text');
+        if (targetText) {
+          targetText.textContent = shuffledWords[index];
+        }
+      }
+    });
+  }
+
+  // Drag and drop functions
+  function dragStart(event) {
+    const targetElement = event.target.closest('.target-container');
+    if (targetElement && toRankContainer && toRankContainer.contains(targetElement)) {
+      draggedElement = targetElement;
+      event.target.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  }
+
+  function dragOver(event) {
+    event.preventDefault();
+    const targetElement = event.target.closest('.target-container');
+    if (targetElement && targetElement !== draggedElement) {
+      targetElement.classList.add('over');
+    }
+  }
+
+  function dragLeave(event) {
+    const targetElement = event.target.closest('.target-container');
+    if (targetElement) {
+      targetElement.classList.remove('over');
+    }
+  }
+
+  function drop(event) {
+    event.preventDefault();
+    const targetElement = event.target.closest('.target-container');
+    if (draggedElement && targetElement && targetElement !== draggedElement) {
+      const bounding = targetElement.getBoundingClientRect();
+      const offset = event.clientX - bounding.left;
+      if (offset < bounding.width / 2) {
+        toRankContainer.insertBefore(draggedElement, targetElement);
+      } else {
+        toRankContainer.insertBefore(draggedElement, targetElement.nextSibling);
+      }
+    } else if (draggedElement) {
+      toRankContainer.appendChild(draggedElement);
+    }
+    if (targetElement) {
+      targetElement.classList.remove('over');
+    }
+    if (draggedElement) {
+      draggedElement.classList.remove('dragging');
+      draggedElement = null;
+    }
+  }
+
   // Remove context menu functionality by not preventing the default click events.
   
   // Toggle target between containers on left click.
@@ -230,12 +478,15 @@
   // Function to move a target to the toRank-container
   function moveToRank(element) {
     const toRankContainer = document.getElementById('toRank-container');
-    if (toRankContainer.children.length < {{ query.B }}) {
+    // For trap questions, use trapB (which should be 1), otherwise use the original B value
+    const maxTargets = isTrapQuestion ? trapB : {{ query.B }};
+    if (toRankContainer.children.length < maxTargets) {
       toRankContainer.appendChild(element);
       // Re-enable dragging within the ranking container
       element.setAttribute('draggable', 'true');
     } else {
-      alert(`You can only rank exactly {{ query.B }} targets.`);
+      const message = isTrapQuestion ? `You can only select exactly ${trapB} target.` : `You can only rank exactly {{ query.B }} targets.`;
+      alert(message);
     }
   }
 
@@ -247,10 +498,7 @@
     element.setAttribute('draggable', 'false');
   }
 
-  // Drag and drop functionality within the toRank-container remains unchanged.
-  let draggedElement = null;
-  const toRankContainer = document.getElementById('toRank-container');
-
+  // Drag and drop functionality within the toRank-container
   toRankContainer.addEventListener('dragstart', function(event) {
     const targetElement = event.target.closest('.target-container');
     if (targetElement && toRankContainer.contains(targetElement)) {
@@ -299,24 +547,118 @@
   });
 
   function submitAnswer() {
-    const rankedTargets = Array.from(toRankContainer.querySelectorAll('.target-container'));
-    
-    // Check if the number of ranked targets matches query.B
-    if (rankedTargets.length !== {{ query.B }}) {
-      alert(`Please rank exactly {{ query.B }} targets.`);
+    // Prevent multiple submissions
+    if (isSubmitting) {
       return;
     }
     
-    // Collect the IDs of ranked targets in left-to-right order
-    const targetWinner = rankedTargets.map(function(target) {
-      return target.id.split('-')[1];
-    });
+    // Check if next_widget exists
+    if (typeof next_widget === 'undefined' || !next_widget || !next_widget.processAnswer) {
+      console.error('next_widget or next_widget.processAnswer is not available');
+      alert('Error: Widget not properly initialized. Please refresh the page.');
+      return;
+    }
+    
+    isSubmitting = true;
+    
+    // Update button to show processing state
+    const submitBtn = document.getElementById('submit');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      submitBtn.style.backgroundColor = '#999';
+    }
+    
+    try {
+      const rankedTargets = Array.from(toRankContainer.querySelectorAll('.target-container'));
+      const targetsContainer = document.getElementById('targets-container');
+      const unrankedTargets = Array.from(targetsContainer.querySelectorAll('.target-container'));
+      
+      // For trap questions, check if exactly 1 target is selected
+      if (isTrapQuestion) {
+        if (rankedTargets.length !== trapB) {
+          alert(`Please select exactly ${trapB} target.`);
+          resetSubmitButton();
+          return;
+        }
+        
+        // Get the selected answer
+        const selectedTarget = rankedTargets[0];
+        const targetText = selectedTarget.querySelector('.target-text');
+        
+        if (!targetText) {
+          console.error('No target-text element found in selected target');
+          alert('Error: Invalid target structure');
+          resetSubmitButton();
+          return;
+        }
+        
+        const selectedText = targetText.textContent.trim();
+        
+        // Check if we have a valid correct answer
+        if (!correctAnswer || correctAnswer.trim() === '') {
+          console.error('No valid correct answer found for trap question');
+          alert('Error: Invalid trap question configuration');
+          resetSubmitButton();
+          return;
+        }
+        
+        // Check if the answer is correct
+        const isCorrect = selectedText === correctAnswer;
+        
+        // For trap questions, we need to create a target_winner array with the selected answer
+        const targetWinner = [0];
+        
+        // Call processAnswer with trap question data
+        next_widget.processAnswer({
+          "target_winner": targetWinner, 
+          "participant_uid": '{{ query.participant_uid }}',
+          "trapped": !isCorrect  // trapped is true if the answer is incorrect
+        });
+      } else {
+        // Handle regular question submission
+        // Check if the number of ranked targets matches query.B
+        if (rankedTargets.length !== {{ query.B }}) {
+          alert(`Please rank exactly {{ query.B }} targets.`);
+          resetSubmitButton();
+          return;
+        }
+        
+        // Collect the IDs of ranked targets in left-to-right order
+        const rankedTargetIds = rankedTargets.map(function(target) {
+          return target.id.split('-')[1];
+        });
 
-    const anchorTarget = document.querySelector('.anchor-target').id.split('-')[1];
-    targetWinner.unshift(anchorTarget);
+        // Collect the IDs of unranked targets
+        const unrankedTargetIds = unrankedTargets.map(function(target) {
+          return target.id.split('-')[1];
+        });
 
-    // Call processAnswer with the order of ranked targets
-    next_widget.processAnswer({"target_winner": targetWinner, "participant_uid": '{{ query.participant_uid }}' });
-    console.log("Submitted order: ", targetWinner);
+        // Create the final array: [anchor, ranked_targets..., unranked_targets...]
+        const anchorTarget = document.querySelector('.anchor-target').id.split('-')[1];
+        const targetWinner = [anchorTarget, ...rankedTargetIds, ...unrankedTargetIds];
+
+        // Call processAnswer with the complete array of all targets
+        next_widget.processAnswer({
+          "target_winner": targetWinner, 
+          "participant_uid": '{{ query.participant_uid }}',
+          "trapped": false  // Regular questions are not trap questions
+        });
+      }
+    } catch (error) {
+      console.error('Error in submitAnswer:', error);
+      alert('An error occurred while submitting your answer. Please try again.');
+      resetSubmitButton();
+    }
+  }
+  
+  function resetSubmitButton() {
+    isSubmitting = false;
+    const submitBtn = document.getElementById('submit');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit';
+      submitBtn.style.backgroundColor = '#67b1ce';
+    }
   }
 </script>

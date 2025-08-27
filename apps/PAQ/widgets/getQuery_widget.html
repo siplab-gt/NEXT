@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic Sample Slider</title>
+<style>
+  body      { font-family: Arial, sans-serif; margin:0; padding:20px; }
+  .row      { display:flex; gap:4%; }
+  .cell     { position:relative; flex:1 1 48%; border:1px solid #ccc; aspect-ratio:16/9; overflow:hidden; }
+  .cell > * { width:100%; height:100%; }
+  .cell p   { display:flex; align-items:center; justify-content:center; margin:0; font-size:1.25rem; }
+  .cell audio { width:100%; height:auto; }
+  .cell video { object-fit:cover; }
+  .cell img   { object-fit:contain; width:100%; height:100%; }
+  .colorFill { position:absolute; inset:0; }
+  
+  /* Ensure reference containers also scale properly */
+  #referenceImage, #referenceVideo { width:100%; height:100%; }
+  #referenceImage img, #referenceVideo video { object-fit:contain; width:100%; height:100%; }
+
+  #sliderBox{ text-align:center; margin:40px 0 20px; position: relative; }
+  #ticks    { position:relative; margin-top:8px; height: 30px; }
+  
+  .tickContainer {
+    position: absolute;
+    left: 0;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none; /* Allow mouse events to pass through container */
+  }
+  
+  .tickSymbol { 
+    width: 8px;
+    height: 8px;
+    background: #666;
+    border-radius: 50%;
+    cursor: pointer;
+    pointer-events: auto; /* Re-enable mouse events for the symbol */
+  }
+  
+  .tickTooltip {
+    position: absolute;
+    top: 12px; /* Position below the tick */
+    background: black;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    white-space: nowrap;
+    display: none;
+    pointer-events: none; /* Prevent tooltip from interfering with hover */
+  }
+  
+  .tickSymbol:hover + .tickTooltip {
+    display: block;
+  }
+  
+  .tickSymbol.active {
+    background: #000;
+  }
+  
+  /* Hide tooltip when slider is being dragged */
+  #slider:active ~ #ticks .tickTooltip {
+    display: none !important;
+  }
+  
+  #submitBtn{ display:block; margin:40px auto 0; padding:8px 24px; font-size:1rem; }
+</style>
+</head>
+<body>
+
+<p>{{ query.instruction }}</p>
+
+<div class="row">
+  <div id="containerA" class="cell">
+    {% if query.queryType == "text" %}
+      <p>{{ query.referenceItem }}</p>
+    {% elif query.queryType == "color" %}
+      <div class="colorFill" style="background:{{ query.referenceItem }};"></div>
+    {% elif query.queryType == "audio" %}
+      <audio controls src="{{ query.referenceItem }}"></audio>
+    {% elif query.queryType == "video" %}
+      <div id="referenceVideo"></div>
+    {% elif query.queryType == "image" %}
+      <div id="referenceImage"></div>
+    {% endif %}
+  </div>
+
+  <div id="containerSample" class="cell"></div>
+</div>
+
+<div id="sliderBox">
+  <!-- step="any" lets the thumb move freely; we will snap on pointerup/change -->
+  <input id="slider" type="range" min="0" max="{{ query.targetItems | length - 1 }}" step="1" value="0" style="width:100%;">
+  <div id="ticks"></div>
+</div>
+
+<button id="submitBtn">Submit</button>
+
+<script>
+console.log('[WIDGET_DEBUG] Widget script starting...');
+console.log('[WIDGET_DEBUG] Raw query data:', {{ query | tojson }});
+
+const targetItems = {{ query.targetItems | tojson }};
+const tickItems = {{ query.tickItems | tojson }};
+const tickFlag = {{ query.tickFlag | tojson }};
+const tickType = {{ query.tickType | tojson }};
+const queryType = {{ query.queryType | tojson }};
+
+console.log('[WIDGET_DEBUG] Parsed variables:');
+console.log('  - targetItems:', targetItems);
+console.log('  - tickItems:', tickItems);
+console.log('  - tickFlag:', tickFlag);
+console.log('  - tickType:', tickType);
+console.log('  - queryType:', queryType);
+
+const slider = document.getElementById('slider');
+const ticks = document.getElementById('ticks');
+const sampleC = document.getElementById('containerSample');
+
+console.log('[WIDGET_DEBUG] DOM elements:');
+console.log('  - slider:', slider);
+console.log('  - ticks:', ticks);
+console.log('  - sampleC:', sampleC);
+
+console.log('Initial data:', {
+  targetItems,
+  tickItems,
+  tickFlag,
+  tickType,
+  queryType
+});
+
+function render(res, target) {
+  console.log('[WIDGET_DEBUG] render() called with:', { res, target, queryType });
+  target.innerHTML = '';
+  if (queryType === 'text') {
+    console.log('[WIDGET_DEBUG] Rendering text:', res);
+    const p = document.createElement('p');
+    p.textContent = res;
+    target.appendChild(p);
+  } else if (queryType === 'color') {
+    console.log('[WIDGET_DEBUG] Rendering color:', res);
+    const d = document.createElement('div');
+    d.className = 'colorFill';
+    d.style.background = res;
+    target.appendChild(d);
+  } else if (queryType === 'audio') {
+    console.log('[WIDGET_DEBUG] Rendering audio:', res);
+    const a = document.createElement('audio');
+    a.controls = true;
+    a.src = res;
+    target.appendChild(a);
+  } else if (queryType === 'video') {
+    console.log('[WIDGET_DEBUG] Rendering video frames:', res);
+    // Convert numpy array frames to video blob
+    const frames = res; // res is the numpy array of shape (num_frames, height, width, channels)
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = frames[0].shape[1];  // width
+    canvas.height = frames[0].shape[0]; // height
+    
+    console.log('[WIDGET_DEBUG] Video canvas dimensions:', { width: canvas.width, height: canvas.height });
+    
+    // Create a MediaRecorder to capture the frames
+    const stream = canvas.captureStream(30); // 30 fps
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType: 'video/webm;codecs=vp9',
+      videoBitsPerSecond: 2500000 // 2.5 Mbps
+    });
+    
+    const chunks = [];
+    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      console.log('[WIDGET_DEBUG] MediaRecorder stopped, creating video element');
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const videoUrl = URL.createObjectURL(blob);
+      
+      const video = document.createElement('video');
+      video.controls = true;
+      video.src = videoUrl;
+      target.appendChild(video);
+    };
+    
+    mediaRecorder.start();
+    
+    // Draw each frame to canvas
+    let frameIndex = 0;
+    function drawFrame() {
+      if (frameIndex < frames.length) {
+        // Convert frame data to ImageData
+        const frame = frames[frameIndex];
+        const imageData = new ImageData(
+          new Uint8ClampedArray(frame.buffer),
+          frame.shape[1],
+          frame.shape[0]
+        );
+        ctx.putImageData(imageData, 0, 0);
+        frameIndex++;
+        requestAnimationFrame(drawFrame);
+      } else {
+        console.log('[WIDGET_DEBUG] All frames drawn, stopping MediaRecorder');
+        mediaRecorder.stop();
+      }
+    }
+    
+    drawFrame();
+  } else if (queryType === 'image') {
+    console.log('[WIDGET_DEBUG] Rendering image:', res);
+    const img = document.createElement('img');
+    
+    // Handle base64 encoded images
+    if (typeof res === 'string' && res.startsWith('data:image')) {
+      // Already a data URL
+      img.src = res;
+    } else if (typeof res === 'string' && res.length > 100) {
+      // Likely a base64 string without data URL prefix
+      img.src = 'data:image/jpeg;base64,' + res;
+    } else if (Array.isArray(res)) {
+      // Handle numpy array format (fallback for compatibility)
+      console.log('[WIDGET_DEBUG] Converting numpy array to base64');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Assuming res is a 3D array [height, width, channels]
+      canvas.width = res[0].length;  // width
+      canvas.height = res.length;    // height
+      
+      const imageData = new ImageData(
+        new Uint8ClampedArray(res.flat()),
+        canvas.width,
+        canvas.height
+      );
+      ctx.putImageData(imageData, 0, 0);
+      
+      img.src = canvas.toDataURL('image/jpeg', 0.85);
+    } else {
+      // Fallback to direct src
+      img.src = res;
+    }
+    
+    img.alt = 'image';
+    target.appendChild(img);
+  }
+  console.log('[WIDGET_DEBUG] render() completed');
+}
+
+function buildTicks() {
+  console.log('[WIDGET_DEBUG] buildTicks() called');
+  ticks.innerHTML = '';
+  if (!tickFlag) {
+    console.log('[WIDGET_DEBUG] tickFlag is false, hiding ticks');
+    ticks.style.display = 'none';
+    return;
+  }
+
+  console.log('Building ticks with values:', tickItems);
+
+  for (let i = 0; i < tickItems.length; i++) {
+    console.log(`[WIDGET_DEBUG] Creating tick ${i} with value:`, tickItems[i]);
+    const tickContainer = document.createElement('div');
+    tickContainer.className = 'tickContainer';
+    const position = (i / (tickItems.length - 1)) * 100;
+    tickContainer.style.left = `${position}%`;
+    
+    const tickSymbol = document.createElement('div');
+    tickSymbol.className = 'tickSymbol';
+    tickSymbol.dataset.index = i;
+    tickSymbol.dataset.value = tickItems[i];
+    
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tickTooltip';
+    const tickValue = String(tickItems[i]);
+    tooltip.textContent = tickValue;
+    
+    // Debug: Log the created elements
+    console.log(`Created tick ${i}:`, {
+      position,
+      value: tickValue,
+      container: tickContainer,
+      symbol: tickSymbol,
+      tooltip: tooltip
+    });
+    
+    // Add click handler
+    tickSymbol.addEventListener('click', function(e) {
+      console.log(`[WIDGET_DEBUG] Tick ${i} clicked, setting slider to:`, i);
+      e.stopPropagation();
+      const index = parseInt(this.dataset.index);
+      slider.value = index;
+      updateDisplay();
+    });
+    
+    tickContainer.appendChild(tickSymbol);
+    tickContainer.appendChild(tooltip);
+    ticks.appendChild(tickContainer);
+  }
+  
+  // Debug: Log the final ticks container
+  console.log('Final ticks container:', ticks);
+  console.log('Number of tick containers:', ticks.children.length);
+  
+  // Add click handler to document
+  document.addEventListener('click', function() {
+    document.querySelectorAll('.tickSymbol').forEach(tick => {
+      tick.classList.remove('active');
+    });
+  });
+}
+
+function updateDisplay() {
+  console.log('[WIDGET_DEBUG] updateDisplay() called');
+  const idx = parseInt(slider.value, 10);
+  console.log('[WIDGET_DEBUG] Slider value:', idx, 'targetItems length:', targetItems.length);
+  
+  if (idx >= 0 && idx < targetItems.length) {
+    console.log('[WIDGET_DEBUG] Rendering target item at index:', idx, 'value:', targetItems[idx]);
+    render(targetItems[idx], sampleC);
+    
+    // Update active state of ticks
+    document.querySelectorAll('.tickSymbol').forEach(tick => {
+      const tickIndex = parseInt(tick.dataset.index);
+      if (tickIndex === idx) {
+        tick.classList.add('active');
+      } else {
+        tick.classList.remove('active');
+      }
+    });
+  } else {
+    console.warn('[WIDGET_DEBUG] Invalid slider index:', idx);
+  }
+}
+
+function submitAnswer() {
+  console.log('[WIDGET_DEBUG] submitAnswer() called');
+  const idx = parseInt(slider.value, 10);
+  console.log('[WIDGET_DEBUG] Submitting answer with index:', idx, 'tickItems length:', tickItems.length);
+  
+  if (idx >= 0 && idx < tickItems.length) {
+    const answer = tickItems[idx];
+    console.log('[WIDGET_DEBUG] Submitted value:', answer);
+    console.log('[WIDGET_DEBUG] Calling next_widget.processAnswer with:', { answer });
+    next_widget.processAnswer({answer: answer});
+  } else {
+    console.error('[WIDGET_DEBUG] Invalid answer index:', idx);
+  }
+}
+
+// Initialize
+console.log('[WIDGET_DEBUG] Starting initialization...');
+buildTicks();
+updateDisplay();
+console.log('[WIDGET_DEBUG] Initialization completed');
+
+// Initialize reference image/video based on query type
+if (queryType === 'video') {
+  console.log('[WIDGET_DEBUG] Initializing reference video');
+  const referenceFrames = {{ query.referenceItem | tojson }};
+  console.log('[WIDGET_DEBUG] Reference frames:', referenceFrames);
+  render(referenceFrames, document.getElementById('referenceVideo'));
+} else if (queryType === 'image') {
+  console.log('[WIDGET_DEBUG] Initializing reference image');
+  const referenceImage = {{ query.referenceItem | tojson }};
+  console.log('[WIDGET_DEBUG] Reference image:', referenceImage);
+  render(referenceImage, document.getElementById('referenceImage'));
+}
+
+// Event listeners
+console.log('[WIDGET_DEBUG] Setting up event listeners');
+slider.addEventListener('input', updateDisplay);  // Update while dragging
+slider.addEventListener('change', updateDisplay); // Update on release
+document.getElementById('submitBtn').onclick = submitAnswer;
+console.log('[WIDGET_DEBUG] Event listeners set up completed');
+</script>
+</body>
+</html>

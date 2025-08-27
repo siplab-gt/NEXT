@@ -10,16 +10,16 @@ from sklearn.utils import check_random_state
 class MyAlg:
     def initExp(self, butler, A, B, n, d 
                 ,random_seed, failure_probability
-                ,iteration, burn_in, down_sample, mu
-                , debug):
-        #Algo Specific
+                ,iteration, burn_in, down_sample, mu, debug,
+                setTrap, expel, tolerance, trapRatio, num_trap_questions):
+        #For InfoTuple
         butler.algorithms.set(key='debug_flag', value=debug)
         butler.algorithms.set(key='mu', value=mu)
         butler.algorithms.set(key='down_sample', value=down_sample)
         butler.algorithms.set(key='burn_in', value=burn_in)
         butler.algorithms.set(key='iteration', value=iteration)
         butler.algorithms.set(key='responses', value=list()) #store all responses in list
-        
+       
         rng = check_random_state(random_seed)
         rng_state = rng.get_state()
         serializable_rng_state = (rng_state[0], rng_state[1].tolist(), *rng_state[2:])
@@ -32,12 +32,22 @@ class MyAlg:
         butler.algorithms.set(key='B', value=B) #answer length
         butler.algorithms.set(key='delta', value=failure_probability)
         butler.algorithms.set(key='num_reported_answers', value=0)
-        X = rng.rand(n, d)
+        # Store the number of regular targets (A) separately from total targets (n)
+        butler.algorithms.set(key='num_regular_targets', value=A)
+        butler.algorithms.set(key='total_targets', value=n)
+        # Create embedding matrix only for regular targets (0 to A-1)
+        X = rng.rand(n - num_trap_questions, d)
         butler.algorithms.set(key='X', value=X)
-       
+
+        # To keep track of bad participants
+        butler.algorithms.set(key='bad_participants', value=list())
+        butler.algorithms.set(key='expel', value=expel)
         return True
 
-    def getQuery(self, butler, participant_uid):
+    def getQuery(self, butler, participant_uid, isTrap=False):
+        # For trap questions, return empty list since trap targets are handled separately
+        if isTrap:
+            return []
         #Gather necessary parameters for getQuery
         A = butler.algorithms.get(key='A')
         X = np.array(butler.algorithms.get(key='X'))
@@ -60,7 +70,7 @@ class MyAlg:
         h = butler.participants.get(uid=participant_uid, key='head')
         curr_iteration = butler.participants.get(uid=participant_uid, key='curr_iteration')
         if curr_iteration < burn_in:
-            selected_tuple = [h]+list(rng.choice(n, A, replace=False))
+            selected_tuple = [h]+list(rng.choice([i for i in range(n) if i != h], size=A, replace=False))
         else: 
             candidates = permutations(filter(lambda x: x is not h, range(n)), A)
             tuples = map(lambda x: [h] + list(x), candidates)
@@ -77,18 +87,42 @@ class MyAlg:
         return selected_tuple
     
 
-    def processAnswer(self, butler, target_winner, participant_uid):
-        #Gather necessary parameters for processAnswer
+    def processAnswer(self, butler, target_winner, participant_uid, disregard_candidate):
+        # Check if the participant is a bad participant
+        if disregard_candidate:
+            if participant_uid not in butler.algorithms.get(key='bad_participants'):
+                butler.algorithms.append(key='bad_participants', value=participant_uid) 
+            if butler.algorithms.get(key='expel'):
+                raise ValueError("Bad participant {} is expelled".format(participant_uid))
+            return True
+       
         X = np.array(butler.algorithms.get(key='X'))
         n, d = X.shape
         h = butler.participants.get(uid=participant_uid, key='head')
         iteration = butler.algorithms.get(key='iteration')
         curr_iteration = butler.participants.get(uid=participant_uid, key='curr_iteration')
-        
-        for i in range(len(target_winner)-2):
-            pairwise_comparison = (int(target_winner[0]),int(target_winner[i+1]), int(target_winner[i+2]))
-            butler.participants.append(uid=participant_uid, key='responses', value=pairwise_comparison)
-            butler.algorithms.append(key='responses', value=pairwise_comparison)
+        B = butler.algorithms.get(key='B')
+       
+        # target_winner consists of head, B ranked targets and A - B unranked targets
+        head_element = int(target_winner[0])
+        # Form explicit pairwise comparisons
+        explicit_targets = np.array(target_winner[1:B+1], dtype=int)
+        i, j = np.triu_indices(len(explicit_targets), k=1)
+        explicit_comparison = list(zip(explicit_targets[i], explicit_targets[j]))
+        explicit_comparison = [(head_element, int(i), int(j)) for i, j in explicit_comparison]
+        # Form implicit pairwise comparisons
+        implicit_targets = np.array(target_winner[B+1:], dtype=int)
+        X, Y = np.meshgrid(explicit_targets, implicit_targets, indexing='ij')
+        implicit_comparison = list(zip(X.flatten(), Y.flatten()))
+        implicit_comparison = [(head_element, int(i), int(j)) for i, j in implicit_comparison]
+        # Update participant responses
+        current_responses = butler.participants.get(uid=participant_uid, key='responses')
+        participant_responses = current_responses + explicit_comparison + implicit_comparison
+        butler.participants.set(uid=participant_uid, key='responses', value=participant_responses)
+        # Update algorithm responses
+        current_responses = butler.algorithms.get(key='responses')
+        algorithm_responses = current_responses + explicit_comparison + implicit_comparison 
+        butler.algorithms.set(key='responses', value=algorithm_responses)
         
         num_reported_answers = butler.algorithms.increment(
             key='num_reported_answers')
@@ -116,7 +150,7 @@ class MyAlg:
 
     def incremental_embedding_update(self, butler, participant_uid):
         responses = butler.participants.get(uid=participant_uid, key='responses')
-        seed = butler.algorithms.get(key='random_seed')
+        seed = butler.algorithms.get(key='seed')
         X = np.array(butler.participants.get(uid=participant_uid, key='embedding'))
         n, d = X.shape
         embedder = SOE(n_components=d, random_state=seed, n_init=10, backend='scipy', max_iter=20, margin=5) # Embedding algorithm to get the embeddings
@@ -125,15 +159,25 @@ class MyAlg:
         # take a single gradient step
         #t_start = time.time()
         #while (time.time()-t_start < 0.5*t_max):
-        X = embedder.fit_transform(responses, n_objects=n, init=X)
-        butler.participants.set(uid=participant_uid, key='embedding', value=X.tolist())
+        try:
+            X = embedder.fit_transform(responses, n_objects=n, init=X)
+            butler.participants.set(uid=participant_uid, key='embedding', value=X.tolist())
+        except Exception as e:
+            # Log the error but don't fail the entire process
+            print(f"Warning: Embedding update failed for participant {participant_uid}: {e}")
+            return
 
     def full_embedding_update(self, butler, args):
         X = np.array(butler.algorithms.get(key='X'))
         n, d = X.shape
         
         responses = butler.algorithms.get(key='responses')
-        seed = butler.algorithms.get(key='random_seed')
+        
+        # Check if there are any responses to process
+        if not responses:
+            return  # Skip embedding update if no responses available
+        
+        seed = butler.algorithms.get(key='seed')
         try:
             embedder = SOE(n_components=d, random_state=seed, n_init=10, backend='scipy', max_iter=20, margin=5)
             X = embedder.fit_transform(responses, n_objects=n, init=X)

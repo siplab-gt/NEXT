@@ -1,4 +1,3 @@
-# PoolBasedTripletMDS asks triplet comparison questions of the form "which is closer to item i, item j or k' to find an embedding of the items into Euclidean space.
 extends: [base.yaml]
 initExp:
   args:

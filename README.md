@@ -21,24 +21,61 @@
     - Users can modify the input values for $A$, $B$, and the set of items to be ranked (see template ```NEXT/local/template/ArankB-init.yaml``` for all adjustable parameters).
   - Info-Tuple Sampling: Dynamically updates an embedding based on responses received in real time and selects the tuple of items expected to yield the highest information gain as the subsequent query.
     - In addition to the configurable options mentioned above, users can adjust a range of parameters unique to Info-Tuple Sampling, including the number of burn-in iterations, total iterations, down-sampling rate, and more (see template ```NEXT/local/template/ArankB-init.yaml``` for comprehensive configuration details and explanations for each parameter).
+- **Trap Question Mechanism:**
+  A Rank B includes a trap question system to ensure data quality by identifying inattentive or dishonest participants.
+  - **Purpose:** Trap questions are designed to catch participants who are not paying attention or are providing random responses, helping maintain the quality of collected data.
+  - **Implementation:** Users can configure trap questions with various parameters including frequency, tolerance thresholds, and expulsion policies. Trap questions are stored in the target set after the regular targets and consist of simple attention-check questions with clear correct answers.
+  - **Example:** A trap question might ask "Choose the option with the word positive in it" with options "Positive, Negativity, War, Peace" where "Positive" is the correct answer.
+  - **Configuration:** Users can modify trap question settings including enabling/disabling traps, setting frequency, tolerance levels, and expulsion policies. See template ```NEXT/local/template/ARankB-InfoTuple.yaml``` for detailed parameter explanations and configuration options.
 
 
 ## Binary Sentiment Word Classification Rank One and Rank N
-- **Overview:** Given $n$ words, participants needs to choose the most positive word(Rank One)/ rank from most positive to most negative(Rank N).
+- **Overview:** Given $n$ words, participants need to choose the most positive word(Rank One)/ rank from most positive to most negative(Rank N).
 - **Query Interface for Rank One:** ![Rank One](picRef/BSWCRO_UI.png) 
   - The central box displays the full pool of words. 
   - Clicking on a word will highlight it to indicate choice.
 - **Query Interface for Rank N:** ![Rank N](picRef/BSWCRN_UI.png) 
   - The central box displays the full pool of words. 
-  - Clicking on an word will highlight it to indicate choice.
+  - Clicking on a word will highlight it to indicate choice.
   - A participant can only submit their response when exactly one word is clicked.
 - **Static Sampling Algorithm:** 
   - Read CSV: Given a CSV file where each row represents the content of one query. Truncate the first *number_of_queries* rows off and naively present them as query.
     - A specific way of implementing static sampling explained previously. 
+
+
+   
+
+## PAQ (Perceptual Adjustment Query)
+- **Overview:** Given a reference item and a set of target items along a perceptual continuum, participants adjust a slider to match the reference item with the most similar/dissimilar target item depending on the instruction. PAQ supports multiple media types including colors, images, text.
+- **Query Interface:** ![Color PAQ 1](picRef/PAQ_UI_1.png)
+  ![Color PAQ 2](picRef/PAQ_UI_2.png)
+  ![Color PAQ 3](picRef/PAQ_UI_3.png)
+  - The left area displays the reference item (color, image, text, audio, or video)
+  - The right area shows the target item that changes as participants move the slider
+  - A horizontal slider allows participants to toggle and adjust the target item at some predefined range
+  - The number of queries along the slider can be determined by the developer. In general, the number can be taken as 100 for color vision to ensure numerical precision accuracy
+  - Participants submit their response by clicking the submit button
+- **Supported Query Types:**
+  - **Color PAQ:** Participants match a reference color by adjusting through a continuously changing color path
+  - **Image PAQ:** Participants match a reference image by adjusting through morphed image transformations
+  - **Text PAQ:** Participants match a reference text by adjusting through text variations
+- **Algorithms:**
+  - **ColorVision:** Generates color paths in xyY color space with directional sampling.  For more information about PAQ, see the paper: https://arxiv.org/abs/2309.04626.
+    - Users can configure reference colors, directional vectors, number of ticks, and tick visibility
+  - **ImageTransformation:** Creates image morphing between start and end images
+    - Users can configure start, reference, and end images, number of ticks, and tick visibility
+- **Dynamic Sampling Algorithm:** 
+  - **DynamicPAQ:** Active learning in PAQ queries construction that dynamically selects items for each query rather than using predefined sequences
+    - Randomly selects start, reference, and end items from the available target set
+    - Currently supports ImageTransformation algorithm
+    - **Start, Reference, and End Items:** These are the key components of a PAQ query. The start item represents the beginning of the perceptual continuum, the reference item is what participants try to match, and the end item represents the end of the continuum. For example, in a color matching task, the start item might be a blue color, the reference item could be a specific shade of purple, and the end item might be a red color. The available target set contains all possible items that can be used as start, reference, or end items in the experiment.
+- **Configuration:** Users can modify parameters including reference items, directional vectors (for ColorVision), start/end items (for ImageTransformation), tick count, tick visibility, and query type (see templates ```NEXT/local/template/PAQ-ColorVision.yaml``` and ```NEXT/local/template/PAQ-ImageTransformation.yaml``` for configuration details).
+
+
    
 
 ## Pool Based Triplets(By Neuromatch)
-- **Overview:** Given an item triplet. Participants need to choose one item out of two give an anchor.
+- **Overview:** Given an item triplet. Participants need to choose one item out of two given an anchor.
 - **Query Interface:** ![Pool Based Triplet](picRef/PBT_UI.png) 
   - The top box displays the anchor item.
   - Clicking one of the item on the bottom to suggest preference. 
@@ -93,7 +130,7 @@ This section describes how to set up NEXT on the newly created AWS instance. We 
 
 - **Clone NEXT Repo** -
 You can clone the latest version of the repository by using the following command:  
-  - ``` git clone https://github.com/wshi991201/NEXT.git ```
+  - ``` git clone https://github.com/siplab-gt/NEXT.git ```
 
   Once you have cloned the repository, change directory to the ```NEXT/local/``` directory and edit the ```nginx.conf``` file. You want to replace the value for server_name to the public ip address of your instance. It is currently set to next.localhost.
 
@@ -125,7 +162,7 @@ The NEXT platform uses Docker to house and manage all services. You will need to
 - **Python Environment Setup** -
 In order to launch experiments from the terminal, you will need to have a Python environment setup with the required dependencies installed. Install Python virtual-env with:
   - ``` sudo apt update ```
-  - ``` sudo apt install python3.10-venv ``` 
+  - ``` sudo apt install python3.12-venv ``` 
   
   Now you can create virtual environments to install Python packages. Cd into the ``` NEXT/local/``` and run the following:
   - ``` python3 -m venv local-venv ```
@@ -152,8 +189,8 @@ You now have created and activated a Python environment named local-venv. You ha
 
   - Under the same directory, run ```./docker_up.sh``` to start the NEXT application. Now, you should be able to access the platform via 
   ```Instance_IP_address/home ```
-  - Note that you may run into some premission error sometimes due to group membership not getting updated immediately and user may not have permission to access docker's Unix Socker. 
-  - Run ```grep docker /etc/group``` and you should see some output similar to ```docker:x:999:ubunut```.
+  - Note that you may run into some permission error sometimes due to group membership not getting updated immediately and user may not have permission to access docker's Unix Socket. 
+  - Run ```grep docker /etc/group``` and you should see some output similar to ```docker:x:999:ubuntu```.
   - Run ```newgrp docker``` to force group membership update and run ```id -nG```. 
   - Make sure you see  ```docker``` within the list of output. Then running ```./docker_up.sh``` should work.
   - Next, run ```source local-venv/bin/activate``` to activate a python virtual env.
@@ -169,7 +206,7 @@ You now have created and activated a Python environment named local-venv. You ha
   - At the same dashboard page, you can spot ***Participant data*** that contains all the participant-related information including participant ID, response, decision_time, etc (actual content depends on types of query). You can download it in JSON or in CSV format. 
 - **Tips on Customize Static Sampling Process with Example** 
   - In  ```Next/local/csv ``` folder, a example CSV file is provided as well as other simple python scripts that are used to extract information from the CSV file.
-  It serves as an example of how you could transform each query from your source of file to dictionary format in ```*-init.yaml```. Files in this folder extract queries and initialize a Binary Word Sentinement Classfication task introduced in section one. Set configs in ```config.yaml``` and launch experiment by running ```python easy_launch.py ```.
+  It serves as an example of how you could transform each query from your source of file to dictionary format in ```*-init.yaml```. Files in this folder extract queries and initialize a Binary Word Sentinement Classification task introduced in section one. Set configs in ```config.yaml``` and launch experiment by running ```python easy_launch.py ```.
 - **Monitor System Performance**
   - It is always a good idea to monitor and test system performance. This can inform you about the needs of your system and about which processes or services are consuming resources. 
     - **Cadvisor** allows you to monitor cpu, memory, and disk usage on the system wide level, as well as per process and per container. We have implemented a password protected version for you. The default user and password is admin and password. To change these, simply change the content in the ```cadvisor_user.txt``` and ```cadvisor_password.txt``` files respectively. The docker environment will use these to set the username and password for cadvisor. To sign into cadvisor, go to this url: ``` instance-public-ipaddress/cadvisor ```
@@ -186,10 +223,9 @@ You now have created and activated a Python environment named local-venv. You ha
   - Run ``` docker-compose down --remove-orphans ``` to stop all the running containers as well as clear caches.
 ### 4.3. Shutdown Amazon EC2 instance
   - Go to ```EC2 > Instances ``` webpage.
-  - Check the current intance in the list.
+  - Check the current instance in the list.
   - Find the ```Instance state ``` radio button on the top and choose Stop instance.
 
 ## 5. Link to Media Instructions
-``` https://mediaspace.gatech.edu/media/NEXT%20tutorial%20part%20I/1_shurcpt7 ```
-``` https://mediaspace.gatech.edu/media/NEXT%20tutorial%20part%20II/1_txxp9uhu ```
-``` https://mediaspace.gatech.edu/media/NEXT%20tutorial%20part%20III/1_2bu3cqsd ```
+``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_1/1_p9fujklo ```
+``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_2/1_ucyud9f3```

@@ -69,6 +69,11 @@ class processAnswer(Resource):
                                                                'processAnswer',
                                                                args_json)
 
+        # Add participant_failed to the meta_success if it exists
+        meta_success['participant_failed'] = args_data['args'].get(
+                                                              'participant_failed', 
+                                                              False)
+
         if didSucceed:
             return attach_meta(eval(response_json), meta_success), 200
         else:
