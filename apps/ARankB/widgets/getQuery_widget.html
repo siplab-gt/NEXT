@@ -19,7 +19,7 @@
     flex-wrap: nowrap; /* Prevent wrapping to multiple rows */
     overflow-x: auto; /* Allow horizontal scrolling if items overflow */
     margin-bottom: 20px; /* Space between rows */
-    border: 2px solid red;
+    border: 4px solid red;
     border-radius: 10px;
     padding: 10px;
     margin-bottom: 20px;
@@ -37,12 +37,16 @@
     font-weight: bold;
     margin-bottom: 10px; /* Space between label and anchor */
   }
-
+  .top-instructions {
+    font-size: 20px !important;
+    font-weight: normal !important;
+  }
   .anchor-target {
     width: 30%;
     height: 100%;
     border-radius: 30px;
     padding: 10px;
+    background-color: #b39ddb; 
     border: 1px solid #67b1ce;
     box-shadow: -1px 1px #67b1ce, -2px 2px #67b1ce, -3px 3px #67b1ce, -4px 4px #67b1ce, -5px 5px #67b1ce;
     text-align: center;
@@ -104,21 +108,22 @@
   }
 
   .submit-btn:disabled {
-    background-color: #999 !important;
+    background-color: red !important;
     cursor: not-allowed;
     opacity: 0.7;
   }
 
   .submit-btn:disabled:hover {
-    background-color: #999 !important;
+    background-color: red !important;
   }
 
   /* Instruction text */
   .instruction-text {
     text-align: center;
-    font-size: large;
+    font-size: large; /* or use toRank-container-text's value */
     margin-bottom: 20px;
   }
+
 
   /* toRank styling */
   .toRank-container {
@@ -126,7 +131,7 @@
     display: flex;
     flex-wrap: nowrap; /* Ensure targets are arranged in a single row */
     gap: 10px; /* Consistent gap between items */
-    border: 2px solid green;
+    border: 4px solid green;
     border-radius: 10px;
     padding: 20px;
     text-align: center;
@@ -182,9 +187,13 @@
 </style>
 
 <!-- Anchor Section -->
-{% if not query.isTrap %}
 <div class="anchor-container">
-  <div class="anchor-label">Anchor</div>
+  <div class="anchor-label">Target</div>
+  {% if query.isTrap %}
+  <div class="anchor-target" id="target-trap">
+    <div class="target-text">{{ query.target_items[0].alt_description }}</div>
+  </div>
+  {% else %}
   <div class="anchor-target" id="target-{{ query.target_items[0].target_id }}">
     {% if query.target_items[0].primary_type == "image" or query.target_items[0].primary_type == "img" %}
     <img src="{{ query.target_items[0].primary_description }}" alt="Target Image">
@@ -205,10 +214,22 @@
     </audio>
     {% endif %}
   </div>
+  {% endif %}
 </div>
-{% endif %}
 
 <!-- Instruction Text -->
+<div class="instruction-text" id="instruction-text">
+  {% if query.query_id % 20 == 0 %}
+    <div style="font-weight: bold; font-size: 1.2em; margin-bottom: 15px;">
+      You're doing well! Keep paying attention and answering the questions.
+    </div>
+  {% endif %}
+
+    Please carefully read the action above. This is your target action.<br>
+    Now, see below a few different actions.
+</div>
+
+<!-- Instruction Text
 <div class="instruction-text" id="instruction-text">
   {% if query.isTrap and query.target_items|length > 0 and query.target_items[0].alt_description %}
   {{ query.target_items[0].alt_description }}
@@ -216,7 +237,8 @@
   Here is a list of <span id="display-A">{{ query.A }}</span> targets. <br>
   Click and choose exactly <span id="display-B">{{ query.B }}</span> targets.
   {% endif %}
-</div>
+</div> -->
+
 
 <!-- Second Row with Red Border around all Non-Anchor Targets -->
 <div class="targets-container" id="targets-container">
@@ -265,7 +287,7 @@
 </div>
 
 <div class="toRank-container-text">
-  Click a target to move it between containers, and drag the targets in the ranking row to re-order them left to right from the most similar to the least similar compared to the anchor.
+  Please click on the actions in the red box above to move them to the green box below. Click these actions IN ORDER FROM MOST SIMILAR (IN TERMS OF EFFORT) TO THE TARGET ACTION (in purple) to THE LEAST SIMILAR (IN TERMS OF EFFORT) TO THE TARGET ACTION.
 </div>
 
 <!-- To Rank Container -->
@@ -485,7 +507,7 @@
       // Re-enable dragging within the ranking container
       element.setAttribute('draggable', 'true');
     } else {
-      const message = isTrapQuestion ? `You can only select exactly ${trapB} target.` : `You can only rank exactly {{ query.B }} targets.`;
+      const message = isTrapQuestion ? `You can only rank exactly ${trapB} targets.` : `You can only rank exactly {{ query.B }} targets.`;
       alert(message);
     }
   }
@@ -577,7 +599,7 @@
       // For trap questions, check if exactly 1 target is selected
       if (isTrapQuestion) {
         if (rankedTargets.length !== trapB) {
-          alert(`Please select exactly ${trapB} target.`);
+          alert(`Please rank exactly ${trapB} targets.`);
           resetSubmitButton();
           return;
         }
