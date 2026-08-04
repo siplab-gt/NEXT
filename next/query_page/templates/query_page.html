@@ -55,6 +55,33 @@
       </div>
     </div>
 
+    <!-- Prolific ID entry modal (shown before the first query) -->
+    <div class="modal fade" id="prolific_modal" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title">Before you begin</h1>
+          </div>
+          <div class="modal-body">
+            <h4>Please enter your Prolific ID below, then press Start.</h4>
+            <br>
+            <div class="form-group">
+              <label for="prolific_pid_input">Prolific ID</label>
+              <input type="text" class="form-control input-lg" id="prolific_pid_input"
+                     maxlength="64" autocomplete="off" spellcheck="false"
+                     placeholder="e.g. 5f8ac81dcd1c9a0e8bb129c4">
+            </div>
+            <p id="prolific_pid_error" class="text-danger" style="display: none;">
+              Please enter a valid Prolific ID (letters and numbers only, no spaces).
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary btn-lg" id="prolific_start_btn">Start</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="container" style="height:90%">
       <!-- instructions at top of page -->
       <div id="top_instructions" class="row" >
@@ -62,7 +89,7 @@
       </div>
       <!-- widget wrapper -->
       <div id="wrapper">
-        <center><h1>Loading...</h1></center>
+        <center><h1>Waiting to start...</h1></center>
       </div>
     <!--
     <div class="navbar navbar-default navbar-fixed-bottom" style="height: 2em; min-height: 20px;">
@@ -86,14 +113,14 @@
       var debrief_link_success = "{{experiment['args']['debrief_link']|safe}}";
       var debrief_link_fail = "{{experiment['args']['debrief_link_fail']|safe}}";
 
+      // Prolific ID prefill from the ?participant= URL parameter (passed through by Flask).
       {% if participant_uid %}
-      var participant_uid = "{{ participant_uid }}";
+      var prefill_uid = "{{ participant_uid }}";
       {% else %}
-      var participant_uid = next_widget.makeRandomString(30);
+      var prefill_uid = "";
       {% endif %}
 
-      $('#participant_uid').html(participant_uid);
-      //$('#participant_uid_bottom').html(participant_uid);
+      var participant_uid = null;  // set when the participant confirms their Prolific ID
       var args = {
           name: "getQuery",
           exp_uid: exp_uid,
@@ -132,7 +159,29 @@
           $('#debrief').modal('show');
         }
       }
-      next_widget.getQuery(div_id, args, callbacks);
+
+      function startExperiment() {
+        var pid = $.trim($('#prolific_pid_input').val());
+        if (pid === "" || !/^[A-Za-z0-9]+$/.test(pid)) {
+          $('#prolific_pid_error').show();
+          $('#prolific_pid_input').focus();
+          return;
+        }
+        participant_uid = pid;
+        args.args.participant_uid = participant_uid;
+        $('#participant_uid').html(participant_uid);
+        //$('#participant_uid_bottom').html(participant_uid);
+        $('#prolific_modal').modal('hide');
+        next_widget.getQuery(div_id, args, callbacks);
+      }
+
+      $('#prolific_start_btn').on('click', startExperiment);
+      $('#prolific_pid_input').on('keypress', function(e) { if (e.which === 13) startExperiment(); });
+      $('#prolific_pid_input').on('input', function() { $('#prolific_pid_error').hide(); });
+      $('#prolific_modal').on('shown.bs.modal', function() { $('#prolific_pid_input').focus(); });
+
+      $('#prolific_pid_input').val(prefill_uid);
+      $('#prolific_modal').modal('show');
     </script>
   </body>
 </html>

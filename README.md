@@ -161,7 +161,10 @@ The NEXT platform uses Docker to house and manage all services. You will need to
    
 - **Python Environment Setup** -
 In order to launch experiments from the terminal, you will need to have a Python environment setup with the required dependencies installed. Install Python virtual-env with:
-  - ``` sudo apt update ```
+  - ```sudo apt update ```
+  - ```sudo add-apt-repository ppa:deadsnakes/ppa```
+  - ```sudo apt update```
+  - ```sudo apt install python3.12-full```
   - ``` sudo apt install python3.12-venv ``` 
   
   Now you can create virtual environments to install Python packages. Cd into the ``` NEXT/local/``` and run the following:
@@ -210,6 +213,20 @@ You now have created and activated a Python environment named local-venv. You ha
 - **Monitor System Performance**
   - It is always a good idea to monitor and test system performance. This can inform you about the needs of your system and about which processes or services are consuming resources. 
     - **Cadvisor** allows you to monitor cpu, memory, and disk usage on the system wide level, as well as per process and per container. We have implemented a password protected version for you. The default user and password is admin and password. To change these, simply change the content in the ```cadvisor_user.txt``` and ```cadvisor_password.txt``` files respectively. The docker environment will use these to set the username and password for cadvisor. To sign into cadvisor, go to this url: ``` instance-public-ipaddress/cadvisor ```
+
+### 3.4. Linking Participants to Prolific / Qualtrics IDs
+- Before the first query, every participant is shown a popup asking for their **Prolific ID**. The entered ID becomes their `participant_uid`, so it appears on every response row in the downloaded JSON/CSV participant data (see 3.3).
+- The popup is **pre-filled automatically** when the query page URL carries a `participant` parameter:
+  ```
+  http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=PROLIFIC_ID
+  ```
+- Recommended funnel setup (Prolific → Qualtrics → NEXT):
+  - Set the Prolific study URL to your Qualtrics survey with the ID appended: ```https://your-qualtrics-survey-url?PROLIFIC_PID={{%PROLIFIC_PID%}}```
+  - In the Qualtrics Survey Flow, add an **Embedded Data** element named ```PROLIFIC_PID``` (its value is taken from the URL parameter automatically).
+  - Set the Qualtrics End-of-Survey redirect to: ```http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=${e://Field/PROLIFIC_PID}```
+  - If the parameter is ever missing, the popup simply shows an empty box and the participant types their ID by hand — nothing breaks.
+- **Analysis note:** the exported `participant_uid` is prefixed with the experiment UID (i.e. `EXPUID_PROLIFICID`). Strip the prefix (or match by suffix) when joining against Qualtrics/Prolific records.
+- Only the main query page (`/query/query_page/query_page/...`) has this feature. Do not send participants to `query_page_popup`.
   
 ---
 
@@ -220,12 +237,72 @@ You now have created and activated a Python environment named local-venv. You ha
 
 ### 4.2. Shutdown the application
   - Go to ```Next/local ```.
-  - Run ``` docker-compose down --remove-orphans ``` to stop all the running containers as well as clear caches.
+  - Run ``` docker-compose stop ``` to stop all the running containers.
+  - **WARNING — never run `docker-compose down` and never run `docker volume prune`.** The MongoDB data lives in an *anonymous* Docker volume: `down` deletes the containers and orphans that volume, so the next `./docker_up.sh` starts with an **empty database** while your old data sits stranded in a dangling volume (this has happened on this instance — see 5.5 for recovery). `./docker_up.sh` itself uses `stop` + `up`, which is safe.
+  - Always use `docker-compose` (v1, with the hyphen), not `docker compose` (v2). v2 uses a different project naming scheme, attaches fresh empty volumes, and the database will silently appear empty.
 ### 4.3. Shutdown Amazon EC2 instance
   - Go to ```EC2 > Instances ``` webpage.
   - Check the current instance in the list.
   - Find the ```Instance state ``` radio button on the top and choose Stop instance.
 
-## 5. Link to Media Instructions
+## 5. Data Management: Backup, Cleanup, and Recovery
+
+### 5.1. Where the data lives
+- All experiment data is in MongoDB inside the `local_mongodb_1` container (MongoDB 7.0 — use ```mongosh```; the legacy ```mongo``` shell does not exist in this image).
+- Database ```app_data```: per-app collections (e.g. ```ARankB:queries``` — one document per query including the answer and `participant_uid`, ```ARankB:participants```, ```ARankB:experiments```, ```ARankB:algorithms``` — algorithm/model state, ```ARankB:dashboard```, ```ARankB:other```), plus the global ```experiments_admin``` (experiment index) and ```targets``` (target sets, re-inserted on every launch).
+- Database ```logs```: ```<app>:APP-EXCEPTION```, ```<app>:ALG-DURATION```, ```<app>:ALG-EVALUATION``` (these grow fastest).
+- The database files live in an anonymous Docker volume mounted at ```/data/db```. Redis and RabbitMQ hold only transient task state, and ```local/media/``` is static files — neither ever needs cleaning.
+
+### 5.2. Inspecting the database
+```
+# collection counts and sizes
+docker exec local_mongodb_1 mongosh app_data --quiet --eval 'db.getCollectionNames().forEach(c=>print(c, db[c].countDocuments({}), (db[c].stats().storageSize/1048576).toFixed(1)+"MB"))'
+# list experiments, newest first
+docker exec local_mongodb_1 mongosh app_data --quiet --eval 'db.experiments_admin.find({},{exp_uid:1,app_id:1,start_date:1}).sort({start_date:-1}).forEach(printjson)'
+```
+
+### 5.3. Backup (always do this before any cleanup)
+The dashboard's database "Download" button and the S3 backup scripts are broken legacy code — do not rely on them. The reliable route (the dump lands on the host at ```NEXT/local/backup_YYYY-MM-DD/```):
+```
+docker exec local_mongodb_1 mongodump --host 127.0.0.1 --port 27017 --out /next_backend/local/backup_$(date +%F)
+```
+Per-experiment participant data can also always be downloaded from the dashboard as JSON/CSV (see 3.3).
+
+### 5.4. Cleanup between data collections
+There is no working delete function in the app ("retire" only hides an experiment from the dashboard — the data stays). Cleaning is manual:
+```
+# delete ONE experiment's data (set the app name and experiment UID first)
+docker exec local_mongodb_1 mongosh app_data --quiet --eval '
+ var a="ARankB", u="EXP_UID_HERE";
+ ["queries","participants","experiments","algorithms","dashboard","other"].forEach(function(c){
+   printjson({coll:a+":"+c, deleted: db[a+":"+c].deleteMany({exp_uid:u}).deletedCount});});
+ printjson({targets: db.targets.deleteMany({exp_uid:u}).deletedCount});
+ printjson({admin: db.experiments_admin.deleteMany({exp_uid:u}).deletedCount});'
+docker exec local_mongodb_1 mongosh logs --quiet --eval '
+ var a="ARankB", u="EXP_UID_HERE";
+ ["APP-EXCEPTION","ALG-DURATION","ALG-EVALUATION"].forEach(function(c){
+   printjson({coll:a+":"+c, deleted: db[a+":"+c].deleteMany({exp_uid:u}).deletedCount});});'
+
+# OR: full reset (wipes ALL experiments in both databases)
+docker exec local_mongodb_1 mongosh --quiet --eval 'db.getSiblingDB("app_data").dropDatabase(); db.getSiblingDB("logs").dropDatabase()'
+```
+Indexes are recreated automatically the next time an experiment is launched.
+
+### 5.5. Recovering data from an orphaned volume
+If ```docker-compose down``` was ever run (see 4.2), the previous database usually survives in a dangling volume:
+```
+docker volume ls -qf dangling=true                      # candidate volumes
+sudo du -sh /var/lib/docker/volumes/VOLUME_HASH/_data   # a real mongo dbpath is 100s of MB
+```
+Recover by mounting the volume in a throwaway mongod (re-using the image the stack already built), dumping, and copying out:
+```
+docker run --rm -d --name mongo_recovery -v VOLUME_HASH:/data/db local_mongodb:latest mongod
+docker exec mongo_recovery mongodump --out /tmp/recovered
+docker cp mongo_recovery:/tmp/recovered ./recovered_dump
+docker stop mongo_recovery    # container auto-removes; the volume itself is untouched
+```
+Then ```mongorestore``` the dump into the live database if desired. As of Aug 2026 this instance has one such orphaned volume (~441 MB, data from Oct 2025–Mar 2026) — do not prune it.
+
+## 6. Link to Media Instructions
 ``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_1/1_p9fujklo ```
 ``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_2/1_ucyud9f3```
