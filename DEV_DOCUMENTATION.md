@@ -42,12 +42,41 @@ The NEXT framework follows a hierarchical structure where data flows between end
 3. Renders the user interface for participants to interact with
 4. Collects and processes participant responses
 
-This endpoint-based architecture enables smooth data flow and experiment management throughout the query lifecycle. To facilitate your task, I will break down the work flow into levels and more specispecficallyfically, files, that you would necessarily have to edit/rewrite:
+This endpoint-based architecture enables smooth data flow and experiment management throughout the query lifecycle. To facilitate your task, I will break down the work flow into levels and more specifically, files, that you would necessarily have to edit/rewrite:
 1. **Template Level**: A YAML file that contains experiment-related flags and parameters ([Step 1](#step-1-create-the-template-configuration))
 2. **App Level**: A YAML file that decides what arguments get passed into/return from which function in the following python file  -> A python file that fetches, processes those arguments and passes them onto a deeper, algo-level handler ([Step 2](#step-2-create-app-configuration--implementation))
 3. **Algorithm Level**: A YAML file that decides what arguments get passed into/return from which function in the following python file -> A python file that runs your algorithm to generate the actual query ([Step 3](#step-3-create-algorithm-configuration--implementation))
 4. **Widget Level**: A HTML file that renders the query interface based on the result generated from you algorithm ([Step 4](#step-4-create-the-widget-interface))
 ![FlowChart](picRef/Flow_Chart.png)
+
+The diagram below is the maintained (text-based) version of the flow chart above, extended with the pieces added in 2026: the Prolific ID modal that gates the first `getQuery`, the trap-question branch, and the fact that the participant's `query_id` counter advances in `processAnswer` (see "Framework Contracts" below):
+
+```mermaid
+flowchart TB
+    Host(["Host"]) -->|"python launch.py yourQuery.yaml"| initExp
+    subgraph initExp["initExp"]
+        direction TB
+        I1["myApp.yaml initExp args"] --> I2["myApp.py initExp()"]
+        I2 --> I3["myAlg.py initExp() per algorithm"]
+    end
+    Participant(["Participant"]) -->|"open query page"| Modal["Prolific ID modal<br>pre-filled from ?participant="]
+    Modal -->|"Start"| getQuery
+    subgraph getQuery["getQuery"]
+        direction TB
+        G1["myApp.py getQuery()<br>reads query_id slot k"] --> G2{"trap slot?"}
+        G2 -->|"no"| G3["myAlg.py getQuery()<br>active learning selection"]
+        G2 -->|"yes"| G4["trap target served<br>algorithm returns nothing"]
+        G3 --> G5["getQuery_widget.html rendered"]
+        G4 --> G5
+    end
+    getQuery -->|"next_widget.processAnswer()"| processAnswer
+    subgraph processAnswer["processAnswer"]
+        direction TB
+        P1["myApp.py processAnswer()<br>query_id becomes k+1"] --> P2["myAlg.py processAnswer()<br>updates embedding state"]
+    end
+    processAnswer -->|"queries remaining"| getQuery
+    processAnswer -->|"all answered"| Debrief["debrief screen"]
+```
 
 The following sections will provide concrete example for the above illustration. In most cases, since the YAML file defines the parameters that get passed to the corresponding functions in the Python files, **it's crucial that these align properly.** 
 
@@ -56,9 +85,10 @@ The following sections will provide concrete example for the above illustration.
 Before starting development, please note these critical system constraints and best practices:
 
 #### **Docker Storage Management**
-- **Docker storage can overflow during development** - run `docker system prune` regularly to clear build cache
+- **Docker storage can overflow during development** - run `docker builder prune` regularly to clear build cache
 - Monitor Docker disk usage: `docker system df`
-- If you see storage issues, run: `docker system prune -a --volumes`
+- 🚨 **NEVER run `docker system prune --volumes`, `docker volume prune`, or `docker-compose down`.** All collected experiment data lives in an *anonymous* Docker volume mounted at `/data/db` in the MongoDB container — these commands delete or orphan it, and the next startup silently begins with an **empty database**. See README §4.2 (safe shutdown) and §5 (backup/cleanup/recovery). Safe cleanup is `docker builder prune` (build cache) or `docker image prune` (dangling images only).
+- Always use `docker-compose` (v1, with the hyphen), never `docker compose` (v2) — v2 uses different project naming and attaches fresh empty volumes.
 
 #### **Memory Constraints**
 - **Each Celery worker has ~5GB free memory** for task processing
@@ -153,7 +183,7 @@ my_dict:
 
 ### 2.1 Create Directory Structure
 
-Copy and paste any query folder inside `/home/ubuntu/NEXT/apps`. Rename it to  `newQuery`.
+Copy and paste any query folder inside `/home/ubuntu/NEXT/apps`. Rename it to  `NewQuery` (matching the casing used in the paths below).
 
 ### 2.2 Edit `apps/NewQuery/myApp.yaml`
 
@@ -286,9 +316,12 @@ class MyApp:
         """
         participant_uid = args.get('participant_uid', butler.exp_uid)
         
-        # Track participant's query count using butler.participants
+        # Track participant's progress using butler.participants.
+        # query_id is READ here but INCREMENTED only in processAnswer, so a
+        # query that is served but never answered (participant refreshed the
+        # page) does not consume the slot - the next getQuery re-serves it.
         if not butler.participants.exists(uid=participant_uid, key='query_id'):
-            butler.participants.set(uid=participant_uid, key='query_id', value=0)
+            butler.participants.set(uid=participant_uid, key='query_id', value=1)
         
         query_id = butler.participants.get(uid=participant_uid, key='query_id')
         
@@ -306,9 +339,13 @@ class MyApp:
         # Call algorithm to generate query
         alg_response = alg(alg_args)
         
-        # Increment participant's query count
-        butler.participants.increment(uid=participant_uid, key='query_id')
-        
+        # Include query_id and total_queries in the returned dict so the query
+        # page can resume a refreshed participant at the right position (see
+        # "Framework Contracts: refresh-resume" below). total_queries is the
+        # number of answers you expect from one participant (num_tries plus
+        # trap questions, in ARankB's case).
+        alg_response.update({'query_id': query_id,
+                             'total_queries': experiment['args']['num_tries']})
         return alg_response
 
     def processAnswer(self, butler, alg, args):
@@ -316,6 +353,7 @@ class MyApp:
         Process the participant's answer.
         
         This function is called when a participant submits an answer. It:
+        - Advances the participant's query_id counter (answered slots only)
         - Records the answer and response time
         - Updates experiment statistics
         - Calls the algorithm to process the answer (for active learning)
@@ -327,6 +365,11 @@ class MyApp:
         """
         query = butler.queries.get(uid=args['query_uid'])
         experiment = butler.experiment.get()
+        
+        # query_id counts ANSWERED queries. Incrementing here (not in
+        # getQuery) makes a page refresh cost zero queries: the abandoned
+        # on-screen query is re-served at the same slot. See apps/ARankB/myApp.py.
+        butler.participants.increment(uid=args['participant_uid'], key='query_id')
         
         # Track number of answers
         num_reported_answers = butler.experiment.increment(
@@ -356,15 +399,36 @@ class MyApp:
 
     def format_responses(self, responses):
         """
-        Format responses for display.
+        Shape query documents into flat rows for the dashboard CSV download.
         
-        This function is called to format raw response data for display in the
-        experiment dashboard or analysis tools.
+        This function drives the CSV that experimenters download from the
+        dashboard (GET /api/experiment/<exp_uid>/participants?csv=1&zip=1 ->
+        next/api/resources/participants.py parse_responses -> this method ->
+        pandas DataFrame -> csv). It receives the raw query documents and must
+        return a LIST OF FLAT DICTS, one per row.
+        
+        Rules learned the hard way (see apps/ARankB/myApp.py for the full
+        reference implementation):
+        - Skip documents without an answer (no 'target_winner' key): these are
+          queries that were served but never answered, e.g. abandoned by a
+          page refresh.
+        - Numbers submitted by the browser arrive as floats, numbers from API
+          clients as ints - coerce before comparing (int(float(x))).
+        - Drop non-scalar keys ('_id', nested target lists) or pandas will
+          emit unusable list-valued columns.
         
         Args:
-            responses: Raw response data from the experiment
+            responses: List of query documents for the experiment
         """
-        return [responses]
+        formatted = []
+        for response in responses:
+            if 'my_answer_key' not in response:
+                continue
+            row = {key: value for key, value in response.items()
+                   if key not in ('q', '_id', 'target_items')}
+            # ...derive any human-readable columns here...
+            formatted += [row]
+        return formatted
 ```
 
 ### 2.4 Understanding the Butler System
@@ -385,10 +449,11 @@ butler.algorithms.set(key='model_state', value={'weights': [1, 2, 3], 'bias': 0.
 
 **`butler.participants`**: Store participant-specific data
 ```python
-# Store participant progress
-butler.participants.set(uid=participant_uid, key='query_id', value=0)
+# Seed participant progress on first contact (in getQuery)
+butler.participants.set(uid=participant_uid, key='query_id', value=1)
 
-# Increment counters
+# Increment counters - do this in processAnswer, NOT in getQuery, so that a
+# served-but-unanswered query (page refresh) is re-served instead of burned
 butler.participants.increment(uid=participant_uid, key='query_id')
 
 # Check if data exists
@@ -609,12 +674,83 @@ class MyAlg:
 
 ### 4.1 Edit `apps/NewQuery/widgets/getQuery_widget.html`
 
-This is the final step where you integrate the user interface that renders your query. It should be standard a HTML, CSS, Javascript all in one Jinja 2 template.To better explain how it would look like, an UI rendered by `apps/ARankB/widgets/getQuery.html` is attached below. ![ARankB_UI_Illustration](picRef/ARankB_UI_Illustration.png) Note that you do not have to understand the entire functionality of this particular file as your query will more than likely look and work very differently from it. The goal is to give you a big picture.
+This is the final step where you integrate the user interface that renders your query. It should be standard a HTML, CSS, Javascript all in one Jinja 2 template.To better explain how it would look like, an UI rendered by `apps/ARankB/widgets/getQuery_widget.html` is attached below. ![ARankB_UI_Illustration](picRef/ARankB_UI_Illustration.png) Note that you do not have to understand the entire functionality of this particular file as your query will more than likely look and work very differently from it. The goal is to give you a big picture.
 
 **⚠️ Key Takeaway**: 
 1. Your UI is inserted into a larger frame created by `next/query_page`. When your implementation fails, the `widget_failure()` function in `next_widget.js` will be triggered, showing a pre-coded debrief screen. Study `next_widget.js` to understand the integration points and error handling.
-2.  To access an argument within the dictionary returned from `getQuery()` that you wrote at app level, use `{{query.your_arg]}}`.
+2.  To access an argument within the dictionary returned from `getQuery()` that you wrote at app level, use `{{query.your_arg}}`.
 3. In your `submit()` function, make sure to call `next_widget.processAnswer(participant_response)`.
+4. The query page (`next/query_page/templates/query_page.html`) has **four terminal states**: (a) the success debrief after the last answer, (b) an immediate debrief when a finished participant reloads the page (`query_id > total_queries`), (c) `widget_failure()` → failure debrief on any failed request (this includes an expelled trap-failing participant), and (d) the pre-experiment Prolific ID modal that gates everything. Your experiment template should therefore always define all four yaml keys: `debrief`, `debrief_fail`, `debrief_link`, `debrief_link_fail` — a template with only `debrief` renders empty strings for the rest.
+
+---
+
+## Framework Contracts (added 2026)
+
+These are page-level behaviors every app developer should know about. They live in `next/query_page/templates/query_page.html` and the API layer, not in your app — but your app's `getQuery`/`processAnswer` decide whether your experiment benefits from them.
+
+### Participant identity and the Prolific ID modal
+
+Participants are identified by an ID they confirm in a modal **before the first query**:
+
+1. The query page URL may carry `?participant=<ID>` (e.g. appended by a Qualtrics end-of-survey redirect). `next/query_page/query_page.py` reads it and pre-fills the modal input.
+2. The participant confirms or types their ID (validated against `/^[A-Za-z0-9]+$/`); nothing is requested from the server until they press Start.
+3. The confirmed value is sent as `participant_uid` with every `getQuery`, and the server prefixes it with the experiment UID (`next/api/resources/get_query.py`), so the stored/exported value is `EXPUID_ENTEREDID`. Your widget must echo `{{ query.participant_uid }}` (already prefixed) in its `processAnswer` calls.
+4. The ID lands on every query document and flows into the JSON/CSV exports — that is the entire linking mechanism to external systems like Prolific.
+
+⚠️ Only `query_page.html` has this flow. The legacy templates `query_page_popup.html` and `queries_unlimited.html` still generate a **random** 30-character ID on every page load (no resume, no linking) — do not send participants there.
+
+### The refresh-resume contract
+
+The page derives the participant's remaining-query countdown from the server on every query, so a page refresh resumes instead of restarting:
+
+```mermaid
+flowchart TD
+    A["Query k shown on screen<br>server counter = k"] --> B{"What does the<br>participant do?"}
+    B -->|"answers"| C["Counter moves to k+1"]
+    B -->|"refreshes the page"| D["Counter stays at k<br>nothing was consumed"]
+    D --> E["Query k is served again<br>zero progress lost"]
+    E --> B
+    C --> F{"Was that the<br>last query?"}
+    F -->|"no"| A
+    F -->|"yes"| G["Debrief shown"]
+    G -.->|"revisits the page later"| H["Counter is already past the total<br>debrief shown immediately"]
+```
+
+What your app must do to opt in (ARankB is the reference):
+- Return `query_id` and `total_queries` from `getQuery`. The page then computes `tries = total_queries - query_id` after every query, and `tries < 0` sends a finished participant straight to the debrief.
+- Seed the counter in `getQuery` but **increment it only in `processAnswer`** — that is what makes a served-but-unanswered query re-servable rather than burned.
+- Apps that return neither field fall back to the legacy behavior: a client-side countdown seeded from `num_tries` that restarts on every page load.
+
+### Trap questions (ARankB reference implementation)
+
+Attention checks that are visually indistinguishable from real queries:
+
+```mermaid
+flowchart TD
+    subgraph browser["In the browser"]
+        A["Trap slot reached"] --> B["Question shown in the<br>purple Target card"]
+        B --> C["Options shuffled into the pool<br>as normal-looking cards"]
+        C --> D["Participant ranks ALL cards"]
+        D --> E{"Correct option<br>ranked first?"}
+    end
+    E -->|"yes"| F["trapped = false"]
+    E -->|"no"| G["trapped = true"]
+    subgraph server["On the server"]
+        F --> H["Answer recorded<br>next query served"]
+        G --> I["num_trapped + 1"]
+        I --> J{"Tolerance<br>exceeded?"}
+        J -->|"no"| H
+        J -->|"yes"| K["participant_failed<br>failure debrief shown"]
+    end
+```
+
+Key facts:
+- **Data format** (targetset entries after the regular targets): `primary_description` is the comma-separated option list and **the first option is the correct answer**; `alt_description` is the question shown in the anchor card. The separator is exactly `", "`.
+- **Scheduling** is a pure function of the participant's `query_id` (`apps/ARankB/myApp.py`), so a refreshed participant sees the trap at the same slot. `total_queries = num_tries + trap_count`.
+- **Scoring is client-side**: the widget checks whether the leftmost ranked card's text equals the correct option, and only sends the boolean. The payload is always the sentinel `target_winner=[0]` plus `trapped` — trap answers contribute **nothing** to the active-learning algorithm (the comparison lists extract empty from `[0]`), they only advance the head counter.
+- **Escape/expulsion** (`myApp.processAnswer` + `myAlg.processAnswer`): each wrong trap increments `num_trapped`; reaching `tolerance × num_trap_questions` sets `participant_failed`, and with `expel: true` the offending answer raises — the failed request triggers `widget_failure()` and the participant lands on the failure debrief.
+- **In the CSV export** trap rows keep `isTrap=True` and have intentionally blank ranking columns.
+
 ---
 
 ## Step 5: Testing Your Implementation
@@ -672,9 +808,46 @@ For any active learning query involving video generation, the **only viable solu
 
 This approach ensures that query generation remains fast and memory-efficient while still supporting video-based experiments.
 
+### 5.4 Inspecting the Database (Developer Quick Reference)
+
+All experiment data lives in MongoDB inside the `local_mongodb_1` container. The image ships **`mongosh` only** — the legacy `mongo` shell does not exist, and any old snippet using it will fail.
+
+```mermaid
+flowchart LR
+    B["Browser<br>participants + dashboard"] --> N["nginx"]
+    N --> A["API server<br>Flask + gunicorn"]
+    A -->|"queue jobs"| Q["RabbitMQ"]
+    Q --> W["Celery workers<br>app + algorithm code"]
+    W --> DB
+    A -->|"JSON / CSV downloads"| DB
+    subgraph DB["MongoDB - anonymous volume /data/db - never prune"]
+        D1["app_data<br>queries, participants,<br>experiments, algorithms"]
+        D2["logs<br>timings + exceptions"]
+    end
+```
+
+Where things live: `app_data` holds one document per query (including the answer and `participant_uid`) in `<app>:queries`, per-participant state (`query_id`, algorithm state such as embeddings) in `<app>:participants`, experiment configs in `<app>:experiments`, model state in `<app>:algorithms`, plus global `experiments_admin` (the experiment index) and `targets` (target sets, re-inserted per launch). `logs` grows fastest (`ALG-DURATION` per algorithm call).
+
+Quick inspection (read-only, safe while an experiment runs):
+
+```bash
+# collection counts and sizes
+docker exec local_mongodb_1 mongosh app_data --quiet --eval 'db.getCollectionNames().forEach(c=>print(c, db[c].countDocuments({}), (db[c].stats().storageSize/1048576).toFixed(1)+"MB"))'
+
+# list experiments, newest first
+docker exec local_mongodb_1 mongosh app_data --quiet --eval 'db.experiments_admin.find({},{exp_uid:1,app_id:1,start_date:1}).sort({start_date:-1}).forEach(printjson)'
+
+# backup everything (lands on the host at NEXT/local/backup_YYYY-MM-DD/)
+docker exec local_mongodb_1 mongodump --host 127.0.0.1 --port 27017 --out /next_backend/local/backup_$(date +%F)
+```
+
+For cleanup between data collections and recovery of orphaned volumes, follow README §5 — those procedures are deliberately documented once, in the user guide, because they delete data.
+
 ---
 
 ## Step 6: Using stress_test.py
+
+**⚠️ Known limitation (2026):** `stress_test.py` predates the Prolific ID modal and currently **hangs on every simulated user** — the modal blocks the page (static backdrop) and the script never fills it. Before using it, the script needs a small update: after page load, fill `#prolific_pid_input` with a generated ID and click `#prolific_start_btn`, then proceed with the existing wait-for-`#submit` logic.
 
 The `stress_test.py` file is located in the `local/` directory and is used for load testing your experiments.
 
@@ -769,7 +942,7 @@ Before testing, verify these alignments:
 5. **Document Assumptions**: Comment your code to explain the expected data flow
 6. **Version Control**: Use meaningful commit messages when making changes
 7. **Memory Management**: Monitor memory usage and stay within 5GB limit per worker
-8. **Docker Maintenance**: Run `docker system prune` regularly to prevent storage overflow
+8. **Docker Maintenance**: Run `docker builder prune` regularly to prevent storage overflow — never `--volumes`, `docker volume prune`, or `docker-compose down` (they destroy/orphan the MongoDB data volume; see the Docker Storage Management note above)
 9. **Resource Strategy**: Store large media files and let frontend handle rendering
 10. **Reference Existing Code**: Study and adapt patterns from existing apps like ARankB, PAQ
 

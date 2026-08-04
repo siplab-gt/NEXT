@@ -76,7 +76,6 @@ class MyApp:
                     target_indices = [trap_index]
                 isTrap = True
         
-        butler.participants.increment(uid=participant_uid, key='query_id')
         # if isTrap is true, alg will return an empty list; else, alg will return a list of target indices
         target_indices.extend(alg({'participant_uid': participant_uid, 'isTrap': isTrap}))
         target_items = []
@@ -95,6 +94,9 @@ class MyApp:
         target_winner = args['target_winner']
         participant_uid = args['participant_uid']
         trapped = args['trapped']
+        # query_id counts answered queries: a served-but-unanswered query (page
+        # refresh) does not consume the slot and gets re-served on the next getQuery
+        butler.participants.increment(uid=participant_uid, key='query_id')
         experiment = butler.experiment.get()
         num_reported_answers = butler.experiment.increment(
             key='num_reported_answers_for_' + query['alg_label'])
@@ -133,16 +135,31 @@ class MyApp:
                        for target in response['target_items']}
             ids = {target['label'] + '_id': target['target_id']
                    for target in response['target_items']}
-            winner = {t['target_id'] == response['target_winner']: (t['primary_description'], t['target_id'])
-                      for t in response['target_items']}
-            response.update(
-                {'target_winner': winner[True][0], 'winner_id': winner[True][1]})
+            # target_winner is [anchor, ranked..., unranked...]; ids arrive as
+            # floats from the widget and ints from API clients, and trap
+            # questions store the sentinel [0] rather than a target_id
+            descriptions = {int(t['target_id']): t['primary_description']
+                            for t in response['target_items']}
+            winner_ids = response['target_winner']
+            if not isinstance(winner_ids, list):
+                winner_ids = [winner_ids]
+            winner_ids = [int(float(w)) for w in winner_ids]
 
-            for key in ['q', '_id', 'target_items']:
-                if key in response:
-                    del response[key]
-            response.update(targets)
-            response.update(ids)
-            formatted += [response]
+            ranking = {}
+            if not response.get('isTrap', False) and winner_ids:
+                num_ranked = int(response.get('B', len(winner_ids) - 1))
+                ranking['anchor_id'] = winner_ids[0]
+                ranking['anchor'] = descriptions.get(winner_ids[0], '')
+                for k, wid in enumerate(winner_ids[1:1 + num_ranked]):
+                    ranking['rank_{}_id'.format(k + 1)] = wid
+                    ranking['rank_{}'.format(k + 1)] = descriptions.get(wid, '')
+
+            row = {key: value for key, value in response.items()
+                   if key not in ('q', '_id', 'target_items', 'targets')}
+            row['target_winner'] = winner_ids
+            row.update(targets)
+            row.update(ids)
+            row.update(ranking)
+            formatted += [row]
 
         return formatted
