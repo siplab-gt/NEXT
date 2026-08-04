@@ -15,6 +15,7 @@
   - Clicking on an item in the red box transfers it to the green box, while clicking on an item in the green box returns it to the red box.
   - To arrange the items, simply drag and drop them within the green box.
   - A participant can only submit their response when exactly $B$ items are in the green box.
+  - Exception: on trap questions (see below), participants must rank **all** of the option cards, not exactly $B$.
 - **Dynamic Sampling Algorithm:** 
   Each query is generated dynamically by some algorithm.
   - Random Sampling: Implements a basic approach by randomly selecting $A+1$ items from all user-provided targets.
@@ -24,8 +25,9 @@
 - **Trap Question Mechanism:**
   A Rank B includes a trap question system to ensure data quality by identifying inattentive or dishonest participants.
   - **Purpose:** Trap questions are designed to catch participants who are not paying attention or are providing random responses, helping maintain the quality of collected data.
-  - **Implementation:** Users can configure trap questions with various parameters including frequency, tolerance thresholds, and expulsion policies. Trap questions are stored in the target set after the regular targets and consist of simple attention-check questions with clear correct answers.
-  - **Example:** A trap question might ask "Choose the option with the word positive in it" with options "Positive, Negativity, War, Peace" where "Positive" is the correct answer.
+  - **Implementation:** Trap questions are stored in the target set after the regular targets. They are rendered to be **visually indistinguishable from a real query**: the attention-check instruction appears inside the same purple "Target" card that normally holds the anchor item, the answer options appear as ordinary cards in the red box (shuffled on every load), and the participant must rank **all** of the option cards into the green box, exactly like a normal question. Users can configure frequency, tolerance thresholds, and expulsion policies.
+  - **Scoring:** the answer counts as correct only if the correct option ends up ranked **first (leftmost)** in the green box; the order of the remaining options does not matter. In the target set, the first comma-separated option in `primary_description` is the correct answer and `alt_description` is the question shown in the purple card.
+  - **Example:** a trap question might show "Choose the option with the word positive in it." in the purple Target card with option cards "Positive, Negativity, War, Peace" — the participant must rank all four, with "Positive" placed first to pass.
   - **Configuration:** Users can modify trap question settings including enabling/disabling traps, setting frequency, tolerance levels, and expulsion policies. See template ```NEXT/local/template/ARankB-InfoTuple.yaml``` for detailed parameter explanations and configuration options.
 
 
@@ -204,9 +206,10 @@ You now have created and activated a Python environment named local-venv. You ha
 
 ### 3.3. Monitoring and Logging
 - **Monitor Data Collected/Metrics Computed in Real Time** 
-  - At the same dashboard page, you can spot ***Experiment data*** that contains all the experiment-related information including number of participants, number of reported answers, application ID, experiment unique ID, embedding(assuming dynamic sampling algorithms are applied), etc. 
+  - At the same dashboard page, you can spot ***Experiment data*** that contains all the experiment-related information including number of participants, number of reported answers, application ID, experiment unique ID, embedding(assuming dynamic sampling algorithms are applied), etc. Note: the participant count is the number of **distinct entered IDs** — a participant who refreshes and re-enters the same ID does not create a second participant.
 - **Download Participant Data**
-  - At the same dashboard page, you can spot ***Participant data*** that contains all the participant-related information including participant ID, response, decision_time, etc (actual content depends on types of query). You can download it in JSON or in CSV format. 
+  - At the same dashboard page, you can spot ***Participant data*** that contains all the participant-related information including participant ID, response, decision_time, etc (actual content depends on types of query). You can download it in JSON or in CSV format.
+  - **A Rank B CSV column key:** one row per answered query with `participant_uid` (the entered Prolific ID, prefixed by the experiment UID), `anchor`/`anchor_id` (the anchor item), `rank_1..rank_B` with matching `rank_k_id` columns (the participant's ranking, left to right), `target_position_k`/`position_k_id` (what was displayed), `isTrap`, `query_id`, and timing fields (`response_time`, timestamps). Trap rows intentionally have blank ranking columns (their raw answer is a sentinel, not a real ranking). Queries that were served but never answered (e.g. abandoned by a page refresh) are excluded from the CSV but remain in the JSON without a `target_winner` field.
 - **Tips on Customize Static Sampling Process with Example** 
   - In  ```Next/local/csv ``` folder, a example CSV file is provided as well as other simple python scripts that are used to extract information from the CSV file.
   It serves as an example of how you could transform each query from your source of file to dictionary format in ```*-init.yaml```. Files in this folder extract queries and initialize a Binary Word Sentinement Classification task introduced in section one. Set configs in ```config.yaml``` and launch experiment by running ```python easy_launch.py ```.
@@ -226,7 +229,7 @@ You now have created and activated a Python environment named local-venv. You ha
   - Set the Qualtrics End-of-Survey redirect to: ```http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=${e://Field/PROLIFIC_PID}```
   - If the parameter is ever missing, the popup simply shows an empty box and the participant types their ID by hand — nothing breaks.
 - **Analysis note:** the exported `participant_uid` is prefixed with the experiment UID (i.e. `EXPUID_PROLIFICID`). Strip the prefix (or match by suffix) when joining against Qualtrics/Prolific records.
-- **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — all prior answers are kept, and the query that was on screen is simply replaced by a fresh one at the same position, so no answers or progress are lost.
+- **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — a refresh costs **zero** queries: all prior answers are kept, and the unanswered query that was on screen is re-served at the same position, so the participant still answers the full configured number of queries. A participant who reloads the page after finishing is taken directly to the completion (debrief) screen instead of being served extra queries.
 - Only the main query page (`/query/query_page/query_page/...`) has this feature. Do not send participants to `query_page_popup`.
   
 ---

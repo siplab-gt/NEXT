@@ -15,6 +15,11 @@ python3.11
 `docker` can be installed via the [Docker install guide]. `docker-compose` can
 be installed via `pip install docker-compose`.
 
+**⚠️ Data-safety rules (read before touching Docker):**
+- Always use `docker-compose` (v1, with the hyphen), never `docker compose` (v2) — v2 uses a different project naming scheme, attaches fresh empty volumes, and the database will silently appear empty.
+- **Never run `docker-compose down`** and **never prune volumes** (`docker volume prune`, `docker system prune --volumes`). All collected experiment data lives in an *anonymous* Docker volume; these commands orphan or delete it. Stop with `docker-compose stop`. See the root README §4.2 and §5 for safe shutdown, backup, cleanup, and recovery procedures.
+- Note: `stress_test.py` currently predates the Prolific ID modal on the query page and will hang until it is updated to fill the modal first (see DEV_DOCUMENTATION.md, Step 6).
+
 Optionally, you need extra packages located in `local/requirements.txt` to run the `launch.py` and `stress_test.py` scripts in this directory:
 
 `python -m venv venv`
