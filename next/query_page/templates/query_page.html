@@ -143,10 +143,26 @@
         },
 
         getQuery_success: function(data){
-          tries -=1;
-          if (data.args.isTrap){
-            // add one try back if it's a trap question
-            tries +=1;
+          if (typeof data.args.query_id !== "undefined" && typeof data.args.total_queries !== "undefined") {
+            // Apps that report server-tracked progress (e.g. ARankB): remaining
+            // queries after this one. Survives page refreshes, so a participant
+            // re-entering the same ID resumes instead of restarting the countdown.
+            tries = data.args.total_queries - data.args.query_id;
+            if (tries < 0) {
+              // Participant already finished this experiment; go straight to debrief.
+              $('#wrapper').hide();
+              $('#debrief_text').html(debrief_success);
+              $('#debrief_link_section').show();
+              $('#debrief_link').attr('href', debrief_link_success);
+              $('#debrief').modal('show');
+              return;
+            }
+          } else {
+            tries -=1;
+            if (data.args.isTrap){
+              // add one try back if it's a trap question
+              tries +=1;
+            }
           }
           console.log("successfully got a query")
         },
