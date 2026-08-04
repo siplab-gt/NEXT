@@ -226,7 +226,7 @@ You now have created and activated a Python environment named local-venv. You ha
   - Set the Qualtrics End-of-Survey redirect to: ```http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=${e://Field/PROLIFIC_PID}```
   - If the parameter is ever missing, the popup simply shows an empty box and the participant types their ID by hand — nothing breaks.
 - **Analysis note:** the exported `participant_uid` is prefixed with the experiment UID (i.e. `EXPUID_PROLIFICID`). Strip the prefix (or match by suffix) when joining against Qualtrics/Prolific records.
-- **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — all prior answers are kept and the progress count continues; only the single query that was on screen at refresh time is skipped.
+- **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — all prior answers are kept, and the query that was on screen is simply replaced by a fresh one at the same position, so no answers or progress are lost.
 - Only the main query page (`/query/query_page/query_page/...`) has this feature. Do not send participants to `query_page_popup`.
   
 ---

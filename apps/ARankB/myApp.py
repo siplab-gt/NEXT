@@ -76,7 +76,6 @@ class MyApp:
                     target_indices = [trap_index]
                 isTrap = True
         
-        butler.participants.increment(uid=participant_uid, key='query_id')
         # if isTrap is true, alg will return an empty list; else, alg will return a list of target indices
         target_indices.extend(alg({'participant_uid': participant_uid, 'isTrap': isTrap}))
         target_items = []
@@ -95,6 +94,9 @@ class MyApp:
         target_winner = args['target_winner']
         participant_uid = args['participant_uid']
         trapped = args['trapped']
+        # query_id counts answered queries: a served-but-unanswered query (page
+        # refresh) does not consume the slot and gets re-served on the next getQuery
+        butler.participants.increment(uid=participant_uid, key='query_id')
         experiment = butler.experiment.get()
         num_reported_answers = butler.experiment.increment(
             key='num_reported_answers_for_' + query['alg_label'])
