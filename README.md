@@ -198,6 +198,12 @@ You now have created and activated a Python environment named local-venv. You ha
   - Run ```grep docker /etc/group``` and you should see some output similar to ```docker:x:999:ubuntu```.
   - Run ```newgrp docker``` to force group membership update and run ```id -nG```. 
   - Make sure you see  ```docker``` within the list of output. Then running ```./docker_up.sh``` should work.
+  - **Troubleshooting: `KeyError: 'ContainerConfig'` during startup.** docker-compose v1 has a known bug on Docker Engine 25+ that fires whenever it tries to *recreate* an existing container whose configuration changed — which happens routinely after new git commits (the worker's `GIT_HASH` env changes) or when you start with a different host/IP (the backend's env changes). The failed recreate can also leave a stranded container with a hash-prefixed name (e.g. `5df8..._local_minionworker_1`). Fix: delete only the **stateless** containers and start again —
+    ```
+    docker rm -f local_nextbackenddocker_1 local_minionworker_1
+    ./docker_up.sh YOUR_PUBLIC_IP
+    ```
+    (also `docker rm -f` any hash-prefixed leftover shown by `docker ps -a`). Freshly *created* containers don't trigger the bug; only recreation does. **Never `docker rm` the `local_mongodb_1` container** — unlike the backend/worker it owns the anonymous data volume, and removing it orphans your database (see §4.2 and §5). If compose ever insists on recreating `mongodb` itself, stop and take a backup first (§5.3).
   - Next, run ```source local-venv/bin/activate``` to activate a python virtual env.
   - Finally, you can launch the experiment with:
   ```python launch.py NAME_OF_YAML_FILE_YOU_CONFIGURED```. And to make sure the experiment has successfully launched, go to the home page of NEXT and find ***Experiment List***. Click it and you should be able to find the experiment you just launched by looking at the ***start date***. 
