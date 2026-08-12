@@ -50,10 +50,14 @@ Lab configs: `ARankB-InfoTuple-cog_rank{2,4,5,6}.yaml` and `cog_tutorial.yaml` i
 `local/`. The command prints the experiment UID; each launch creates a brand-new
 experiment (old data is untouched).
 
-- **⚠ Prolific completion codes are placeholders in git** (public repo). Before a
-  real launch, restore the study's codes into the config's `debrief_link` /
-  `debrief_link_fail` from the untracked `local/prolific_codes.local.txt` (or the
-  Prolific dashboard) — and don't commit them.
+- **⚠ Prolific completion codes live only in `*_live.yaml` configs**, which are
+  gitignored (`local/*_live.yaml`) because the GitHub repo is public — the tracked
+  configs carry `YOUR_SUCCESS_CODE` / `YOUR_FAILURE_CODE` placeholders. **Launch
+  real studies from the `_live` config**, e.g.
+  `ARankB-InfoTuple-cog_rank4_precompute_live.yaml` (rank4 + precompute) or
+  `ARankB-InfoTuple-cog_rank4_live.yaml` (rank4, no precompute). To regenerate one
+  after editing a tracked config, copy it to `<name>_live.yaml` and paste the codes
+  from `local/prolific_codes.local.txt`. Never put real codes in a tracked file.
 - **One-step-ahead precompute** (`precompute: true` in the YAML, off by default):
   `cog_rank4_precompute.yaml` is the production rank4 config with it enabled;
   `cog_rank4_sample_{pre,base}.yaml` are 32-query demos. Monitor with
