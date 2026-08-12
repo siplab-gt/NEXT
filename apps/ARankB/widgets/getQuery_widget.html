@@ -287,7 +287,11 @@
 </div>
 
 <div class="toRank-container-text">
+  {% if query.isTrap %}
+  Answer the question in the purple box: click your chosen option to move it into the green box below. You may move just one option (your answer) or rank several &mdash; only the FIRST (leftmost) option in the green box counts as your answer.
+  {% else %}
   Please click on the actions in the red box above to move them to the green box below. Click these actions IN ORDER FROM MOST SIMILAR (IN TERMS OF EFFORT) TO THE TARGET ACTION (in purple) to THE LEAST SIMILAR (IN TERMS OF EFFORT) TO THE TARGET ACTION.
+  {% endif %}
 </div>
 
 <!-- To Rank Container -->
@@ -349,8 +353,8 @@
 
   // For trap questions, get the correct answer and shuffle the words
   if (isTrapQuestion) {
-    // Rank all option cards, same interaction as a normal query; the answer
-    // counts as correct only when the correct option is ranked first
+    // Same click/drag interaction as a normal query, but any number of ranked
+    // cards (>= 1) is accepted; only the leftmost ranked card decides correctness
     trapB = document.querySelectorAll('#targets-container .target-container').length;
 
     const firstTarget = document.querySelector('.target-container');
@@ -597,11 +601,11 @@
       const targetsContainer = document.getElementById('targets-container');
       const unrankedTargets = Array.from(targetsContainer.querySelectorAll('.target-container'));
       
-      // For trap questions, all options must be ranked; only the first-ranked
-      // (leftmost) card decides correctness
+      // For trap questions, one or more ranked options are accepted; only the
+      // first-ranked (leftmost) card decides correctness
       if (isTrapQuestion) {
-        if (rankedTargets.length !== trapB) {
-          alert(`Please rank exactly ${trapB} targets.`);
+        if (rankedTargets.length < 1) {
+          alert('Please move at least one option into the green box before submitting.');
           resetSubmitButton();
           return;
         }
