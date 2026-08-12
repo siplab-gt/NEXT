@@ -42,3 +42,6 @@ nohup.out
 
 # local/docker-compose.yml
 # Miniconda3-latest-Linux-x86_64.sh
+# mongodump backups and scratch copies on the lab box
+local/backup_*/
+apps/ARankB/widgets/getQuery_widget copy.html
