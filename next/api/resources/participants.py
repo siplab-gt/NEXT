@@ -14,7 +14,7 @@ curl -X GET http://localhost:8001/api/experiment/[exp_uid]/participants
 from next.logging_client.LoggerAPI import LoggerAPI
 from io import StringIO
 import pandas as pd
-from flask import Flask, send_file, request, abort
+from flask import Flask, send_file, request, abort, Response
 from flask_restful import Resource, reqparse
 import traceback
 import json
@@ -107,13 +107,33 @@ class Participants(Resource):
             # Append participant query responses to list
             participant_responses[participant] = response
 
+        # Participant-level trap aggregates. num_trapped/participant_failed come
+        # from the participant docs, so they populate for pre-existing
+        # experiments that lack the per-query trapped field.
+        participant_info = resource_manager.get_participant_info(exp_uid)
+        participant_summaries = {}
+        for participant, response in participant_responses.items():
+            info = participant_info.get(participant, {})
+            participant_summaries[participant] = {
+                'num_trapped': info.get('num_trapped', 0),
+                'participant_failed': info.get('participant_failed', False),
+                'num_answers': (info.get('query_id') or 1) - 1,
+                'traps_seen': sum(1 for r in response if r.get('isTrap')),
+                'traps_answered': sum(1 for r in response
+                                      if r.get('isTrap') and 'target_winner' in r),
+            }
+
         if csv:
             responses = []
-            for participant in participant_uids:
-                response = resource_manager.get_participant_data(participant,
-                                                                 exp_uid)
+            for participant, response in participant_responses.items():
+                summary = participant_summaries.get(participant, {})
                 for r in response:
-                    responses += [r]
+                    row = dict(r)
+                    row['participant_num_trapped'] = summary.get('num_trapped')
+                    row['participant_failed_final'] = summary.get('participant_failed')
+                    row['participant_traps_seen'] = summary.get('traps_seen')
+                    row['participant_traps_answered'] = summary.get('traps_answered')
+                    responses += [row]
 
             try:
                 response_file = parse_responses(responses)
@@ -123,10 +143,11 @@ class Participants(Resource):
                 utils.debug_print(message)
                 return message
 
-        all_responses = {'participant_responses': participant_responses}
+        all_responses = {'participant_responses': participant_responses,
+                         'participant_summaries': participant_summaries}
         if zip_true:
             filename, content = ('responses.json', json.dumps(all_responses))
-            if request.args.get('csv'):
+            if csv:
                 filename, content = ('responses.csv', response_file.getvalue())
 
             zip_responses = BytesIO()
@@ -139,6 +160,8 @@ class Participants(Resource):
                              download_name=filename + '.zip',
                              as_attachment='True')
         else:
+            if csv:
+                return Response(response_file.getvalue(), mimetype='text/csv')
             return api_util.attach_meta(all_responses, meta_success), 200
 
 
