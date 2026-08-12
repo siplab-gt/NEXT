@@ -38,9 +38,9 @@ args:
   # text to display at the end if participant failed
   debrief_fail: FAIL 
   # link to display at the end if participant successfully answered all questions
-  debrief_link: https://www.amazon.com/ 
+  debrief_link: https://app.prolific.com/submissions/complete?cc=YOUR_SUCCESS_CODE # set your study's completion code before launching
   # link to display at the end if participant failed
-  debrief_link_fail: https://www.linkedin.com/ 
+  debrief_link_fail: https://app.prolific.com/submissions/complete?cc=YOUR_FAILURE_CODE # set your study's completion code before launching
   #-----------------------------------------------------------------------#
   # This is a generic instructions for the query page. To change other instructions, 
   # please look for div elements with class name "xxx-text" in the html file at 
