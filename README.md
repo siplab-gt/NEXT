@@ -15,7 +15,7 @@
   - Clicking on an item in the red box transfers it to the green box, while clicking on an item in the green box returns it to the red box.
   - To arrange the items, simply drag and drop them within the green box.
   - A participant can only submit their response when exactly $B$ items are in the green box.
-  - Exception: on trap questions (see below), participants must rank **all** of the option cards, not exactly $B$.
+  - Exception: on trap questions (see below), participants may move **one or more** of the option cards into the green box — moving just their chosen answer is enough.
 - **Dynamic Sampling Algorithm:** 
   Each query is generated dynamically by some algorithm.
   - Random Sampling: Implements a basic approach by randomly selecting $A+1$ items from all user-provided targets.
@@ -25,9 +25,9 @@
 - **Trap Question Mechanism:**
   A Rank B includes a trap question system to ensure data quality by identifying inattentive or dishonest participants.
   - **Purpose:** Trap questions are designed to catch participants who are not paying attention or are providing random responses, helping maintain the quality of collected data.
-  - **Implementation:** Trap questions are stored in the target set after the regular targets. They are rendered to be **visually indistinguishable from a real query**: the attention-check instruction appears inside the same purple "Target" card that normally holds the anchor item, the answer options appear as ordinary cards in the red box (shuffled on every load), and the participant must rank **all** of the option cards into the green box, exactly like a normal question. Users can configure frequency, tolerance thresholds, and expulsion policies.
-  - **Scoring:** the answer counts as correct only if the correct option ends up ranked **first (leftmost)** in the green box; the order of the remaining options does not matter. In the target set, the first comma-separated option in `primary_description` is the correct answer and `alt_description` is the question shown in the purple card.
-  - **Example:** a trap question might show "Choose the option with the word positive in it." in the purple Target card with option cards "Positive, Negativity, War, Peace" — the participant must rank all four, with "Positive" placed first to pass.
+  - **Implementation:** Trap questions are stored in the target set after the regular targets. They are rendered to be **visually indistinguishable from a real query**: the attention-check instruction appears inside the same purple "Target" card that normally holds the anchor item, and the answer options appear as ordinary cards in the red box (shuffled on every load). The participant moves **one or more** option cards into the green box — just their chosen answer, or a fuller ranking, both are accepted. Users can configure frequency, tolerance thresholds, and expulsion policies.
+  - **Scoring:** the answer counts as correct only if the correct option is the **first (leftmost)** card in the green box; any other cards and their order do not matter. In the target set, the first comma-separated option in `primary_description` is the correct answer and `alt_description` is the question shown in the purple card.
+  - **Example:** a trap question might show "Choose the option with the word positive in it." in the purple Target card with option cards "Positive, Negativity, War, Peace" — moving "Positive" into the green box (alone, or ranked first among others) passes.
   - **Configuration:** Users can modify trap question settings including enabling/disabling traps, setting frequency, tolerance levels, and expulsion policies. See template ```NEXT/local/template/ARankB-InfoTuple.yaml``` for detailed parameter explanations and configuration options.
 
 
@@ -180,6 +180,7 @@ You now have created and activated a Python environment named local-venv. You ha
 ## 3. Run Experiment
 ### 3.1. Experiment Config
 - **Configuration File:** Navigate to ```Next/local/template```. There should be one copy of yaml file corresponding to each query type. Follow for more instructions in  the template. Please do not remove entry as it may cause error when the experiment launches. 
+- **One-step-ahead precompute (A Rank B + InfoTuple):** adding `precompute: true` to the experiment config makes the platform compute each participant's *next* query in the background while they answer the current one, so the ~seconds-long InfoTuple selection overlaps with their thinking time instead of blocking the page. It is **off by default**, applies per experiment at launch, and changes nothing about the anchor schedule or the collected data — if a background result is not ready in time, the query is computed on the spot exactly as before. Rule of thumb: a participant who spends longer answering than one selection takes to compute sees the next query instantly. See `PRECOMPUTE_REPORT.md` for the design, verification, and a 30-participant load test with sizing guidance.
 
 ### 3.2. Execution
 - **Launch Experiment** 
@@ -198,6 +199,12 @@ You now have created and activated a Python environment named local-venv. You ha
   - Run ```grep docker /etc/group``` and you should see some output similar to ```docker:x:999:ubuntu```.
   - Run ```newgrp docker``` to force group membership update and run ```id -nG```. 
   - Make sure you see  ```docker``` within the list of output. Then running ```./docker_up.sh``` should work.
+  - **Troubleshooting: `KeyError: 'ContainerConfig'` during startup.** docker-compose v1 has a known bug on Docker Engine 25+ that fires whenever it tries to *recreate* an existing container whose configuration changed — which happens routinely after new git commits (the worker's `GIT_HASH` env changes) or when you start with a different host/IP (the backend's env changes). The failed recreate can also leave a stranded container with a hash-prefixed name (e.g. `5df8..._local_minionworker_1`). Fix: delete only the **stateless** containers and start again —
+    ```
+    docker rm -f local_nextbackenddocker_1 local_minionworker_1
+    ./docker_up.sh YOUR_PUBLIC_IP
+    ```
+    (also `docker rm -f` any hash-prefixed leftover shown by `docker ps -a`). Freshly *created* containers don't trigger the bug; only recreation does. **Never `docker rm` the `local_mongodb_1` container** — unlike the backend/worker it owns the anonymous data volume, and removing it orphans your database (see §4.2 and §5). If compose ever insists on recreating `mongodb` itself, stop and take a backup first (§5.3).
   - Next, run ```source local-venv/bin/activate``` to activate a python virtual env.
   - Finally, you can launch the experiment with:
   ```python launch.py NAME_OF_YAML_FILE_YOU_CONFIGURED```. And to make sure the experiment has successfully launched, go to the home page of NEXT and find ***Experiment List***. Click it and you should be able to find the experiment you just launched by looking at the ***start date***. 
@@ -210,6 +217,8 @@ You now have created and activated a Python environment named local-venv. You ha
 - **Download Participant Data**
   - At the same dashboard page, you can spot ***Participant data*** that contains all the participant-related information including participant ID, response, decision_time, etc (actual content depends on types of query). You can download it in JSON or in CSV format.
   - **A Rank B CSV column key:** one row per answered query with `participant_uid` (the entered Prolific ID, prefixed by the experiment UID), `anchor`/`anchor_id` (the anchor item), `rank_1..rank_B` with matching `rank_k_id` columns (the participant's ranking, left to right), `target_position_k`/`position_k_id` (what was displayed), `isTrap`, `query_id`, and timing fields (`response_time`, timestamps). Trap rows intentionally have blank ranking columns (their raw answer is a sentinel, not a real ranking). Queries that were served but never answered (e.g. abandoned by a page refresh) are excluded from the CSV but remain in the JSON without a `target_winner` field.
+  - **Trap outcome columns:** every answered row carries `trapped` (for a trap row: `True` means the participant answered it *wrong*; always `False` on normal rows) and `num_trapped_so_far` (the participant's running count of wrong traps at that point). Four participant-level columns are repeated on every row: `participant_num_trapped`, `participant_failed_final`, `participant_traps_seen`, and `participant_traps_answered`. The JSON download has the same aggregates under a top-level `participant_summaries` key (per participant: `num_trapped`, `participant_failed`, `num_answers`, `traps_seen`, `traps_answered`) alongside the unchanged `participant_responses`. The aggregate columns populate for experiments collected before this feature too; the per-row `trapped` field exists only for data collected after it. One nuance: if a participant is **expelled** on their final wrong trap, that last trap's outcome appears only in the aggregates (the expulsion interrupts the write to the query document).
+  - **Download URLs:** the dashboard links use `/api/experiment/<EXP_UID>/participants?zip=1` (JSON) and `?csv=1&zip=1` (CSV). `?csv=1` without `zip` returns the raw CSV body directly.
 - **Tips on Customize Static Sampling Process with Example** 
   - In  ```Next/local/csv ``` folder, a example CSV file is provided as well as other simple python scripts that are used to extract information from the CSV file.
   It serves as an example of how you could transform each query from your source of file to dictionary format in ```*-init.yaml```. Files in this folder extract queries and initialize a Binary Word Sentinement Classification task introduced in section one. Set configs in ```config.yaml``` and launch experiment by running ```python easy_launch.py ```.

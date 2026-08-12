@@ -71,7 +71,12 @@ initExp:
           description: Number of trap questions available
           type: num
           optional: true
-          
+        precompute:
+          description: Precompute the next InfoTuple query in the background while the participant answers the current one (InfoTuple only; RandomSampling does not support the trap/precompute kwargs)
+          type: bool
+          default: false
+          optional: true
+
 processAnswer:
   args:
     args:

@@ -2,6 +2,7 @@ import numpy as np
 from itertools import permutations
 from scipy.spatial.distance import pdist
 import math
+from math import ceil
 from functools import reduce
 
 
@@ -154,8 +155,8 @@ def primal_body_selector(M, tuples, rng, mu = 0.05, tuple_downsample_rate = 0.1)
     # downsample_rate = intermediate_params['tuple_downsample_rate']
     # TODO: pass in argument from infotuple caller
     tuples = list(tuples)
-    downsample_rate = 1
-    downsample_indices = rng.choice(range(len(tuples)), int(len(tuples)*downsample_rate), replace=False)
+    downsample_rate = float(tuple_downsample_rate)
+    downsample_indices = rng.choice(range(len(tuples)), math.ceil(len(tuples)*downsample_rate), replace=False)
     tuples = [tuples[i] for i in downsample_indices]
 
     tuple_probabilities = np.ones(len(tuples))
@@ -169,7 +170,7 @@ def primal_body_selector(M, tuples, rng, mu = 0.05, tuple_downsample_rate = 0.1)
         a = tuples[i][0]
         B = tuples[i][1:]
 
-        infogains[i] = mutual_information(M, a, B, int(M.shape[0]/10), dist_std, mu, rng)
+        infogains[i] = mutual_information(M, a, B, math.ceil(M.shape[0]/10), dist_std, mu, rng)
 
     selected_tuple = tuples[np.argmax(infogains)]
 

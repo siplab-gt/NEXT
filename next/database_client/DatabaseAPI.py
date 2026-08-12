@@ -215,8 +215,8 @@ class DatabaseAPI(object):
     def get_doc(self, bucket_id, doc_uid):
         return from_db_fmt(self._bucket(bucket_id).find_one({"_id": doc_uid}))
 
-    def get_docs_with_filter(self, bucket_id, pattern_dict):
-        docs_cursor = self._bucket(bucket_id).find(pattern_dict)
+    def get_docs_with_filter(self, bucket_id, pattern_dict, projection=None):
+        docs_cursor = self._bucket(bucket_id).find(pattern_dict, projection)
 
         return [from_db_fmt(doc) for doc in docs_cursor]
 

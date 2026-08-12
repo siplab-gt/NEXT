@@ -33,6 +33,29 @@ class MyApp:
         init_algs(alg_data)
         return args
 
+    @staticmethod
+    def _trap_schedule(experiment_args):
+        """Return (trap_count, trap_interval, total_queries).
+
+        trap_count == 0 means no traps (setTrap off, num_trap_questions == 0,
+        or a trapRatio too small to yield a single trap). Serving and
+        next-slot prediction both derive from this so they can never disagree.
+        """
+        num_queries = experiment_args['num_tries']
+        if not experiment_args['setTrap']:
+            return 0, 0, num_queries
+        trapRatio = experiment_args['trapRatio']
+        num_trap_questions = experiment_args['num_trap_questions']
+        trap_count = int(trapRatio * num_queries) if trapRatio > 0 else num_trap_questions
+        if trap_count <= 0:
+            return 0, 0, num_queries
+        trap_interval = num_queries // trap_count + 1
+        return trap_count, trap_interval, num_queries + trap_count
+
+    @staticmethod
+    def _is_trap_slot(query_id, trap_count, trap_interval):
+        return trap_count > 0 and query_id % trap_interval == 0
+
     def getQuery(self, butler, alg, args):
         exp_uid = butler.exp_uid
         participant_uid = args.get('participant_uid', butler.exp_uid)
@@ -45,39 +68,46 @@ class MyApp:
         # Decide if the query shoud be a trap question
         experiment = butler.experiment.get()
         n = experiment['args']['n'] # all entries in the targetset
-        
-        setTrap = experiment['args']['setTrap']
+
         isTrap = False
         target_indices = []
         num_trap_questions = experiment['args']['num_trap_questions']
         num_targets = n - num_trap_questions
         # num_queries = (experiment['args']['iteration'] + experiment['args']['burn_in']) * num_targets
-        num_queries = experiment['args']['num_tries']
-        total_queries = num_queries
-        
-        if setTrap:
-            trapRatio = experiment['args']['trapRatio']
-            
-            # Calculate total number of queries including trap questions
-            trap_count = int(trapRatio * num_queries) if trapRatio > 0 else num_trap_questions
-            total_queries = num_queries + trap_count
-            
-            # Calculate interval between trap questions
-            trap_interval = num_queries // trap_count + 1
-            
-            # Check if current query should be a trap
-            if query_id % trap_interval == 0:
-                if trapRatio > 0:
-                    # Random trap question
-                    target_indices = [random.randint(num_targets, n)]
-                else:
-                    # Evenly spaced trap question
-                    trap_index = (query_id // trap_interval - 1) + num_targets
-                    target_indices = [trap_index]
-                isTrap = True
-        
+        trap_count, trap_interval, total_queries = self._trap_schedule(experiment['args'])
+
+        if self._is_trap_slot(query_id, trap_count, trap_interval):
+            if experiment['args']['trapRatio'] > 0:
+                # Random trap question
+                target_indices = [random.randint(num_targets, n)]
+            else:
+                # Evenly spaced trap question
+                trap_index = (query_id // trap_interval - 1) + num_targets
+                target_indices = [trap_index]
+            isTrap = True
+
         # if isTrap is true, alg will return an empty list; else, alg will return a list of target indices
-        target_indices.extend(alg({'participant_uid': participant_uid, 'isTrap': isTrap}))
+        alg_args = {'participant_uid': participant_uid, 'isTrap': isTrap}
+        if experiment['args'].get('precompute', False):
+            # One-step-ahead precompute: tell the alg how many answers ahead
+            # the next InfoTuple selection is. Trap slots consume an answer
+            # without needing a computed tuple, so the target is the next
+            # NON-trap query id. next_steps == 0 disables precompute for this
+            # serve (participant about to finish, or already failed).
+            target_qid = query_id + 1
+            while (self._is_trap_slot(target_qid, trap_count, trap_interval)
+                   and target_qid <= total_queries):
+                target_qid += 1
+            next_steps = target_qid - query_id
+            if target_qid > total_queries:
+                next_steps = 0
+            elif (butler.participants.exists(uid=participant_uid, key='participant_failed')
+                  and butler.participants.get(uid=participant_uid, key='participant_failed')):
+                # a failed-but-not-expelled participant's head no longer
+                # advances, so predictions would never match
+                next_steps = 0
+            alg_args.update({'precompute': True, 'next_steps': next_steps})
+        target_indices.extend(alg(alg_args))
         target_items = []
         for i in range(len(target_indices)):
             cur = self.TargetManager.get_target_item(exp_uid, target_indices[i])
@@ -107,7 +137,8 @@ class MyApp:
             butler.participants.set(uid=participant_uid, key='num_trapped', value=0)
         if trapped:
             butler.participants.increment(uid=participant_uid, key='num_trapped')
-            num_trapped = butler.participants.get(uid=participant_uid, key='num_trapped')
+        num_trapped = butler.participants.get(uid=participant_uid, key='num_trapped')
+        if trapped:
             if num_trapped >= experiment['args']['tolerance'] * experiment['args']['num_trap_questions']:
                 butler.participants.set(uid=participant_uid, key='participant_failed', value=True)
         
@@ -121,7 +152,10 @@ class MyApp:
             raise ValueError("Participant {} failed".format(participant_uid))
         alg({'target_winner': target_winner, 'participant_uid': participant_uid, 
              'disregard_candidate': participant_failed})
-        return {'target_winner': target_winner, 'targets': targets, 'participant_failed': participant_failed}
+        # trapped / num_trapped_so_far are persisted onto the query doc so the
+        # per-trap outcome survives into the JSON/CSV exports
+        return {'target_winner': target_winner, 'targets': targets, 'participant_failed': participant_failed,
+                'trapped': trapped, 'num_trapped_so_far': num_trapped}
 
     def getModel(self, butler, alg, args):
         return alg()

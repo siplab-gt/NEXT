@@ -263,6 +263,36 @@ class ResourceManager:
 
         return participant_uid_list
 
+    def get_participant_info(self, exp_uid):
+        """
+        Given an exp_uid, returns per-participant trap/progress fields:
+        {participant_uid: {num_trapped, participant_failed, query_id}}
+
+        Only scalar fields are projected: participant docs also carry pickled
+        embeddings and response lists that must never reach JSON serialization.
+
+        Inputs: ::\n
+            (string) exp_uid
+
+        Outputs: ::\n
+            (dict) {participant_uid: {num_trapped, participant_failed, query_id}}
+        """
+        app_id = self.get_app_id(exp_uid)
+        participants = db.get_docs_with_filter(
+            app_id+':participants', {'exp_uid': exp_uid},
+            {'participant_uid': 1, 'num_trapped': 1,
+             'participant_failed': 1, 'query_id': 1})
+        participant_info = {}
+        for participant in participants:
+            participant_uid = participant.get('participant_uid')
+            if participant_uid is None:
+                continue
+            participant_info[participant_uid] = {
+                'num_trapped': participant.get('num_trapped', 0),
+                'participant_failed': participant.get('participant_failed', False),
+                'query_id': participant.get('query_id')}
+        return participant_info
+
     def get_participant_data(self, participant_uid, exp_uid):
         """
         Given a participant_id and an exp_uid, returns the associated set of responses.
