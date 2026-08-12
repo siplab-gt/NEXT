@@ -106,14 +106,24 @@ CELERY_ON = eval(os.environ.get('CELERY_ON', 'True'))
 CELERY_SYNC_WORKER_COUNT = int(os.environ.get('CELERY_SYNC_WORKER_COUNT', 1))
 
 
-exchange_name = 'sync@{hostname}'.format(
+# Direct exchange with per-queue routing keys: a job published to
+# sync_queue_k runs on that worker only. The previous 'sync@<host>' fanout
+# exchange delivered every namespaced job (full_embedding_update,
+# precompute_next_query) to ALL sync workers, so each job executed
+# CELERY_SYNC_WORKER_COUNT times and the per-namespace queue assignment in
+# broker.applySyncByNamespace was moot. A NEW exchange name is used because
+# an existing exchange's type cannot be redeclared; the old fanout exchange
+# is left in place, unused (its bindings are inert once nothing publishes
+# to it).
+exchange_name = 'sync_direct@{hostname}'.format(
     hostname=os.environ.get('HOSTNAME', 'localhost'))
-sync_exchange = Exchange(name=exchange_name, type='fanout')
+sync_exchange = Exchange(name=exchange_name, type='direct')
 all_queues = ()
 for i in range(1, CELERY_SYNC_WORKER_COUNT+1):
     queue_name = 'sync_queue_{worker_number}@{hostname}'.format(
         worker_number=i,
         hostname=os.environ.get('HOSTNAME', 'localhost'))
-    all_queues += (Queue(name=queue_name, exchange=sync_exchange),)
+    all_queues += (Queue(name=queue_name, exchange=sync_exchange,
+                         routing_key=queue_name),)
 
 CELERY_QUEUES = all_queues
