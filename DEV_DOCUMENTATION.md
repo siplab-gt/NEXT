@@ -730,8 +730,8 @@ flowchart TD
     subgraph browser["In the browser"]
         A["Trap slot reached"] --> B["Question shown in the<br>purple Target card"]
         B --> C["Options shuffled into the pool<br>as normal-looking cards"]
-        C --> D["Participant ranks ALL cards"]
-        D --> E{"Correct option<br>ranked first?"}
+        C --> D["Participant moves 1+ cards<br>into the rank box"]
+        D --> E{"Correct option<br>leftmost?"}
     end
     E -->|"yes"| F["trapped = false"]
     E -->|"no"| G["trapped = true"]
@@ -747,9 +747,27 @@ flowchart TD
 Key facts:
 - **Data format** (targetset entries after the regular targets): `primary_description` is the comma-separated option list and **the first option is the correct answer**; `alt_description` is the question shown in the anchor card. The separator is exactly `", "`.
 - **Scheduling** is a pure function of the participant's `query_id` (`apps/ARankB/myApp.py`), so a refreshed participant sees the trap at the same slot. `total_queries = num_tries + trap_count`.
-- **Scoring is client-side**: the widget checks whether the leftmost ranked card's text equals the correct option, and only sends the boolean. The payload is always the sentinel `target_winner=[0]` plus `trapped` — trap answers contribute **nothing** to the active-learning algorithm (the comparison lists extract empty from `[0]`), they only advance the head counter.
+- **Scoring is client-side**: the widget accepts any submission with **at least one** card in the rank box and checks whether the leftmost card's text equals the correct option, sending only the boolean. The payload is always the sentinel `target_winner=[0]` plus `trapped` — trap answers contribute **nothing** to the active-learning algorithm (the comparison lists extract empty from `[0]`), they only advance the head counter.
 - **Escape/expulsion** (`myApp.processAnswer` + `myAlg.processAnswer`): each wrong trap increments `num_trapped`; reaching `tolerance × num_trap_questions` sets `participant_failed`, and with `expel: true` the offending answer raises — the failed request triggers `widget_failure()` and the participant lands on the failure debrief.
-- **In the CSV export** trap rows keep `isTrap=True` and have intentionally blank ranking columns.
+- **Persistence and export**: `processAnswer` writes `trapped` and `num_trapped_so_far` onto the answered query document, so the per-trap outcome survives into both JSON and CSV. The participants export additionally joins the participants collection (scalar projection only — participant docs also carry pickled embeddings that must never reach JSON) to produce per-participant aggregates: a `participant_summaries` key in the JSON and `participant_num_trapped` / `participant_failed_final` / `participant_traps_seen` / `participant_traps_answered` columns in the CSV, which populate for pre-existing experiments too. Trap rows keep `isTrap=True` with intentionally blank ranking columns. Caveat: when `expel: true` fires, the fatal trap's `trapped` field never lands on its query document (the raise happens first) — the aggregates are authoritative.
+
+### Background jobs: sync queues and one-step-ahead precompute
+
+Two celery worker pools exist (counts are env vars consumed by `next/broker/next_worker_startup.sh`): **async workers** all consume one shared queue and handle every HTTP-facing task (`getQuery`, `processAnswer`, `getModel`), while **sync workers** each own a private queue (`sync_queue_k@<host>`) for background jobs. `broker.applySyncByNamespace` assigns each *namespace* to a queue round-robin and every job in a namespace runs FIFO on that one concurrency-1 worker — that ordering guarantee is the platform's only serialization primitive (it is how `full_embedding_update` has always run, namespace = `expuid_alglabel`).
+
+⚠️ **Routing (fixed 2026):** the sync queues were historically bound to a single **fanout** exchange, so every sync job was delivered to — and executed by — *every* sync worker (`CELERY_SYNC_WORKER_COUNT`× duplicated work). `next/constants.py` now declares a **direct** exchange (`sync_direct@<host>`) with per-queue routing keys; a job runs exactly once. The new exchange name is deliberate: an existing exchange's type cannot be redeclared, so the old fanout exchange is simply left unused.
+
+**One-step-ahead precompute (ARankB + InfoTuple, `precompute: true` in the experiment config, default off).** The InfoTuple selection takes seconds per query; without precompute the participant's browser blocks on it after every answer. With the flag on, serving query *i* schedules a background job — namespace `expuid_participantuid`, so different participants' jobs parallelize across the sync workers while one participant's jobs stay ordered — that computes the selection for the participant's *predicted next state* and stores it on their participant document (`precomputed_query` = `{head, curr_iteration, tuple, computed_at}`).
+
+The serve path is **consume-if-present**: it uses the stored tuple only when the document's state token (`curr_iteration * n + head`) equals the participant's current token, and otherwise computes inline exactly as before — every failure mode of the background machinery degrades to the pre-feature latency, never to wrong data. Specifics worth knowing before touching this code:
+
+- **Prediction steps over traps.** Trap slots consume an answer (the head advances) without needing a tuple, so the target is the next *non-trap* query id. The trap-slot decision is a pure function of `query_id` shared between serving and prediction (`MyApp._is_trap_slot` / `_trap_schedule`) — they cannot disagree.
+- **Guards** that skip scheduling: target query past `total_queries` (note: the *last* query IS a trap whenever `num_tries` is divisible by `num_trap_questions`); participant already `participant_failed` (their head freezes when `expel: false`, so predictions would never match again); predicted state still in burn-in (instant to serve inline); and any prediction that crosses the anchor-cycle **wrap**, where `incremental_embedding_update` refreshes the participant embedding — controlled by `PRECOMPUTE_ACROSS_WRAP` in `apps/ARankB/algs/InfoTuple/myAlg.py` (default `False` = skip, keeping results identical to inline; flip for max speed at the cost of a one-cycle-stale embedding on that single query).
+- **Consume is peek-then-take**: a document for a *future* state (a page refresh re-serving the current query) is deliberately kept, not discarded, and covered targets are not re-scheduled. Past-state documents are discarded. The background job itself abandons without computing if the participant has already reached its target (`Butler` reads are non-atomic across the wrap; a torn read only wastes one compute, it cannot corrupt state).
+- **The flag is plumbed through `apps/ARankB/myApp.yaml` only** (initExp args are strictly schema-verified, so the key must exist there). Do **not** add an `args:` block to `Algs.yaml`'s `getQuery` — alg getQuery kwargs are intentionally unverified, and declaring them would break the existing `isTrap` call. RandomSampling does not support the trap/precompute kwargs.
+- **Monitoring**: the worker logs one line per event — `PRECOMPUTE SCHEDULED / DONE / HIT / STALE / FUTURE / ABANDONED / SKIP-WRAP` — grep `docker logs` of the worker container for `PRECOMPUTE`. (Celery's logger prints each line once per worker process; dedupe by job id when counting.)
+
+Design rationale, edge-case verification, and a 30-participant load test with sizing guidance live in `PRECOMPUTE_REPORT.md` at the repository root.
 
 ---
 
@@ -816,9 +834,12 @@ All experiment data lives in MongoDB inside the `local_mongodb_1` container. The
 flowchart LR
     B["Browser<br>participants + dashboard"] --> N["nginx"]
     N --> A["API server<br>Flask + gunicorn"]
-    A -->|"queue jobs"| Q["RabbitMQ"]
-    Q --> W["Celery workers<br>app + algorithm code"]
-    W --> DB
+    A -->|"getQuery / processAnswer"| QA["async@host<br>direct, one shared queue"]
+    QA --> WA["Async workers<br>HTTP-facing tasks"]
+    WA -->|"background jobs<br>(embedding updates, precompute)"| QS["sync_direct@host<br>direct, routing key per queue"]
+    QS --> WS["Sync workers<br>one private queue each<br>FIFO per namespace"]
+    WA --> DB
+    WS --> DB
     A -->|"JSON / CSV downloads"| DB
     subgraph DB["MongoDB - anonymous volume /data/db - never prune"]
         D1["app_data<br>queries, participants,<br>experiments, algorithms"]
@@ -847,57 +868,38 @@ For cleanup between data collections and recovery of orphaned volumes, follow RE
 
 ## Step 6: Using stress_test.py
 
-**⚠️ Known limitation (2026):** `stress_test.py` predates the Prolific ID modal and currently **hangs on every simulated user** — the modal blocks the page (static backdrop) and the script never fills it. Before using it, the script needs a small update: after page load, fill `#prolific_pid_input` with a generated ID and click `#prolific_start_btn`, then proceed with the existing wait-for-`#submit` logic.
+`local/stress_test.py` simulates N participants answering an ARankB experiment **simultaneously**, one thread and one headless-Chrome session per participant. Each simulated participant goes through the real flow: the Prolific ID modal (distinct alphanumeric ID per driver), normal queries (ranks all cards), and trap questions (detected via the `#target-trap` element and answered with the flexible one-card rule; a configurable number of drivers answer traps *wrongly* to exercise trap counting and expulsion under load).
 
-The `stress_test.py` file is located in the `local/` directory and is used for load testing your experiments.
+### 6.1 Browser runtime
 
-### 6.1 Configuration
+The script targets a disposable Selenium container — never part of the NEXT compose stack:
 
-Edit `local/stress_test.py` to configure your test:
-
-```python
-# Number of simulated users
-instance_count = 50  # Up to 100
-
-# Your experiment URL (replace with your actual URL)
-query_url = 'http://your-server/query/query_page/query_page/your-experiment-id'
-
-# Number of queries per user
-n = 1000  # Up to 1000
-
-# Number of targets in each query
-num_targets_in_query = 100  # Up to 100
+```bash
+docker run -d --name selenium-load --shm-size=2g -p 4444:4444 \
+    -e SE_NODE_MAX_SESSIONS=32 -e SE_NODE_OVERRIDE_MAX_SESSIONS=true \
+    selenium/standalone-chrome
+# ... run the test, then:
+docker rm -f selenium-load
 ```
 
-### 6.2 Running the Stress Test
+### 6.2 Running
 
-1. **Ensure Selenium is running** (if using remote WebDriver):
-   ```bash
-   # Start Selenium standalone server
-   java -jar selenium-server-standalone.jar -port 4444
-   ```
+```bash
+cd local/
+./local-venv/bin/python stress_test.py EXP_UID \
+    --base=http://172.17.0.1:8000 --drivers=30 --wrong-trap-drivers=2 \
+    --min-wait=10 --max-wait=20 --max-queries=40 --tag=run1
+```
 
-2. **Run the stress test**:
-   ```bash
-   cd local/
-   python stress_test.py
-   ```
+`--base` must be reachable **from inside the Selenium container** — the docker bridge address (`172.17.0.1`) with the backend's direct port, or the instance's public IP; `127.0.0.1` will not resolve to the host from the container. `--min/max-wait` is per-answer think time (realistic pacing matters: precompute hit rates depend on it), `--max-queries` caps answers per driver, `--wrong-trap-drivers=K` makes the first K drivers answer every trap incorrectly.
 
-### 6.3 What the Stress Test Does
+### 6.3 Output
 
-The stress test:
-- Creates multiple headless Chrome browser instances
-- Simulates multiple users accessing your experiment simultaneously
-- Performs random interactions with your query interface
-- Measures performance under load
-- Helps identify bottlenecks and scalability issues
+- `stress_<tag>_latencies.csv` — one row per answer: driver, query number, normal/trap, and the participant-experienced **submit → next-query-rendered latency**; a p50/p95/max summary prints at the end.
+- `stress_<tag>_events.log` — per-driver lifecycle notes (start, expulsion/debrief reached, timeouts).
+- Server-side counterparts to correlate with: `docker logs` of the worker container (`PRECOMPUTE` lines, task durations), RabbitMQ queue depths (`rabbitmqctl list_queues`), and cAdvisor for per-container CPU/memory.
 
-### 6.4 Interpreting Results
-
-- **Performance metrics**: Monitor response times and error rates
-- **Resource usage**: Check CPU, memory, and database load
-- **Error patterns**: Look for specific failure modes under load
-- **Scalability**: Determine how many concurrent users your system can handle
+For a worked 30-participant example with results and interpretation, see `PRECOMPUTE_REPORT.md`.
 
 ---
 
