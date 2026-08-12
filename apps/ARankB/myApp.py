@@ -107,7 +107,8 @@ class MyApp:
             butler.participants.set(uid=participant_uid, key='num_trapped', value=0)
         if trapped:
             butler.participants.increment(uid=participant_uid, key='num_trapped')
-            num_trapped = butler.participants.get(uid=participant_uid, key='num_trapped')
+        num_trapped = butler.participants.get(uid=participant_uid, key='num_trapped')
+        if trapped:
             if num_trapped >= experiment['args']['tolerance'] * experiment['args']['num_trap_questions']:
                 butler.participants.set(uid=participant_uid, key='participant_failed', value=True)
         
@@ -121,7 +122,10 @@ class MyApp:
             raise ValueError("Participant {} failed".format(participant_uid))
         alg({'target_winner': target_winner, 'participant_uid': participant_uid, 
              'disregard_candidate': participant_failed})
-        return {'target_winner': target_winner, 'targets': targets, 'participant_failed': participant_failed}
+        # trapped / num_trapped_so_far are persisted onto the query doc so the
+        # per-trap outcome survives into the JSON/CSV exports
+        return {'target_winner': target_winner, 'targets': targets, 'participant_failed': participant_failed,
+                'trapped': trapped, 'num_trapped_so_far': num_trapped}
 
     def getModel(self, butler, alg, args):
         return alg()
