@@ -50,6 +50,17 @@ Lab configs: `ARankB-InfoTuple-cog_rank{2,4,5,6}.yaml` and `cog_tutorial.yaml` i
 `local/`. The command prints the experiment UID; each launch creates a brand-new
 experiment (old data is untouched).
 
+- **⚠ Prolific completion codes are placeholders in git** (public repo). Before a
+  real launch, restore the study's codes into the config's `debrief_link` /
+  `debrief_link_fail` from the untracked `local/prolific_codes.local.txt` (or the
+  Prolific dashboard) — and don't commit them.
+- **One-step-ahead precompute** (`precompute: true` in the YAML, off by default):
+  `cog_rank4_precompute.yaml` is the production rank4 config with it enabled;
+  `cog_rank4_sample_{pre,base}.yaml` are 32-query demos. Monitor with
+  `docker logs local_minionworker_1 2>&1 | grep PRECOMPUTE`. Sizing: near-instant
+  serves up to ~8–12 simultaneous participants on this 8-core box; details and
+  levers in `PRECOMPUTE_REPORT.md`.
+
 ## URLs (substitute the experiment UID)
 
 - Experiment list: `http://52.2.236.217/dashboard/experiment_list`
