@@ -45,3 +45,7 @@ nohup.out
 # mongodump backups and scratch copies on the lab box
 local/backup_*/
 apps/ARankB/widgets/getQuery_widget copy.html
+
+# load-test artifacts and local-only secrets
+local/stress_*_latencies.csv
+local/prolific_codes.local.txt
