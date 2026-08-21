@@ -96,6 +96,8 @@ class Participant(threading.Thread):
         self.idx, self.pid, self.args, self.stats, self.log = idx, pid, args, stats, log
         self.wrong_traps = (idx < int(round(args.participants * args.wrong_trap_fraction)))
         self.session = requests.Session()
+        if args.host_header:
+            self.session.headers["Host"] = args.host_header
         self.req_counter = 0
         self.answered = 0
         self.final = "unknown"
@@ -197,6 +199,7 @@ def main():
     ap.add_argument("--pid-prefix", default="sim")
     ap.add_argument("--tag", default="run")
     ap.add_argument("--fault", default="none", help="none | bad-url:K (every K-th request hits a wrong URL)")
+    ap.add_argument("--host-header", default="", help="override the HTTP Host header (e.g. 52.2.236.217 when hitting nginx on localhost)")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
     args.think = parse_pair(args.think)
