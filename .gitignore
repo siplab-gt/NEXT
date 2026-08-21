@@ -50,3 +50,8 @@ apps/ARankB/widgets/getQuery_widget copy.html
 local/stress_*_latencies.csv
 local/prolific_codes.local.txt
 local/*_live.yaml
+
+# leak / load-test artifacts (local only)
+local/leak_*.csv
+local/loadsim_*.csv
+local/loadsim_*.log
