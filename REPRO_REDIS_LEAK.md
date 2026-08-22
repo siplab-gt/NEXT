@@ -23,8 +23,8 @@ climbing again immediately (~3k/hour).
 1. Under gunicorn+gevent, celery's `app.backend` is greenlet-local, so **every HTTP request
    builds its own result backend + a drainer greenlet that is never stopped** — ~2 sockets
    to Redis per request that stay open after the response is sent.
-2. The `rabbitmqredis` container runs a cron (`next/database/redis/Dockerfile:15`,
-   `cleanup_idle_redis_connections.sh`) that `CLIENT KILL`s any client idle ≥ 300 s. Its own
+2. The `rabbitmqredis` container ran a cron (`next/database/redis/Dockerfile:15`,
+   `cleanup_idle_redis_connections.sh` — both deleted in commit `4c1ffe4`) that `CLIENT KILL`s any client idle ≥ 300 s. Its own
    log: **56,678 kills of backend (172.18.0.7) connections in 24 h** (~200 per 5-min cycle).
 3. Redis closes its side; the backend never notices → **CLOSE_WAIT forever**. When a request
    does touch a killed pubsub connection, celery's `_reconnect_pubsub()` drops it without

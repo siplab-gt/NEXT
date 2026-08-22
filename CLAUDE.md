@@ -9,7 +9,9 @@ bind-mounted into the Docker containers. The instance has an **Elastic IP:
 - **Never switch git branches on this machine** (`git checkout master`, etc.) and
   never use `git add -A` / `git stash` / `git reset --hard` / `git clean`. The repo
   tracks the Python venv (`local/local-venv/`), so those commands rewrite the live
-  environment under the running containers. Work stays on the `prolific-id` branch;
+  environment under the running containers. Work stays on the lab branch
+  (`prolific-id`, or a feature branch created from it such as
+  `fix/redis-leak-and-retry`) — never check out a branch with a different tree;
   merge to master only via GitHub PRs. Commit with targeted `git add <file>`.
 - **Always `docker-compose` (v1, hyphen), never `docker compose` (v2).**
 - **Never `docker-compose down`, `docker volume prune`, or `docker system prune
@@ -52,15 +54,14 @@ experiment (old data is untouched).
 
 - **⚠ Prolific completion codes live only in `*_live.yaml` configs**, which are
   gitignored (`local/*_live.yaml`) because the GitHub repo is public — the tracked
-  configs carry `YOUR_SUCCESS_CODE` / `YOUR_FAILURE_CODE` placeholders. **Launch
-  real studies from the `_live` config**, e.g.
+  configs carry `YOUR_SUCCESS_CODE` / `YOUR_FAILURE_CODE` / `YOUR_TECHNICAL_CODE`
+  placeholders. **Launch real studies from the `_live` config**, e.g.
   `ARankB-InfoTuple-cog_rank4_precompute_live.yaml` (rank4 + precompute) or
-  `ARankB-InfoTuple-cog_rank4_live.yaml` (rank4, no precompute). To regenerate one
-  after editing a tracked config, copy it to `<name>_live.yaml` and paste the codes
-  from `local/prolific_codes.local.txt`. Never put real codes in a tracked file.
-  **Preferred: `cd local && ./make_live.sh`** rebuilds the `_live` configs from the
-  tracked templates + the codes file (`SUCCESS_CODE=`, `FAILURE_CODE=`,
-  `TECHNICAL_CODE=`); re-run it after editing a template.
+  `ARankB-InfoTuple-cog_rank4_live.yaml` (rank4, no precompute). Regenerate them
+  with `cd local && ./make_live.sh`, which substitutes the three placeholders from
+  `local/prolific_codes.local.txt` (`SUCCESS_CODE=`, `FAILURE_CODE=`,
+  `TECHNICAL_CODE=`) — re-run it after editing a template. Never put real codes in
+  a tracked file.
 - **One-step-ahead precompute** (`precompute: true` in the YAML, off by default):
   `cog_rank4_precompute.yaml` is the production rank4 config with it enabled;
   `cog_rank4_sample_{pre,base}.yaml` are 32-query demos. Monitor with
@@ -90,10 +91,9 @@ experiment (old data is untouched).
 - **Redis connection leak (the 2026-08-21 outage) is fixed in
   `next/broker/broker.py`**: each request's celery result backend is released
   after the call. `rabbitmqredis` is the plain `redis:8` image (the old custom
-  image's `CLIENT KILL` cron is gone). Regression check:
-  `docker exec -i local_nextbackenddocker_1 python /next_backend/local/diag_result_backend.py <EXP_UID> 40 8`
-  must print `FLAT`; `local/leak_monitor.sh 30 > leak.csv &` watches sockets
-  live. Full story and reproduction: `REPRO_REDIS_LEAK.md`.
+  image's `CLIENT KILL` cron is gone). Regression check and monitor:
+  `diag_result_backend.py` / `leak_monitor.sh`, usage in DEV_DOCUMENTATION §6.4.
+  Full story and reproduction: `REPRO_REDIS_LEAK.md`.
 - gunicorn runs `-w 2 --max-requests 2000`; nginx proxies wait 330 s
   (`local/nginx.conf`; apply with
   `docker exec reverse_proxy nginx -t && docker exec reverse_proxy nginx -s reload`).
@@ -117,6 +117,10 @@ experiment (old data is untouched).
 
 ## Docs
 
-README.md = user guide (funnel setup, data management §5, troubleshooting §3.2).
-DEV_DOCUMENTATION.md = architecture (Framework Contracts, trap questions, database
-quick reference, diagrams).
+README.md = user guide (funnel setup, completion codes §3.5, data management §5,
+troubleshooting §3.2). DEV_DOCUMENTATION.md = architecture (System architecture,
+Framework Contracts incl. server-error handling, trap questions, database quick
+reference, test tools §6). Reports: `PRECOMPUTE_REPORT.md` (precompute design +
+first load test), `REPRO_REDIS_LEAK.md` (the Aug 2026 outage, reproduced and
+fixed), `CAPACITY_REPORT.md` (acceptance numbers + capacity ramp plan),
+`PROPOSAL_query_page_error_handling.md` (historical design note).

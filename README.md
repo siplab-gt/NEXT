@@ -205,6 +205,7 @@ You now have created and activated a Python environment named local-venv. You ha
     ./docker_up.sh YOUR_PUBLIC_IP
     ```
     (also `docker rm -f` any hash-prefixed leftover shown by `docker ps -a`). Freshly *created* containers don't trigger the bug; only recreation does. **Never `docker rm` the `local_mongodb_1` container** — unlike the backend/worker it owns the anonymous data volume, and removing it orphans your database (see §4.2 and §5). If compose ever insists on recreating `mongodb` itself, stop and take a backup first (§5.3).
+  - **Troubleshooting: every request suddenly fails while the machine is idle.** If participants report an error screen the moment they start, and the backend log (`docker logs local_nextbackenddocker_1`) shows `Error 99 connecting to rabbitmqredis:6379. Cannot assign requested address`, the backend has run out of network ports — historically caused by a Redis connection leak that is now fixed (see `REPRO_REDIS_LEAK.md`). Confirm with `./leak_monitor.sh 10` in `local/` (the `close_wait` column should be near zero; thousands means the leak is back) and recover with `docker restart local_nextbackenddocker_1` (2 s, no data affected). Participants who were inside the study keep their progress and can continue from their link.
   - Next, run ```source local-venv/bin/activate``` to activate a python virtual env.
   - Finally, you can launch the experiment with:
   ```python launch.py NAME_OF_YAML_FILE_YOU_CONFIGURED```. And to make sure the experiment has successfully launched, go to the home page of NEXT and find ***Experiment List***. Click it and you should be able to find the experiment you just launched by looking at the ***start date***. 
@@ -224,10 +225,13 @@ You now have created and activated a Python environment named local-venv. You ha
   It serves as an example of how you could transform each query from your source of file to dictionary format in ```*-init.yaml```. Files in this folder extract queries and initialize a Binary Word Sentinement Classification task introduced in section one. Set configs in ```config.yaml``` and launch experiment by running ```python easy_launch.py ```.
 - **Monitor System Performance**
   - It is always a good idea to monitor and test system performance. This can inform you about the needs of your system and about which processes or services are consuming resources. 
+    - **Connection health:** `cd local && ./leak_monitor.sh 30 > leak.csv &` samples the backend's connections to the Redis result store every 30 s (live, dead/`close_wait`, Redis's own client count, load, memory, nginx 5xx and `Errno 99` counts). Healthy: `close_wait` ≈ 0 and the live count returns to zero within a minute of participants finishing. Run it during any collection day and glance at the last line now and then (`tail -1 local/leak.csv`).
     - **Cadvisor** allows you to monitor cpu, memory, and disk usage on the system wide level, as well as per process and per container. We have implemented a password protected version for you. The default user and password is admin and password. To change these, simply change the content in the ```cadvisor_user.txt``` and ```cadvisor_password.txt``` files respectively. The docker environment will use these to set the username and password for cadvisor. To sign into cadvisor, go to this url: ``` instance-public-ipaddress/cadvisor ```
 
 ### 3.4. Linking Participants to Prolific / Qualtrics IDs
 - Before the first query, every participant is shown a popup asking for their **Prolific ID**. The entered ID becomes their `participant_uid`, so it appears on every response row in the downloaded JSON/CSV participant data (see 3.3).
+
+  ![Prolific ID popup, pre-filled from the URL parameter](picRef/QueryPage_ProlificModal.png)
 - The popup is **pre-filled automatically** when the query page URL carries a `participant` parameter:
   ```
   http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=PROLIFIC_ID
@@ -238,7 +242,7 @@ You now have created and activated a Python environment named local-venv. You ha
   - Set the Qualtrics End-of-Survey redirect to: ```http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=${e://Field/PROLIFIC_PID}```
   - If the parameter is ever missing, the popup simply shows an empty box and the participant types their ID by hand — nothing breaks.
 - **Analysis note:** the exported `participant_uid` is prefixed with the experiment UID (i.e. `EXPUID_PROLIFICID`). Strip the prefix (or match by suffix) when joining against Qualtrics/Prolific records.
-- **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — a refresh costs **zero** queries: all prior answers are kept, and the unanswered query that was on screen is re-served at the same position, so the participant still answers the full configured number of queries. A participant who reloads the page after finishing is taken directly to the completion (debrief) screen instead of being served extra queries.
+- **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — a refresh costs **zero** queries: all prior answers are kept, and the unanswered query that was on screen is re-served at the same position, so the participant still answers the full configured number of queries. A participant who reloads the page after finishing is taken directly to the completion (debrief) screen instead of being served extra queries. The same applies after the "Technical problem" exit (§3.5): reopening the link continues the study where it stopped.
 - Only the main query page (`/query/query_page/query_page/...`) has this feature. Do not send participants to `query_page_popup`.
 
 ### 3.5. Completion codes and what participants see when something goes wrong
@@ -250,9 +254,28 @@ The query page has **three** exits, each with its own text and link in the exper
 | Attention-check failure | the participant missed enough trap questions to be expelled (`tolerance × num_trap_questions`) | `debrief_fail` / `debrief_link_fail` | failed attention checks |
 | Technical problem | the server could not be reached after `retry_attempts` automatic retries | `debrief_error` / `debrief_link_error` | technical issue (**do not** reuse the failure code) |
 
-- A failed server call (timeout, 5xx, nginx error page) is **never** shown as an attention-check failure. The page shows a "Connection problem — retrying in N s (attempt k of `retry_attempts`)" banner with a *Retry now* button and retries on its own with growing delays (5, 15, 30 s). Progress is kept on the server, so a participant who lands on the technical exit can re-open their link later and continue where they left off.
+What the participant sees in each case (test experiment; the links carry placeholder codes):
+
+![Connection problem banner: the page retries on its own](picRef/QueryPage_RetryBanner.png)
+
+*A failed server call — the page retries automatically; the participant can also press "Retry now".*
+
+![Technical problem exit](picRef/QueryPage_TechnicalProblem.png)
+
+*Retries exhausted — the separate "Technical problem" screen with the technical-issue link. Never the fail code.*
+
+![Attention-check failure exit](picRef/QueryPage_AttentionFail.png)
+
+*A genuine attention-check failure — the only way to reach the fail link.*
+
+![Successful completion](picRef/QueryPage_Success.png)
+
+*Completion — the success link.*
+
+- A failed server call (timeout, 5xx, nginx error page) is **never** shown as an attention-check failure. The page shows a "Connection problem — retrying in N s (attempt k of `retry_attempts`)" banner with a *Retry now* button and retries on its own with growing delays (5, 15, 30 s). Progress is kept on the server, so a participant who lands on the technical exit can re-open their link later and continue where they left off. Each attempt waits up to 2 minutes for a hanging server, so the technical exit appears after ~50 s if the server is down and up to ~8 minutes if it is merely hanging.
 - An interrupted answer is never re-sent: recovery re-requests the query, and the server re-serves the one that was on screen (or the next one if the answer did get through), so nothing is double-counted.
 - Create three completion codes on Prolific and put them in the gitignored `local/prolific_codes.local.txt` (`SUCCESS_CODE=`, `FAILURE_CODE=`, `TECHNICAL_CODE=`), then run `cd local && ./make_live.sh` to generate the `*_live.yaml` launch configs from the tracked templates — re-run it whenever a template changes. Review a "technical issue" submission by checking the participant's progress in the export rather than treating it as a failure.
+- These screens are exercised automatically by `local/test_query_page_retry.py` (DEV_DOCUMENTATION.md §6.5) — run it after any change to the query page.
 
 ---
 
@@ -332,3 +355,11 @@ Then ```mongorestore``` the dump into the live database if desired. As of Aug 20
 ## 6. Link to Media Instructions
 ``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_1/1_p9fujklo ```
 ``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_2/1_ucyud9f3```
+
+---
+
+## 7. Further Reading
+- `PRECOMPUTE_REPORT.md` — one-step-ahead query precompute: design, verification, and the first load test (numbers predate the Aug 2026 stability fixes).
+- `CAPACITY_REPORT.md` — acceptance results after the stability fixes (10 and 25 simultaneous participants) and the plan for a capacity ramp on a larger instance.
+- `REPRO_REDIS_LEAK.md` — the Aug 2026 outage: how the Redis connection leak was reproduced, what it really was, and the before/after numbers.
+- `PROPOSAL_query_page_error_handling.md` — the original design note for the retry / technical-exit behaviour (historical; implemented).

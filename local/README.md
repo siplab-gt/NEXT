@@ -9,7 +9,7 @@ To start the NEXT backend, you need a machine with the following things installe
 ```
 docker
 docker-compose
-python3.11
+python3.12
 ```
 
 `docker` can be installed via the [Docker install guide]. `docker-compose` can
@@ -18,7 +18,7 @@ be installed via `pip install docker-compose`.
 **⚠️ Data-safety rules (read before touching Docker):**
 - Always use `docker-compose` (v1, with the hyphen), never `docker compose` (v2) — v2 uses a different project naming scheme, attaches fresh empty volumes, and the database will silently appear empty.
 - **Never run `docker-compose down`** and **never prune volumes** (`docker volume prune`, `docker system prune --volumes`). All collected experiment data lives in an *anonymous* Docker volume; these commands orphan or delete it. Stop with `docker-compose stop`. See the root README §4.2 and §5 for safe shutdown, backup, cleanup, and recovery procedures.
-- Note: `stress_test.py` simulates concurrent participants end-to-end, including the Prolific ID modal and trap questions — usage in DEV_DOCUMENTATION.md, Step 6.
+- Note: `load_sim.py` (plain HTTP) and `stress_test.py` (real browsers) simulate concurrent participants, including trap questions — see "Load, leak and browser tests" below and DEV_DOCUMENTATION.md, Step 6.
 
 Optionally, you need extra packages located in `local/requirements.txt` to run the `launch.py` and `stress_test.py` scripts in this directory:
 
@@ -54,7 +54,7 @@ optionally provide a path to the repo if you are running the
 The default will assume host is `localhost` and `NEXT` is located at `../../`:
 
 Note: The default setting of `localhost` can be used when deploying on AWS with this setup because NGINX in now included in the docker network.
-Make sure to change the `server_name` variable in the `local/nginx.conf` file to the IP address associated with your AWS instance. You will also need to open up port 80 on your AWS instace.
+Make sure to change the `server_name` variable in the `local/nginx.conf` file to the IP address associated with your AWS instance. You will also need to open up port 80 on your AWS instace. The same file sets the proxy timeouts (330 s) that let slow query computations finish instead of being cut off with a 504; after editing it, `docker exec reverse_proxy nginx -t && docker exec reverse_proxy nginx -s reload` applies it without a restart.
 
 ```
 ./docker_up.sh
@@ -87,6 +87,8 @@ Alternatively, you can launch the experiment by running:
 python launch.py strange_fruit_triplet/init.yaml
 ```
 
+For a real Prolific study, launch from a `*_live.yaml` config: put your three completion codes in the gitignored `prolific_codes.local.txt` and run `./make_live.sh`, which builds the `_live` configs from the tracked templates (root README §3.5).
+
 
 ## Creating your own experiments
 To run any of the remaining examples in `NEXT/examples/`:
@@ -109,9 +111,12 @@ Do not commit these files.
 You can sign in to cadvisor at `http://localhost:8888` or `http://AWS_INSTANCE_IP/cadvisor`
 
 
-## Stress Tests
-To run the stress test, activate your python environment setup above, start a disposable
-`selenium/standalone-chrome` container, and run `stress_test.py` with the experiment UID
-and CLI flags (`--drivers`, `--min-wait`/`--max-wait`, `--wrong-trap-drivers`, `--base`).
-Full usage, the container command, and output interpretation are in
-DEV_DOCUMENTATION.md, Step 6; a worked 30-participant example is in `PRECOMPUTE_REPORT.md`.
+## Load, leak and browser tests
+All of these run against a throwaway experiment (launch one from `ARankB-InfoTuple-cog_rank4_sample_base.yaml`) with the venv activated; full usage is in DEV_DOCUMENTATION.md, Step 6.
+
+- `load_sim.py` — simulated participants over plain HTTP, no browser needed; the main load tool. `./local-venv/bin/python load_sim.py --base http://127.0.0.1 --host-header <PUBLIC_IP> --exp EXP_UID --participants 10 --tag run1`
+- `check_export.py EXP_UID` — checks the export afterwards (no duplicate answers, traps in the right slots, fail flags consistent).
+- `leak_monitor.sh [seconds] > leak.csv &` — samples the backend's Redis connections; `close_wait` must stay near zero.
+- `acceptance_driver.sh EXP_UID` — the whole sequence (10 participants, 2 h idle, 25 participants) unattended in tmux; results in `acceptance.log`.
+- `test_query_page_retry.py EXP_UID` — drives the real page in headless Chrome through the retry / technical-exit / expulsion scenarios (needs the `selenium/standalone-chrome` container).
+- `stress_test.py` — the older browser-per-participant stress test (`--drivers`, `--min-wait`/`--max-wait`, `--wrong-trap-drivers`); a worked 30-participant example is in `PRECOMPUTE_REPORT.md`, the post-fix acceptance numbers in `CAPACITY_REPORT.md`.

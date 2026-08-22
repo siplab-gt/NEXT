@@ -7,6 +7,8 @@ Needs the disposable Selenium grid (see stress_test.py) and a throwaway experime
 
     docker run -d --name selenium-load --shm-size=2g -p 4444:4444 selenium/standalone-chrome
     ./local-venv/bin/python test_query_page_retry.py EXP_UID [--base=http://172.17.0.1:8000] [--only=A,B]
+        [--screenshots=DIR]   save a PNG of each key screen (Prolific modal, retry banner,
+                              technical-problem modal, fail debrief, success debrief) into DIR
 
 Scenarios (each prints PASS/FAIL):
   A  normal flow: two queries answered, progress advances, no JS errors
@@ -17,6 +19,7 @@ Scenarios (each prints PASS/FAIL):
   D  genuine expulsion: every trap answered wrong -> the attention-check fail exit
      (debrief modal with debrief_link_fail), not the technical one
   E  refresh mid-query resumes at the same query
+  S  answer every query correctly -> success debrief (slow: a full run of the experiment)
 The worker is paused/unpaused with `docker pause/unpause local_minionworker_1`.
 """
 import json, subprocess, sys, time
@@ -36,6 +39,7 @@ BASE = opts.get('base', 'http://172.17.0.1:8000')        # as seen from the grid
 API = opts.get('api', 'http://127.0.0.1:8000')            # as seen from this host
 GRID = opts.get('grid', 'http://127.0.0.1:4444/wd/hub')
 ONLY = opts.get('only', 'A,B,C,D,E').split(',')
+SHOTS = opts.get('screenshots', '')
 WORKER = 'local_minionworker_1'
 URL = BASE + '/query/query_page/query_page/' + EXP
 RESULTS = {}
@@ -46,6 +50,7 @@ def docker(*cmd):
 def make_driver():
     o = Options()
     o.add_argument('--headless'); o.add_argument('--no-sandbox'); o.add_argument('--disable-dev-shm-usage')
+    o.add_argument('--window-size=1280,800')
     o.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
     d = webdriver.Remote(command_executor=GRID, options=o)
     d.set_page_load_timeout(60)
@@ -54,9 +59,10 @@ def make_driver():
 def js_errors(d):
     return [e['message'] for e in d.get_log('browser') if e['level'] == 'SEVERE' and 'favicon' not in e['message']]
 
-def start(d, pid):
+def start(d, pid, shot_name=None):
     d.get(URL + '?participant=' + pid)
     WebDriverWait(d, 30).until(lambda x: x.find_element(By.ID, 'prolific_start_btn').is_displayed())
+    if shot_name: shot(d, shot_name)
     d.execute_script("document.getElementById('prolific_start_btn').click();")
 
 def progress(d):
@@ -102,6 +108,13 @@ def export_rows(pid):
 def answered_ids(pid):
     return sorted(q['query_id'] for q in export_rows(pid) if 'target_winner' in q)
 
+def shot(d, name):
+    if SHOTS:
+        import os
+        os.makedirs(SHOTS, exist_ok=True)
+        time.sleep(0.5)
+        d.save_screenshot(os.path.join(SHOTS, name + '.png'))
+
 def report(name, ok, detail=''):
     RESULTS[name] = ok
     print('%s %s %s' % ('PASS' if ok else 'FAIL', name, detail), flush=True)
@@ -111,7 +124,7 @@ def scenario_A():
     d = make_driver()
     try:
         pid = 'rtA%d' % int(time.time())
-        start(d, pid); wait_query(d, '')
+        start(d, pid, shot_name='QueryPage_ProlificModal'); wait_query(d, '')
         p0 = progress(d); answer(d); wait_query(d, p0); p1 = progress(d); answer(d); wait_query(d, p1); p2 = progress(d)
         errs = js_errors(d)
         report('A normal flow', p0 != p1 != p2 and not errs, 'progress %s -> %s -> %s; js errors: %s' % (p0, p1, p2, errs))
@@ -129,6 +142,7 @@ def scenario_B():
         try:
             sig = progress(d); answer(d)                            # submit while the worker is frozen
             banner = WebDriverWait(d, 30).until(lambda x: 'Connection problem' in x.find_element(By.ID, 'wrapper').text)
+            shot(d, 'QueryPage_RetryBanner')
             att = d.execute_script('return retry.attempt;')
             time.sleep(6)                                           # let the first retry also fail
         finally:
@@ -153,6 +167,7 @@ def scenario_C():
         try:
             answer(d)
             WebDriverWait(d, 90).until(lambda x: shown(x, 'technical_modal'))
+            shot(d, 'QueryPage_TechnicalProblem')
             href = d.find_element(By.ID, 'technical_link').get_attribute('href')
             text = d.find_element(By.ID, 'technical_text').text
             fail_shown = shown(d, 'debrief')
@@ -163,7 +178,7 @@ def scenario_C():
         start(d, pid); wait_query(d, '')
         p_after = progress(d)
         report('C retries exhausted -> technical exit, then resume',
-               'TECH123' in href and 'technical problem' in text.lower() and not fail_shown and p_after != '',
+               href and 'cc=' in href and 'YOUR_FAILURE_CODE' not in href and 'YOUR_SUCCESS_CODE' not in href and 'technical problem' in text.lower() and not fail_shown and p_after != '',
                'href=%s fail_modal=%s progress before=%s after=%s' % (href, fail_shown, p1, p_after))
     finally:
         d.quit()
@@ -176,6 +191,7 @@ def scenario_D():
         while state == 'query' and n < 40:
             sig = progress(d); answer(d, wrong_traps=True); n += 1
             state = wait_query(d, sig, timeout=150)
+        if state == 'debrief': shot(d, 'QueryPage_AttentionFail')
         link = d.find_element(By.ID, 'debrief_link').get_attribute('href') if state == 'debrief' else ''
         text = d.find_element(By.ID, 'debrief_text').text if state == 'debrief' else ''
         report('D genuine expulsion -> fail exit', state == 'debrief' and 'YOUR_FAILURE_CODE' in link and 'attention' in text.lower(),
@@ -190,6 +206,20 @@ def scenario_E():
         start(d, pid); wait_query(d, ''); p0 = progress(d); answer(d); wait_query(d, p0); p1 = progress(d)
         start(d, pid); wait_query(d, ''); p2 = progress(d)
         report('E refresh mid-query resumes', p1 == p2, 'before refresh %s, after %s' % (p1, p2))
+    finally:
+        d.quit()
+
+def scenario_S():
+    d = make_driver()
+    try:
+        pid = 'rtS%d' % int(time.time())
+        start(d, pid); state = wait_query(d, ''); n = 0
+        while state == 'query' and n < 200:
+            sig = progress(d); answer(d); n += 1
+            state = wait_query(d, sig, timeout=150)
+        if state == 'debrief': shot(d, 'QueryPage_Success')
+        link = d.find_element(By.ID, 'debrief_link').get_attribute('href') if state == 'debrief' else ''
+        report('S full run -> success exit', state == 'debrief' and 'YOUR_SUCCESS_CODE' in link, 'state=%s after %d answers; link=%s' % (state, n, link))
     finally:
         d.quit()
 

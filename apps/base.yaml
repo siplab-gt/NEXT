@@ -40,7 +40,7 @@ initExp:
           optional: true
 
         debrief_fail:
-          description: Debrief message that appears as a popup on the query page once the user has responded to num_tries queries.
+          description: Debrief message shown when the participant is expelled for failing too many attention-check (trap) questions.
           type: str
           default: Thank you for participating, too
           optional: true

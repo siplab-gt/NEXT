@@ -7,6 +7,8 @@ launched from the production config `ARankB-InfoTuple-cog_rank4_precompute.yaml`
 (158 queries incl. 8 traps, precompute on). Driver: `local/acceptance_driver.sh`;
 log `local/acceptance.log`; samples `local/leak_accept.csv` (30 s).*
 
+Earlier sizing and the precompute design: `PRECOMPUTE_REPORT.md` (its 30-participant numbers predate these fixes).
+
 ## Leak acceptance (M1)
 
 | Test | Result |

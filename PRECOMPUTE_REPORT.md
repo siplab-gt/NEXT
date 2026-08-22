@@ -2,6 +2,8 @@
 
 *ARankB + InfoTuple, August 2026. Feature flag: `precompute: true` in the experiment config (default off).*
 
+*Note (2026-08-22): the load-test numbers below were measured before the Redis connection-leak fix, gunicorn `-w 2` and the 330 s nginx timeout. For the post-fix acceptance run (10 and 25 simultaneous participants on the same box) see `CAPACITY_REPORT.md`.*
+
 ## The problem
 
 InfoTuple selects each query by scoring candidate tuples by expected information gain — for a 25-target, A=4 experiment that is ~255,000 candidate orderings, downsampled (`down_sample`) and scored with a Monte-Carlo mutual-information estimate. On a typical instance the selection takes ~8 s per query, and the participant's browser blocks on it after **every** answer. Over a 158-query session that is ~20 minutes of spinner; with a batch of concurrent participants the waits compound into queueing delays and Prolific timeouts.
