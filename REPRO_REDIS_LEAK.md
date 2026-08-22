@@ -89,8 +89,53 @@ zombies → port exhaustion → `Errno 99` → every request 500. The narrow por
 compresses the timeline (160 ports instead of ~28k); the mechanism and the error are
 identical.
 
-## After the fix
+## What the fix turned out to be (deeper than the mechanism sketch above)
 
-_To be filled in once the leak fix (Step 2) is rebuilt: the same protocol must show
-ESTABLISHED returning to baseline within seconds of the load stopping, CLOSE_WAIT ≈ 0
-even after `CLIENT KILL`, and 0 × Errno 99 with the narrow port range._
+Instrumenting the broker path inside the container (`local/diag_result_backend.py`)
+showed the per-request sockets are **celery's, created for every HTTP request**:
+
+1. celery stores `app.backend` in `threading.local` unless `result_backend_thread_safe`
+   is set (`celery/app/base.py`, `_backend` property). Under gunicorn's gevent worker
+   that is *greenlet-local* → one `RedisBackend` per request, each with its own redis
+   client pool, pubsub subscription and a drainer greenlet that never stops. The
+   drainer keeps the object graph alive, so the 2 sockets (pubsub + `GET`) outlive the
+   request. (A standalone sequential process reuses one greenlet and shows no leak,
+   which is why this was easy to miss.)
+2. The "obvious" fix, `result_backend_thread_safe=True` (one shared backend), **hangs
+   under gevent**: 8 concurrent waiters never received results the worker had already
+   produced. Rejected.
+3. Releasing the greenlet's backend after each call (kill drainer, close pubsub,
+   disconnect pool, drop the local reference) fixed the `GET` socket but pubsub
+   connections still leaked under concurrency — because `AsyncResult.__del__` →
+   `remove_pending_result` → `cancel_for` → `pubsub.unsubscribe()` makes redis-py open
+   a **brand-new connection just to send UNSUBSCRIBE** on the closed PubSub. Clearing
+   `_pubsub` after closing it, and detaching the result from the backend, closed that.
+
+Fix commits: `6faff20` (broker teardown), `4c1ffe4` (remove the CLIENT KILL cron; plain
+`redis:8` image), `49d3138` (celery settings actually in effect), `e753380` (gunicorn
+`-w 2 --max-requests`, nginx 330 s timeouts), `5c6f3cc` (hygiene).
+
+## Results AFTER the fix (same protocol, same throwaway experiment)
+
+In-process regression (`diag_result_backend.py`, 40 calls at concurrency 8):
+**8 sockets after warm-up, 8 at the end — FLAT** (all eight are the bounded JobBroker
+pool connections, same age throughout).
+
+Through nginx against the live gunicorn backend (code fix only; the cron-less Redis
+image and gunicorn flags still need the container recreate):
+
+| Step | Requests | Sockets to :6379 (backend) | HTTP | Notes |
+|---|---|---|---|---|
+| Part 1: 5 × 10 queries | 105 | **2 ESTABLISHED** + 28 TIME_WAIT (properly closed, drained in 60 s) | 105 × 200 | was 212 hoarded forever |
+| Part 2: `CLIENT KILL` | — | 2 CLOSE_WAIT (the pool; self-heals on next use) | — | was 212 zombies |
+| Part 3a: port range 40000–40160, 5 × 8 | 85 | 2 ESTABLISHED + TIME_WAIT | **85 × 200, 0 × 500** | was 2 × 500 / Errno 99 |
+| Part 3b: kill, 5 × 6 | 65 | 2 ESTABLISHED | **65 × 200** | was 5 × 500 |
+| Part 3c: kill, 5 probes | 5 | 1 ESTABLISHED, 1 CLOSE_WAIT | **5/5 × 200** | was 5/5 × 500 |
+| `Errno 99` in backend log | | | **0** | was 46 |
+
+The narrow port range that previously produced total failure cannot be exhausted any
+more: connections are closed when the request ends instead of hoarded.
+
+_Still to run on the rebuilt stack (cron-less Redis, `-w 2`): the 2 h idle soak and the
+1 h 10-participant soak from the plan, with `leak_monitor.sh` — see the plan's M1
+acceptance criteria._
