@@ -96,6 +96,10 @@ experiment (old data is untouched).
   §6.4; the outage itself: `REPRO_REDIS_LEAK.md`.
 - The query page retries server errors and has a separate "Technical problem"
   exit, so studies need **three** Prolific completion codes — README §3.5.
+- `local/healthcheck.sh` (cron every 5 min, README §3.3) probes the stack, logs
+  to `local/health.log`, alerts via `WEBHOOK_URL` in `local/alert.local.conf`,
+  and auto-restarts the backend on the leak signature. Check `tail -3
+  local/health.log` before assuming the stack is fine.
 
 ## Code changes on the live stack
 

@@ -75,6 +75,13 @@ Record p50/p95 per level, `docker stats` CPU per container and RabbitMQ
 the largest N with getQuery p95 under ~5 s (precompute keeping ahead of think time)
 and zero failures.
 
+## Alerting (added 2026-08-22)
+
+`local/healthcheck.sh` runs from cron every 5 minutes: full-path probe, dead-socket
+count, container liveness, nginx 5xx, load; one log line per run, webhook alert on
+state change, automatic backend restart on the leak signature. The 7-hour silent
+outage becomes a 5-minute one.
+
 ## Open items
 
 - ~~Dashboard `get_stats` 500s (matplotlib `XAxis.get_converter`)~~ — fixed: mpld3 0.5.11 needs an API from matplotlib 3.10 while the image has 3.8.4; `next/apps/AppDashboard.py` installs a compatibility shim and the mpld3 pin is tightened for the next image build.

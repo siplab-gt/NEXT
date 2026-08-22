@@ -55,3 +55,6 @@ local/*_live.yaml
 local/leak_*.csv
 local/loadsim_*.csv
 local/loadsim_*.log
+local/alert.local.conf
+local/health.log
+local/health.state
