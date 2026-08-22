@@ -55,6 +55,31 @@
       </div>
     </div>
 
+    <!-- technical-problem modal: shown only when the server could not be reached
+         after all retries. Deliberately separate from #debrief so a server
+         outage is never presented (or coded on Prolific) as a failed attention check. -->
+    <div class="modal fade" id="technical_modal" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header" style="background-color: #fcf8e3;">
+            <h1 class="modal-title">Technical problem</h1>
+          </div>
+          <div class="modal-body">
+            <h4 id="technical_text"></h4>
+            <br>
+            <div id="technical_link_section" style="display: none;">
+              <p><a id="technical_link" href="#" target="_blank" class="btn btn-warning btn-lg">Return to Prolific</a></p>
+            </div>
+            <div id="technical_nolink" style="display: none;">
+              <p>Please contact the researcher and quote your participant ID.</p>
+            </div>
+            <br>
+            User ID: <div id="technical_pid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Prolific ID entry modal (shown before the first query) -->
     <div class="modal fade" id="prolific_modal" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
       <div class="modal-dialog modal-lg">
@@ -101,17 +126,33 @@
 
     <script>
       next_widget.setUrl("");
+      next_widget.setOptions({timeout: 120000});   // per-request cap; a hang counts as a failure
       var tries =  {{experiment['args']['num_tries']}};
       var div_id = "wrapper";
       var exp_uid = "{{exp_uid}}";
-      
-      // Store debrief messages in JavaScript variables
-      var debrief_success = "{{experiment['args']['debrief']|safe}}";
-      var debrief_fail = "{{experiment['args']['debrief_fail']|safe}}";
-      
-      // Store debrief links in JavaScript variables
-      var debrief_link_success = "{{experiment['args']['debrief_link']|safe}}";
-      var debrief_link_fail = "{{experiment['args']['debrief_link_fail']|safe}}";
+
+      // Debrief messages / links. |tojson yields a safe JS string literal; the text
+      // may contain HTML (it is inserted with .html(), as before).
+      var debrief_success      = {{ experiment['args']['debrief']|tojson }};
+      var debrief_fail         = {{ experiment['args']['debrief_fail']|tojson }};
+      var debrief_link_success = {{ experiment['args']['debrief_link']|tojson }};
+      var debrief_link_fail    = {{ experiment['args']['debrief_link_fail']|tojson }};
+
+      // Server-error handling. .get() defaults: experiments launched before these
+      // fields existed have no such keys, and a missing key would otherwise render
+      // as an empty JS token and break the whole script.
+      var retry = {
+        max: parseInt({{ experiment['args'].get('retry_attempts', 3) }}, 10),
+        delaysMs: [5000, 15000, 30000],   // grows per attempt; last value repeats
+        attempt: 0,
+        timer: null,
+        countdown: null
+      };
+      var debrief_error      = {{ experiment['args'].get('debrief_error', 'A technical problem interrupted the study and it cannot continue right now. Your progress has been saved. Please contact the researcher quoting your participant ID.')|tojson }};
+      var debrief_link_error = {{ experiment['args'].get('debrief_link_error', '')|tojson }};
+      // A genuine attention-check expulsion arrives as an error whose backend
+      // message matches one of these (apps/ARankB/myApp.py, algs/InfoTuple/myAlg.py).
+      var EXPELLED_RE = /(Participant .* failed|Bad participant .* is expelled)/;
 
       // Prolific ID prefill from the ?participant= URL parameter (passed through by Flask).
       {% if participant_uid %}
@@ -129,20 +170,103 @@
 	      widget: true
 	  }
       };
+
+      // ---- exits -------------------------------------------------------------
+      function showDebrief(text, link) {
+        clearRetryTimers();
+        $('#wrapper').hide();
+        $('#debrief_text').html(text);
+        $('#debrief_link_section').show();
+        $('#debrief_link').attr('href', link);
+        $('#debrief').modal('show');
+      }
+      function showSuccessExit() { showDebrief(debrief_success, debrief_link_success); }
+      function showFailExit()    { showDebrief(debrief_fail, debrief_link_fail); }
+      function showTechnicalExit() {
+        clearRetryTimers();
+        $('#wrapper').hide();
+        $('#technical_text').html(debrief_error);
+        if (debrief_link_error) {
+          $('#technical_link').attr('href', debrief_link_error);
+          $('#technical_link_section').show();
+          $('#technical_nolink').hide();
+        } else {
+          $('#technical_link_section').hide();
+          $('#technical_nolink').show();
+        }
+        $('#technical_pid').text(participant_uid || '');
+        $('#technical_modal').modal('show');
+      }
+
+      // ---- failure classification --------------------------------------------
+      function responseBody(jqXHR, data) {
+        if (data) return data;
+        if (!jqXHR) return null;
+        if (jqXHR.responseJSON) return jqXHR.responseJSON;
+        if (jqXHR.responseText) { try { return JSON.parse(jqXHR.responseText); } catch (e) {} }
+        return null;
+      }
+      function isExpelled(jqXHR, data) {
+        var body = responseBody(jqXHR, data);
+        if (!body || !body.meta) return false;           // nginx HTML, timeout, network: never an expulsion
+        if (body.meta.expelled) return true;
+        return typeof body.meta.backend_error === 'string' && EXPELLED_RE.test(body.meta.backend_error);
+      }
+
+      // ---- retries -------------------------------------------------------------
+      function clearRetryTimers() {
+        if (retry.timer) { clearTimeout(retry.timer); retry.timer = null; }
+        if (retry.countdown) { clearInterval(retry.countdown); retry.countdown = null; }
+      }
+      function retryNow() {
+        clearRetryTimers();
+        // Recovery is ALWAYS a fresh getQuery, never a re-POST of the answer: the
+        // server re-serves a query that was served but not answered, and serves the
+        // next one if the answer did land before the error - so nothing is
+        // double-counted either way (apps/ARankB/myApp.py, processAnswer).
+        $('#wrapper').html('<center><h1>Reconnecting...</h1></center>');
+        next_widget.getQuery(div_id, args, callbacks);
+      }
+      function scheduleRetry(phase) {
+        if (retry.attempt >= retry.max) { showTechnicalExit(); return; }
+        var delayMs = retry.delaysMs[Math.min(retry.attempt, retry.delaysMs.length - 1)];
+        retry.attempt += 1;
+        var secs = Math.round(delayMs / 1000);
+        $('#wrapper').show().html(
+          '<div class="alert alert-warning" style="margin-top:40px; text-align:center;">' +
+          '<h3>Connection problem</h3>' +
+          '<p>We could not reach the study server' +
+          (phase === 'processAnswer' ? ' while saving your answer' : '') + '. ' +
+          'Retrying automatically in <span id="retry_countdown">' + secs + '</span> s ' +
+          '(attempt ' + retry.attempt + ' of ' + retry.max + '). ' +
+          'Please keep this tab open &mdash; your progress is saved.</p>' +
+          '<p><button type="button" class="btn btn-default" id="retry_now_btn">Retry now</button></p>' +
+          '</div>');
+        $('#retry_now_btn').on('click', retryNow);
+        var remaining = secs;
+        retry.countdown = setInterval(function () {
+          remaining -= 1;
+          $('#retry_countdown').text(Math.max(remaining, 0));
+          if (remaining <= 0) { clearInterval(retry.countdown); retry.countdown = null; }
+        }, 1000);
+        retry.timer = setTimeout(retryNow, delayMs);
+      }
+
+      // ---- widget callbacks ----------------------------------------------------
       var callbacks = {
-        processAnswer_success: function() {
+        processAnswer_success: function(data) {
+          retry.attempt = 0;
+          if (data && data.meta && data.meta.expelled) { showFailExit(); return; }
           if(tries > 0){
             next_widget.getQuery(div_id, args, callbacks);
           } else{
-            $('#wrapper').hide();
-            $('#debrief_text').html(debrief_success);
-            $('#debrief_link_section').show();
-            $('#debrief_link').attr('href', debrief_link_success);
-            $('#debrief').modal('show');
+            showSuccessExit();
           }
         },
 
         getQuery_success: function(data){
+          retry.attempt = 0;
+          clearRetryTimers();
           if (typeof data.args.query_id !== "undefined" && typeof data.args.total_queries !== "undefined") {
             // Apps that report server-tracked progress (e.g. ARankB): remaining
             // queries after this one. Survives page refreshes, so a participant
@@ -150,11 +274,7 @@
             tries = data.args.total_queries - data.args.query_id;
             if (tries < 0) {
               // Participant already finished this experiment; go straight to debrief.
-              $('#wrapper').hide();
-              $('#debrief_text').html(debrief_success);
-              $('#debrief_link_section').show();
-              $('#debrief_link').attr('href', debrief_link_success);
-              $('#debrief').modal('show');
+              showSuccessExit();
               return;
             }
           } else {
@@ -167,12 +287,14 @@
           console.log("successfully got a query")
         },
 
-        widget_failure: function(){
-          $('#wrapper').hide();
-          $('#debrief_text').html(debrief_fail);
-          $('#debrief_link_section').show();
-          $('#debrief_link').attr('href', debrief_link_fail);
-          $('#debrief').modal('show');
+        // Any failed server call lands here (next_widget.js passes the details).
+        // Only a genuine attention-check expulsion goes to the fail exit; everything
+        // else (timeout, 5xx, nginx error page, app error) is retried, then ends on
+        // the technical-problem exit - never on the fail code.
+        widget_failure: function(jqXHR, textStatus, errorThrown, phase, data){
+          console.log("widget_failure", phase, textStatus, jqXHR ? jqXHR.status : null, errorThrown);
+          if (isExpelled(jqXHR, data)) { showFailExit(); return; }
+          scheduleRetry(phase);
         }
       }
 

@@ -7,10 +7,21 @@ var next_widget = (function($){
     var _args = null;
     var _callbacks = null;
     var _queryTime = 0;
+    var _timeout = 120000;   // ms per request; 0 = browser default (no limit)
+    // Callback contract (all extra arguments are optional, older pages ignore them):
+    //   getQuery_success(data)
+    //   processAnswer_success(data)
+    //   widget_failure(jqXHR, textStatus, errorThrown, phase, data)
+    //     phase is "getQuery" or "processAnswer"; textStatus is jQuery's
+    //     ("timeout", "error", "abort", "parsererror") or "appfail" when the
+    //     server answered 200 but with a FAIL meta / no widget.
     return {	
 
 	setUrl : function(url) {      
 	    _url = url;
+	},
+	setOptions : function(opts) {
+	    if (opts && typeof opts.timeout === "number") { _timeout = opts.timeout; }
 	},
 	getQuery : function(div_id,args,callbacks){
 	    $.ajax({
@@ -18,8 +29,17 @@ var next_widget = (function($){
 		type: "POST",
 		contentType: "application/json",
 		data: JSON.stringify(args),
-		dataType: "json"
+		dataType: "json",
+		timeout: _timeout
 	    }).done( function(data,textStatus, jqXHR) {
+		// A 200 can still be a failure: the app raised inside getQuery and the
+		// API returned {"meta": {"status": "FAIL", ...}} with no widget html.
+		if (!data || !data.html || !data.args || (data.meta && data.meta.status === "FAIL")) {
+		    var msg = (data && data.meta && data.meta.message) ? data.meta.message : "no widget in response";
+		    console.log("getQuery returned 200 without a widget", data);
+		    callbacks.widget_failure(jqXHR, "appfail", msg, "getQuery", data);
+		    return;
+		}
 		// Set the div to this html
 		$('#'+div_id).html(data.html);
 		_queryTime = new Date().getTime();
@@ -38,11 +58,15 @@ var next_widget = (function($){
 
 	    }).fail( function(jqXHR, textStatus, errorThrown){
 		console.log("Failed to get widget data", jqXHR, textStatus, errorThrown);
-		callbacks.widget_failure();
+		callbacks.widget_failure(jqXHR, textStatus, errorThrown, "getQuery");
 	    });
 	},	
 
 	processAnswer: function(args, query_meta) {
+	    if (_args === null || _callbacks === null) {
+		console.log("processAnswer called before a query was served");
+		return;
+	    }
 	    $.extend(_args["args"], args);
 	    currTime = new Date().getTime();
 	    _args["args"]["response_time"] = (currTime -  _queryTime)/1000.;
@@ -51,12 +75,13 @@ var next_widget = (function($){
 		url: _url+"/api/experiment/processAnswer",
 		type: "POST",
 		contentType: "application/json",
-		data: JSON.stringify(_args)
+		data: JSON.stringify(_args),
+		timeout: _timeout
 	    }).done( function(data, textStatus,XHR){
-		_callbacks.processAnswer_success();
+		_callbacks.processAnswer_success(data);
 	    } ).fail(function(jqXHR, textStatus, errorThrown){
 		console.log("Error in communicating with next_backend", jqXHR, textStatus, errorThrown);
-		_callbacks.widget_failure();
+		_callbacks.widget_failure(jqXHR, textStatus, errorThrown, "processAnswer");
 	    });
 	},
 	
