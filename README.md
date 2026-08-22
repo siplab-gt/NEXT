@@ -362,4 +362,3 @@ Then ```mongorestore``` the dump into the live database if desired. As of Aug 20
 - `PRECOMPUTE_REPORT.md` — one-step-ahead query precompute: design, verification, and the first load test (numbers predate the Aug 2026 stability fixes).
 - `CAPACITY_REPORT.md` — acceptance results after the stability fixes (10 and 25 simultaneous participants) and the plan for a capacity ramp on a larger instance.
 - `REPRO_REDIS_LEAK.md` — the Aug 2026 outage: how the Redis connection leak was reproduced, what it really was, and the before/after numbers.
-- `PROPOSAL_query_page_error_handling.md` — the original design note for the retry / technical-exit behaviour (historical; implemented).

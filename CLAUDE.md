@@ -86,25 +86,16 @@ experiment (old data is untouched).
 - Cleanup / orphaned-volume recovery: README §5. A ~441 MB orphaned volume with
   Oct 2025–Mar 2026 data still awaits recovery — never prune dangling volumes.
 
-## Stability fixes (branch `fix/redis-leak-and-retry`, Aug 2026)
+## Stability fixes (Aug 2026, branch `fix/redis-leak-and-retry`)
 
-- **Redis connection leak (the 2026-08-21 outage) is fixed in
-  `next/broker/broker.py`**: each request's celery result backend is released
-  after the call. `rabbitmqredis` is the plain `redis:8` image (the old custom
-  image's `CLIENT KILL` cron is gone). Regression check and monitor:
-  `diag_result_backend.py` / `leak_monitor.sh`, usage in DEV_DOCUMENTATION §6.4.
-  Full story and reproduction: `REPRO_REDIS_LEAK.md`.
-- gunicorn runs `-w 2 --max-requests 2000`; nginx proxies wait 330 s
-  (`local/nginx.conf`; apply with
-  `docker exec reverse_proxy nginx -t && docker exec reverse_proxy nginx -s reload`).
-- **Query page retries server errors and has a separate "Technical problem"
-  exit** (`retry_attempts`, `debrief_error`, `debrief_link_error` in the YAML;
-  README §3.5). Studies need **three** Prolific completion codes (success /
-  failed attention checks / technical issue) in the `_live` config. Server
-  expulsions now return `200 {meta.expelled: true}` from `processAnswer`.
-- Test tools in `local/`: `load_sim.py` (HTTP participants), `check_export.py`
-  (export integrity), `test_query_page_retry.py` (browser scenarios; needs the
-  `selenium/standalone-chrome` container from DEV_DOCUMENTATION §6.1).
+- The Redis connection leak behind the 2026-08-21 outage is fixed
+  (`next/broker/broker.py`); `rabbitmqredis` is the stock `redis:8` image;
+  gunicorn runs `-w 2 --max-requests 2000`; nginx waits 330 s (`local/nginx.conf`,
+  apply with `docker exec reverse_proxy nginx -t && docker exec reverse_proxy nginx -s reload`).
+  How it works and how to check it: DEV_DOCUMENTATION "System architecture" and
+  §6.4; the outage itself: `REPRO_REDIS_LEAK.md`.
+- The query page retries server errors and has a separate "Technical problem"
+  exit, so studies need **three** Prolific completion codes — README §3.5.
 
 ## Code changes on the live stack
 
@@ -122,5 +113,4 @@ troubleshooting §3.2). DEV_DOCUMENTATION.md = architecture (System architecture
 Framework Contracts incl. server-error handling, trap questions, database quick
 reference, test tools §6). Reports: `PRECOMPUTE_REPORT.md` (precompute design +
 first load test), `REPRO_REDIS_LEAK.md` (the Aug 2026 outage, reproduced and
-fixed), `CAPACITY_REPORT.md` (acceptance numbers + capacity ramp plan),
-`PROPOSAL_query_page_error_handling.md` (historical design note).
+fixed), `CAPACITY_REPORT.md` (acceptance numbers + capacity ramp plan).

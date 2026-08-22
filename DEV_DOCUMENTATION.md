@@ -1001,7 +1001,7 @@ Afterwards, `./local-venv/bin/python check_export.py EXP_UID --prefix sim` verif
 
 `local/acceptance_driver.sh EXP_UID` runs, in order: 10 HTTP participants on the given experiment, `check_export.py`, a 2 h idle soak, 25 simultaneous participants, `check_export.py` again, and a summary of the connection monitor (max live / dead sockets, 5xx and `Errno 99` totals). Start it in tmux (`tmux new-session -d -s acceptance "./acceptance_driver.sh EXP_UID"`) and read `local/acceptance.log`; results of the Aug 2026 run are in `CAPACITY_REPORT.md`.
 
-`local/make_live.sh` builds the gitignored `*_live.yaml` launch configs from the tracked templates by substituting the three `cc=YOUR_*_CODE` placeholders with the values in `local/prolific_codes.local.txt` — the only supported way to get real completion codes into a config without committing them.
+Real completion codes never go into a tracked config: `local/make_live.sh` generates the gitignored `*_live.yaml` files from the templates (README §3.5).
 
 ---
 
@@ -1053,12 +1053,6 @@ Before testing, verify these alignments:
 ---
 
 ## Legacy System Notes
-
-### **System Architecture**
-- **Backend**: Maintains existing structure and implementation patterns
-- **Frontend**: Widgets handle rendering and user interaction
-- **Storage**: Butler system manages data persistence
-- **Workers**: Celery workers handle task processing with memory constraints
 
 ### **Development Workflow**
 1. **Study existing apps** (`ARankB`, `PAQ`, `DynamicPAQ`) for patterns
