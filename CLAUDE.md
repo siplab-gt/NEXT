@@ -26,6 +26,15 @@ bind-mounted into the Docker containers. The instance has an **Elastic IP:
   `http://52.2.236.217/dashboard/experiment_list` before anything disruptive, and
   take a backup first (see below).
 
+## Machine
+
+The lab instance is a **burstable t2.2xlarge** (8 vCPU on paper, 3.2 guaranteed): after a
+few hours of heavy load its CPU credits run out and everything slows 2–3× (the
+2026-08-22 25-participant re-run failed this way; README §2.1). Capacity numbers are
+only valid with a healthy credit balance — `healthcheck.sh`/`leak_monitor.sh` show
+`steal %`. Plan: move to `c6i.2xlarge`/`c6i.4xlarge` (stop → change type → start; EBS
+root and Elastic IP persist; then `docker start …` below).
+
 ## Starting the stack
 
 **After an instance reboot** (only nginx auto-restarts; everything else stays down):
