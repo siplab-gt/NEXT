@@ -63,12 +63,14 @@ for pid, docs in sorted(responses.items()):
     num_trapped = summ.get('num_trapped', wrong) if summ else wrong
     note = ''
     if failed and fail_at is not None:
-        # The answer that trips the limit is counted on the participant record but
-        # the app raises before that query doc is written, so the docs hold one
-        # wrong trap fewer than num_trapped. Anything beyond that means answers
-        # kept being accepted after expulsion.
-        if num_trapped == fail_at and wrong == fail_at - 1:
-            note = '  (expelled at trap %d; expelling answer not stored - expected)' % fail_at
+        # Expelled: the wrong trap that tripped the limit is stored on its query
+        # doc (since Aug 2026); data collected before that lacks it, so the docs
+        # hold one wrong trap fewer than num_trapped. Anything beyond either shape
+        # means answers kept being accepted after expulsion.
+        if num_trapped == fail_at and wrong == fail_at:
+            note = '  (expelled at trap %d)' % fail_at
+        elif num_trapped == fail_at and wrong == fail_at - 1:
+            note = '  (expelled at trap %d; expelling answer not stored - pre-Aug-2026 data)' % fail_at
         else:
             errs.append("expelled but num_trapped=%s, wrong traps in docs=%d (expected %d and %d)" % (num_trapped, wrong, fail_at, fail_at - 1))
     else:

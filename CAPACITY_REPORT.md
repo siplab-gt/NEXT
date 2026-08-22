@@ -78,7 +78,8 @@ and zero failures.
 ## Open items
 
 - ~~Dashboard `get_stats` 500s (matplotlib `XAxis.get_converter`)~~ — fixed: mpld3 0.5.11 needs an API from matplotlib 3.10 while the image has 3.8.4; `next/apps/AppDashboard.py` installs a compatibility shim and the mpld3 pin is tightened for the next image build.
-- The expelling trap answer is not stored on the query doc (app raises before the
-  write); `check_export.py` accounts for it. Cosmetic for analysis, worth a later fix.
+- ~~The expelling trap answer is not stored on the query doc~~ — fixed:
+  `myApp.processAnswer` records it before the expulsion propagates; `check_export.py`
+  recognises both the new and the pre-fix shape.
 - Throwaway experiments created for these tests (UIDs `46ab46c5…`, `4f6860d8…`,
   `2ee6764e…`, `49489c8c…`) can be cleaned up per README §5 whenever convenient.
