@@ -22,6 +22,19 @@ class NextDictionary(object):
         self.set(key=key, value=value)
 
 
+_MINIONREDIS_POOL = None
+
+
+def _minionredis_pool():
+    """Shared redis connection pool for butler.*.memory (minionredis)."""
+    global _MINIONREDIS_POOL
+    if _MINIONREDIS_POOL is None:
+        _MINIONREDIS_POOL = redis.ConnectionPool(
+            host=constants.MINIONREDIS_HOST, port=constants.MINIONREDIS_PORT,
+            max_connections=20)
+    return _MINIONREDIS_POOL
+
+
 class Memory(NextDictionary):
     def __init__(self, collection='', exp_uid='', uid_prefix=''):
         self.key_prefix = collection + uid_prefix.format(exp_uid=exp_uid)
@@ -37,8 +50,8 @@ class Memory(NextDictionary):
     def ensure_connection(self):
         try:
             if self.cache is None:
-                self.cache = redis.StrictRedis(
-                    host=constants.MINIONREDIS_HOST, port=constants.MINIONREDIS_PORT)
+                # One process-wide pool instead of a private pool per Memory object.
+                self.cache = redis.StrictRedis(connection_pool=_minionredis_pool())
         except Exception as e:
             raise Exception(
                 "Butler.Collection.Memory could not connect with RedisDB: {}".format(e))

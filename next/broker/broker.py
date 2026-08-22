@@ -109,7 +109,6 @@ class JobBroker:
     @contextmanager
     def get_redis_connection(self):
         client = redis.Redis(connection_pool=self.pool)
-        client.set('MINIONWORKER_HOSTNAME', 'localhost')
         try:
             yield client
         finally:
@@ -282,7 +281,20 @@ class JobBroker:
         a simple circular hashing scheme to load balance getQuery/processAnswer calls.
         This implementation assumes just a single master node and no workers
         so only a single hostname (e.g. localhost) has celery workers.
+
+        The answer never changes for the life of the process, so it is resolved
+        once (env MINIONWORKER_HOSTNAME first, then the legacy redis key /
+        /etc/hosts / socket.gethostname()) and cached. Previously every request
+        did 1-3 redis round-trips here, plus a SET on each connection
+        acquisition.
         """
+        if self.hostname is not None:
+            return self.hostname
+        env_hostname = os.environ.get('MINIONWORKER_HOSTNAME')
+        if env_hostname:
+            self.hostname = env_hostname
+            utils.debug_print('Found hostname: {} (env)'.format(self.hostname))
+            return self.hostname
         with self.get_redis_connection() as client:
             if client.exists('MINIONWORKER_HOSTNAME'):
                 self.hostname = client.get(
