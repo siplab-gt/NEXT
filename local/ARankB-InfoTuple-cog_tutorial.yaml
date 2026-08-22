@@ -34,13 +34,17 @@ args:
   num_trap_questions: 0 # number of trap questions available
   #-----------------------------------------------------------------------#
   # text to display at the end if participant successfully answered all questions
-  debrief: Click the link to finish
+  debrief: Thank you - you have completed the study. Click the link to return to Prolific and register your completion.
   # text to display at the end if participant failed
-  debrief_fail: Click the link to finish
+  debrief_fail: You did not pass enough attention checks, so the study ends here. Click the link to return to Prolific.
   # link to display at the end if participant successfully answered all questions
   debrief_link: https://vivek2000anand.github.io/success_effort.io/
   # link to display at the end if participant failed
   debrief_link_fail: https://vivek2000anand.github.io/effort_failure.io/ 
+  # Server-error handling (see next/query_page/templates/query_page.html)
+  retry_attempts: 3 # automatic retries of a failed server call before the technical-problem exit
+  debrief_error: A technical problem interrupted the study and it cannot continue right now. Your progress has been saved. Click the link to return to Prolific, then message the researcher quoting your participant ID.
+  debrief_link_error: https://app.prolific.com/submissions/complete?cc=YOUR_TECHNICAL_CODE # a third Prolific completion code meaning 'technical issue' - keep it distinct from the fail code
   #-----------------------------------------------------------------------#
   # This is a generic instructions for the query page. To change other instructions, 
   # please look for div elements with class name "xxx-text" in the html file at 
