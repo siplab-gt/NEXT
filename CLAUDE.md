@@ -58,6 +58,9 @@ experiment (old data is untouched).
   `ARankB-InfoTuple-cog_rank4_live.yaml` (rank4, no precompute). To regenerate one
   after editing a tracked config, copy it to `<name>_live.yaml` and paste the codes
   from `local/prolific_codes.local.txt`. Never put real codes in a tracked file.
+  **Preferred: `cd local && ./make_live.sh`** rebuilds the `_live` configs from the
+  tracked templates + the codes file (`SUCCESS_CODE=`, `FAILURE_CODE=`,
+  `TECHNICAL_CODE=`); re-run it after editing a template.
 - **One-step-ahead precompute** (`precompute: true` in the YAML, off by default):
   `cog_rank4_precompute.yaml` is the production rank4 config with it enabled;
   `cog_rank4_sample_{pre,base}.yaml` are 32-query demos. Monitor with

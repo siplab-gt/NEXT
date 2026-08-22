@@ -252,7 +252,7 @@ The query page has **three** exits, each with its own text and link in the exper
 
 - A failed server call (timeout, 5xx, nginx error page) is **never** shown as an attention-check failure. The page shows a "Connection problem — retrying in N s (attempt k of `retry_attempts`)" banner with a *Retry now* button and retries on its own with growing delays (5, 15, 30 s). Progress is kept on the server, so a participant who lands on the technical exit can re-open their link later and continue where they left off.
 - An interrupted answer is never re-sent: recovery re-requests the query, and the server re-serves the one that was on screen (or the next one if the answer did get through), so nothing is double-counted.
-- Create three completion codes on Prolific and put them in the gitignored `*_live.yaml` copy of your config (`local/prolific_codes.local.txt` is the local record). Review a "technical issue" submission by checking the participant's progress in the export rather than treating it as a failure.
+- Create three completion codes on Prolific and put them in the gitignored `local/prolific_codes.local.txt` (`SUCCESS_CODE=`, `FAILURE_CODE=`, `TECHNICAL_CODE=`), then run `cd local && ./make_live.sh` to generate the `*_live.yaml` launch configs from the tracked templates — re-run it whenever a template changes. Review a "technical issue" submission by checking the participant's progress in the export rather than treating it as a failure.
 
 ---
 
