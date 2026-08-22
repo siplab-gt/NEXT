@@ -7,8 +7,10 @@ bind-mounted into the Docker containers. The instance has an **Elastic IP:
 ## Critical safety rules
 
 - **Never switch git branches on this machine** (`git checkout master`, etc.) and
-  never use `git add -A` / `git stash` / `git reset --hard` / `git clean`. The repo
-  tracks the Python venv (`local/local-venv/`), so those commands rewrite the live
+  never use `git add -A` / `git stash` / `git reset --hard` / `git clean`. Until
+  `fix/redis-leak-and-retry` is merged, `master` still tracks the Python venv
+  (`local/local-venv/`, untracked on this branch since Aug 2026) and the generated
+  `local/docker-compose.yml`, so a checkout would write stale files into the live
   environment under the running containers. Work stays on the lab branch
   (`prolific-id`, or a feature branch created from it such as
   `fix/redis-leak-and-retry`) — never check out a branch with a different tree;
@@ -108,7 +110,7 @@ experiment (old data is untouched).
   `python -m py_compile` inside the container before saving is considered done;
   a syntax error breaks running experiments.
 - Never edit `local/docker-compose.yml` directly — it is regenerated from
-  `docker-compose.yml.pre` by `docker_up.sh`.
+  `docker-compose.yml.pre` by `docker_up.sh` (and is gitignored for that reason).
 
 ## Docs
 

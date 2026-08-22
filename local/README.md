@@ -20,7 +20,7 @@ be installed via `pip install docker-compose`.
 - **Never run `docker-compose down`** and **never prune volumes** (`docker volume prune`, `docker system prune --volumes`). All collected experiment data lives in an *anonymous* Docker volume; these commands orphan or delete it. Stop with `docker-compose stop`. See the root README §4.2 and §5 for safe shutdown, backup, cleanup, and recovery procedures.
 - Note: `load_sim.py` (plain HTTP) and `stress_test.py` (real browsers) simulate concurrent participants, including trap questions — see "Load, leak and browser tests" below and DEV_DOCUMENTATION.md, Step 6.
 
-Optionally, you need extra packages located in `local/requirements.txt` to run the `launch.py` and `stress_test.py` scripts in this directory:
+The Python virtual environment (`local/local-venv/`) is not in git: create it once with `python3 -m venv local-venv` and install `local/requirements.txt` into it (root README §2.3). You need those packages to run `launch.py` and the test scripts in this directory:
 
 `python -m venv venv`
 `source venv/bin/activate`
