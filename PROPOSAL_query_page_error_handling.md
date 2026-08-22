@@ -1,7 +1,18 @@
 # Proposal: stop sending server-error victims to the FAIL exit
 
-*Status: PROPOSAL ONLY — not implemented. Written 2026-08-21 after the rank-4
-overload incident. No code has been changed.*
+*Status (2026-08-22): IMPLEMENTED on branch `fix/redis-leak-and-retry` — see the
+commit log. Sections 1–5 landed as `5fe091f` (query page + next_widget.js),
+`15b55aa` (processAnswer returns `meta.expelled`), `d73a085`/`7f1c287` (YAML fields
+and configs). Differences from the proposal as written: the genuine-expulsion
+error reached the browser as a generic HTML 500 (the JSON error handler never
+applied), so discrimination is done server-side (`meta.expelled`) with the
+text match kept only as a fallback; the `participant_failed` flag in the success
+payload did not exist and was not needed. Companion fix 1 (the connection leak)
+turned out to have a different mechanism than guessed below — see
+`REPRO_REDIS_LEAK.md`; it is fixed (`6faff20` … `5c6f3cc`). Companion fix 2
+(dashboard matplotlib) is still open. Original text follows unchanged.*
+
+*Originally written 2026-08-21 after the rank-4 overload incident.*
 
 ## The problem (what happened on 2026-08-20/21)
 

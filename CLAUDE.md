@@ -82,9 +82,30 @@ experiment (old data is untouched).
 - Cleanup / orphaned-volume recovery: README §5. A ~441 MB orphaned volume with
   Oct 2025–Mar 2026 data still awaits recovery — never prune dangling volumes.
 
+## Stability fixes (branch `fix/redis-leak-and-retry`, Aug 2026)
+
+- **Redis connection leak (the 2026-08-21 outage) is fixed in
+  `next/broker/broker.py`**: each request's celery result backend is released
+  after the call. `rabbitmqredis` is the plain `redis:8` image (the old custom
+  image's `CLIENT KILL` cron is gone). Regression check:
+  `docker exec -i local_nextbackenddocker_1 python /next_backend/local/diag_result_backend.py <EXP_UID> 40 8`
+  must print `FLAT`; `local/leak_monitor.sh 30 > leak.csv &` watches sockets
+  live. Full story and reproduction: `REPRO_REDIS_LEAK.md`.
+- gunicorn runs `-w 2 --max-requests 2000`; nginx proxies wait 330 s
+  (`local/nginx.conf`; apply with
+  `docker exec reverse_proxy nginx -t && docker exec reverse_proxy nginx -s reload`).
+- **Query page retries server errors and has a separate "Technical problem"
+  exit** (`retry_attempts`, `debrief_error`, `debrief_link_error` in the YAML;
+  README §3.5). Studies need **three** Prolific completion codes (success /
+  failed attention checks / technical issue) in the `_live` config. Server
+  expulsions now return `200 {meta.expelled: true}` from `processAnswer`.
+- Test tools in `local/`: `load_sim.py` (HTTP participants), `check_export.py`
+  (export integrity), `test_query_page_retry.py` (browser scenarios; needs the
+  `selenium/standalone-chrome` container from DEV_DOCUMENTATION §6.1).
+
 ## Code changes on the live stack
 
-- Templates/widgets (`.html`): live after `docker restart local_nextbackenddocker_1` (~2 s).
+- Templates/widgets (`.html`) and `next/query_page/static/js`: live after `docker restart local_nextbackenddocker_1` (~2 s). Backend Python under `next/` is also hot-reloaded by gunicorn `--reload`.
 - `apps/*/myApp.py` / algorithms: celery children re-import within ~5 tasks — run
   `python -m py_compile` inside the container before saving is considered done;
   a syntax error breaks running experiments.
