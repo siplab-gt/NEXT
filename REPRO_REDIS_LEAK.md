@@ -136,6 +136,7 @@ image and gunicorn flags still need the container recreate):
 The narrow port range that previously produced total failure cannot be exhausted any
 more: connections are closed when the request ends instead of hoarded.
 
-_Still to run on the rebuilt stack (cron-less Redis, `-w 2`): the 2 h idle soak and the
-1 h 10-participant soak from the plan, with `leak_monitor.sh` — see the plan's M1
-acceptance criteria._
+Rebuilt-stack acceptance (cron-less `redis:8`, gunicorn `-w 2`): 10-participant load
+(2,407 requests, all 200, 0 CLOSE_WAIT, 0 sockets 60 s after), 2 h idle soak (0 sockets,
+0 errors, RSS flat), 25 simultaneous participants (7,519 requests, all 200, 0 CLOSE_WAIT).
+Details in `CAPACITY_REPORT.md`.
