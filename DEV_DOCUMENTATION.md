@@ -901,6 +901,29 @@ cd local/
 
 For a worked 30-participant example with results and interpretation, see `PRECOMPUTE_REPORT.md`.
 
+### 6.4 Pure-HTTP load generation: load_sim.py, check_export.py, leak_monitor.sh
+
+For capacity and leak testing a browser per participant is unnecessary. `local/load_sim.py` drives simulated ARankB participants straight against the API with the real payload shapes (`getQuery` with `widget: false`, `processAnswer` with the prefixed `participant_uid`), answers traps correctly or deliberately wrong, and classifies every outcome the way the query page does (`ok` / `transient` / `expelled` / `app_fail` / `technical_exit`), never re-POSTing an answer. It runs from this box or from a laptop:
+
+```bash
+cd local/
+# through nginx, like real participants (from the box: use the Host header)
+./local-venv/bin/python load_sim.py --base http://127.0.0.1 --host-header 52.2.236.217 \
+    --exp EXP_UID --participants 25 --think 8,15 --wrong-trap-fraction 0.1 --tag run1
+# from a laptop
+python3 load_sim.py --base http://52.2.236.217 --exp EXP_UID --participants 25 --tag run1
+```
+
+Output: `loadsim_<tag>.csv` (one row per request with latency, HTTP status and outcome) and a summary (p50/p95/p99 per call type, status counts, completions, expulsions, technical exits, peak in-flight). `--fault bad-url:K` makes every K-th request hit a wrong URL to exercise the retry path; `--no-retry` reproduces the old page behaviour.
+
+Afterwards, `./local-venv/bin/python check_export.py EXP_UID --prefix sim` verifies the export: contiguous duplicate-free `query_id` per participant (the double-record detector), traps in the expected slots, `num_trapped` / `participant_failed` consistency and the expected expulsion shape.
+
+`./leak_monitor.sh 30 > leak_run1.csv &` samples the backend's sockets to the Redis result backend by TCP state, Redis's client count, load, memory and nginx 5xx / `Errno 99` counts every 30 s — the instrument behind `REPRO_REDIS_LEAK.md`. After the fix the CLOSE_WAIT column must stay near zero and ESTABLISHED must return to its idle baseline within a minute of load stopping. `docker exec -i local_nextbackenddocker_1 python /next_backend/local/diag_result_backend.py EXP_UID 40 8` is the in-process regression check for that leak (must print `FLAT`).
+
+### 6.5 Browser test of the query page's error handling
+
+`local/test_query_page_retry.py EXP_UID` (needs the Selenium container from 6.1 and a throwaway sample experiment) drives five scenarios in headless Chrome: normal flow, worker paused mid-submit → retry banner → recovery with no duplicate answers, retries exhausted → technical-problem exit → resume, genuine expulsion → attention-check fail exit, and refresh-resumes. Run it after any change to `next_widget.js`, `query_page.html` or `process_answer.py`.
+
 ---
 
 ## Parameter Alignment Checklist

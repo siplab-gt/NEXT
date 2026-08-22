@@ -240,7 +240,20 @@ You now have created and activated a Python environment named local-venv. You ha
 - **Analysis note:** the exported `participant_uid` is prefixed with the experiment UID (i.e. `EXPUID_PROLIFICID`). Strip the prefix (or match by suffix) when joining against Qualtrics/Prolific records.
 - **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — a refresh costs **zero** queries: all prior answers are kept, and the unanswered query that was on screen is re-served at the same position, so the participant still answers the full configured number of queries. A participant who reloads the page after finishing is taken directly to the completion (debrief) screen instead of being served extra queries.
 - Only the main query page (`/query/query_page/query_page/...`) has this feature. Do not send participants to `query_page_popup`.
-  
+
+### 3.5. Completion codes and what participants see when something goes wrong
+The query page has **three** exits, each with its own text and link in the experiment YAML, so a Prolific submission code tells you exactly what happened:
+
+| Exit | When | YAML text / link | Use a Prolific code meaning |
+|---|---|---|---|
+| Success | all `num_tries` queries answered | `debrief` / `debrief_link` | completed |
+| Attention-check failure | the participant missed enough trap questions to be expelled (`tolerance × num_trap_questions`) | `debrief_fail` / `debrief_link_fail` | failed attention checks |
+| Technical problem | the server could not be reached after `retry_attempts` automatic retries | `debrief_error` / `debrief_link_error` | technical issue (**do not** reuse the failure code) |
+
+- A failed server call (timeout, 5xx, nginx error page) is **never** shown as an attention-check failure. The page shows a "Connection problem — retrying in N s (attempt k of `retry_attempts`)" banner with a *Retry now* button and retries on its own with growing delays (5, 15, 30 s). Progress is kept on the server, so a participant who lands on the technical exit can re-open their link later and continue where they left off.
+- An interrupted answer is never re-sent: recovery re-requests the query, and the server re-serves the one that was on screen (or the next one if the answer did get through), so nothing is double-counted.
+- Create three completion codes on Prolific and put them in the gitignored `*_live.yaml` copy of your config (`local/prolific_codes.local.txt` is the local record). Review a "technical issue" submission by checking the participant's progress in the export rather than treating it as a failure.
+
 ---
 
 ## 4. End Experiment & Shutdown server
