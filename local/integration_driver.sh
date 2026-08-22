@@ -18,6 +18,7 @@ check(){ # check NAME  (uses $? of the previous command via $1=status)
   if [ "$1" = 0 ]; then say "PASS $2"; else say "FAIL $2"; fails=$((fails+1)); fi; }
 launch(){ $PY launch.py "$1" 2>&1 | grep -oE "experiment_dashboard/[a-f0-9]+" | head -1 | cut -d/ -f2; }
 
+RUN_START=$(date -u +%FT%TZ)
 say "=== INTEGRATION RUN on $(git -C .. rev-parse --short HEAD) ($(git -C .. branch --show-current)) ==="
 
 say "STEP 0 preflight"
@@ -46,6 +47,7 @@ code=$(curl -s -m 60 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: ap
 
 say "STEP 5 acceptance: 10 participants, 2 h idle, 25 participants (production precompute config)"
 EXP_ACC=$(launch ARankB-InfoTuple-cog_rank4_precompute.yaml); say "acceptance experiment: $EXP_ACC"
+: > acceptance.log     # acceptance_driver appends; the checks below assume one run
 ./acceptance_driver.sh $EXP_ACC >> $LOG 2>&1
 grep -q "max_close_wait=0 nginx_5xx_total=0 errno99_total=0" acceptance.log; check $? "acceptance summary: 0 CLOSE_WAIT, 0 5xx, 0 Errno 99"
 [ "$(grep -c 'export check: PASS' acceptance.log)" = 2 ]; check $? "both acceptance export checks PASS"
@@ -55,7 +57,8 @@ grep -A7 "load_sim summary (c25)" acceptance.log | grep -E "getQuery|participant
 say "STEP 6 final health + cron evidence"
 ./healthcheck.sh >> $LOG 2>&1; check $? "healthcheck.sh OK after the run"
 [ "$(grep -c ' OK ' health.log)" -ge 10 ]; check $? "cron has been running healthcheck.sh (>=10 OK lines in health.log)"
-! grep -q "restarted local_nextbackenddocker_1" health.log || say "NOTE: an auto-restart happened during the run (see health.log)"
+! awk -v t="$RUN_START" '$1 >= t' health.log | grep -q "restarted local_nextbackenddocker_1" || say "NOTE: an auto-restart happened during the run (see health.log)"
+awk -v t="$RUN_START" '$1 >= t && $2 != "OK"' health.log | head -3 | sed 's/^/  health during run: /' | tee -a $LOG
 
 if [ $fails = 0 ]; then verdict="INTEGRATION_VERDICT: ALL PASS"; else verdict="INTEGRATION_VERDICT: FAILED ($fails checks failed - see integration.log)"; fi
 say "$verdict"

@@ -13,7 +13,7 @@
 #
 # Optional settings in alert.local.conf (gitignored), KEY=value:
 #   WEBHOOK_URL=https://hooks.slack.com/...     PROBE_EXP_UID=<exp uid for the probe>
-#   HOST_HEADER=52.2.236.217  AUTO_RESTART=1  CLOSE_WAIT_CRIT=5000  CLOSE_WAIT_WARN=1000
+#   HOST_HEADER=52.2.236.217  AUTO_RESTART=1  CLOSE_WAIT_CRIT=5000  CLOSE_WAIT_WARN=1000  STEAL_WARN=20
 # Exit status: 0 healthy, 1 warning, 2 critical.
 set -u
 cd "$(dirname "$0")"
@@ -60,6 +60,9 @@ n5=$(docker logs --since 5m reverse_proxy 2>&1 | grep -cE '" 5[0-9]{2} ')
 [ "$n5" -gt 5 ] && { worst 1; msgs+=("nginx 5xx in 5 min: $n5"); }
 load=$(cut -d' ' -f1 /proc/loadavg); cores=$(nproc)
 awk -v l="$load" -v c="$cores" 'BEGIN{exit !(l > 2*c)}' && { worst 1; msgs+=("load $load on $cores cores"); }
+# 6. CPU steal (burstable instances: credits exhausted -> everything slows down)
+steal=$( { head -1 /proc/stat; sleep 1; head -1 /proc/stat; } | awk 'NR==1{s1=$9; t1=$2+$3+$4+$5+$6+$7+$8+$9} NR==2{s2=$9; t2=$2+$3+$4+$5+$6+$7+$8+$9; if(t2>t1) printf "%.0f", 100*(s2-s1)/(t2-t1); else print 0}')
+[ "${steal:-0}" -ge "${STEAL_WARN:-20}" ] && { worst 1; msgs+=("CPU throttled: steal ${steal}% (burstable credits exhausted?)"); }
 
 # auto-remediation: the leak signature only (backend is stateless)
 if [ "$leak" = 1 ] && [ "$AUTO_RESTART" = 1 ]; then
@@ -67,7 +70,7 @@ if [ "$leak" = 1 ] && [ "$AUTO_RESTART" = 1 ]; then
 fi
 
 case $level in 0) status=OK;; 1) status=WARN;; 2) status=CRIT;; esac
-line="$ts $status est=$est close_wait=$cw all_tcp=$all errno99=$errno99 probe=$probe nginx5xx=$n5 load=$load${msgs:+ | ${msgs[*]}}${actions:+ | ${actions[*]}}"
+line="$ts $status est=$est close_wait=$cw all_tcp=$all errno99=$errno99 probe=$probe nginx5xx=$n5 load=$load steal=${steal:-0}%${msgs:+ | ${msgs[*]}}${actions:+ | ${actions[*]}}"
 echo "$line" >> $LOG
 
 # alert on state change, and every 6th consecutive non-OK run (~30 min)

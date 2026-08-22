@@ -2,7 +2,7 @@
 
 *Branch `fix/redis-leak-and-retry` → `master`. Written 2026-08-22. Everything below is already running on the lab box; merging only publishes it.*
 
-_Integration run: pending — the unattended run writes its verdict here and in local/integration.log._
+_Integration run (2026-08-22 06:40–10:37 UTC, `local/integration.log`): **code checks all PASS** — leak regression FLAT, all six browser scenarios, export integrity incl. the stored expelling answer, dashboard plots, 10-participant load (2,407 requests all 200, 0 CLOSE_WAIT), 2 h idle soak (0 sockets), health check + cron. **The 25-participant step failed on machine capacity, not code**: 35 minutes in, the t2.2xlarge's burst credits ran out (23% of all non-idle CPU time since boot is hypervisor steal), everything slowed ~2.5×, background jobs hit their 60 s limit, queries crossed the 120 s client timeout and 21 of 25 simulated participants took the technical exit — no 5xx, no leak, no restart. The same 25-participant run passed in full last night on a fresh credit balance (`CAPACITY_REPORT.md`). Re-run it after moving to a non-burstable instance._
 
 ## Why
 

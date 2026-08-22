@@ -51,6 +51,31 @@ instead of being cut off at 60 s and mislabelled as failures. Latency at 25 on t
 box is poor (p50 9 s per query; the 10-participant run had p50 7.7 s), i.e. the box is
 compute-bound well before 25: this is the capacity problem, not a reliability one.
 
+## Integration re-run (2026-08-22 morning) and the burst-credit finding
+
+A second full run (`local/integration_driver.sh`) repeated every test after the later
+changes (dashboard shim, expelling-answer storage, health check, venv untracking):
+leak regression FLAT; six browser scenarios PASS; export integrity PASS with the
+expelling answer now stored; dashboard plots 200; 10 participants: 2,407 requests all
+200, 0 CLOSE_WAIT; 2 h idle: 0 sockets; health check OK throughout (cron firing).
+
+The 25-participant step **failed on capacity**: fine for 35 minutes (p50 10 s), then
+from 10:05 UTC the box slowed ~2.5× — two background jobs were killed at the 60 s
+celery limit (normally ~8 s), the worker's throughput collapsed while load *fell*,
+in-flight requests piled up, getQuery crossed the simulator's 120 s timeout and 21/25
+participants took the technical exit. No 5xx, no CLOSE_WAIT, no restart, no OOM, empty
+queues. `/proc/stat` shows **23 % of all non-idle CPU time since boot stolen by the
+hypervisor**: the t2.2xlarge had spent its burst credits after ~7 h of heavy use
+(last night's run + this one). Last night's identical run passed on a fresh balance.
+
+Consequences: (1) capacity numbers from this box are only valid while its credit
+balance is healthy — check *CPU credit balance* in the EC2 console's Monitoring tab
+before trusting a run; (2) `leak_monitor.sh` and `healthcheck.sh` now report
+`steal_pct` / warn at ≥ 20 %, so throttling is visible as it happens; (3) the capacity
+ramp belongs on a non-burstable instance, as planned. Worth tuning there regardless:
+`CELERY_ASYNC_WORKER_PREFETCH` 4 → 1 (long tasks + prefetch = head-of-line blocking
+under load) and the sync-job time limit for precompute under contention.
+
 ## Next: capacity ramp on a non-burstable instance
 
 After resizing (e.g. `c5.4xlarge`, 16 vCPU; the Elastic IP survives; restart with

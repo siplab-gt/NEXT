@@ -16,12 +16,15 @@
 #   nginx_5xx     5xx responses logged by nginx in the last INTERVAL seconds
 #   errno99       "Errno 99" lines in the backend log in the last INTERVAL seconds
 #   concurrent    "ConcurrentObjectUseError" lines in the backend log, same window
+#   steal_pct     CPU time stolen by the hypervisor over the last second (burstable
+#                 instances: >0 means the CPU-credit balance is exhausted and the box
+#                 is throttled - every computation gets slower)
 #
 # Pass criterion after the fix: close_wait < 100 and flat; est returns to its idle
 # baseline within ~60 s of load stopping; errno99 == 0; concurrent == 0.
 INT=${1:-30}
 B=local_nextbackenddocker_1; R=local_rabbitmqredis_1; N=reverse_proxy
-echo "ts,est,close_wait,time_wait,other,all_tcp,redis_clients,load1,backend_rss,nginx_5xx,errno99,concurrent"
+echo "ts,est,close_wait,time_wait,other,all_tcp,redis_clients,load1,backend_rss,nginx_5xx,errno99,concurrent,steal_pct"
 while :; do
   ts=$(date -u +%FT%TZ)
   # /proc/net/tcp: col3 = remote addr:port (hex), col4 = state. 18EB = 6379.
@@ -35,6 +38,7 @@ while :; do
   n5=$(docker logs --since ${INT}s $N 2>&1 | grep -cE '" 5[0-9]{2} ')
   e99=$(docker logs --since ${INT}s $B 2>&1 | grep -c 'Errno 99')
   cu=$(docker logs --since ${INT}s $B 2>&1 | grep -c 'ConcurrentObjectUseError')
-  echo "$ts,$est,$cw,$tw,$oth,$all,${rc:-?},$load,${rss:-?},$n5,$e99,$cu"
+  steal=$( { head -1 /proc/stat; sleep 1; head -1 /proc/stat; } | awk 'NR==1{s1=$9; t1=$2+$3+$4+$5+$6+$7+$8+$9} NR==2{s2=$9; t2=$2+$3+$4+$5+$6+$7+$8+$9; if(t2>t1) printf "%.1f", 100*(s2-s1)/(t2-t1); else print 0}')
+  echo "$ts,$est,$cw,$tw,$oth,$all,${rc:-?},$load,${rss:-?},$n5,$e99,$cu,$steal"
   sleep "$INT"
 done
