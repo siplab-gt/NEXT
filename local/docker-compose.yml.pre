@@ -125,7 +125,13 @@ services:
      - nextnet
 
   rabbitmqredis:
-    build: {{NEXT_DIR}}/next/database/redis
+    # Celery result backend. Plain upstream image (as in ec2/templates): the old
+    # custom image ran a cron that CLIENT KILLed idle connections every 5 min,
+    # which turned the backend's per-request sockets into CLOSE_WAIT zombies and
+    # caused the 2026-08-21 port-exhaustion outage. The backend now releases its
+    # connections itself (next/broker/broker.py), so no server-side reaping.
+    image: redis:8
+    command: redis-server --appendonly yes
     ports:
      - "0.0.0.0:6379:6379"
     networks:
