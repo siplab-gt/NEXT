@@ -63,6 +63,9 @@ services:
       - GIT_HASH={{GIT_HASH}}
       - PYTHONPATH=:/next_backend
       - HOSTNAME=localhost
+      # Queue domain used by jobs submitted from inside the worker (butler.job);
+      # must match the queues the workers consume (async@localhost etc.).
+      - MINIONWORKER_HOSTNAME=localhost
     networks:
      - nextnet
     depends_on:
@@ -73,7 +76,11 @@ services:
 
   nextbackenddocker:
     build: {{NEXT_DIR}}/next/base_docker_image
-    command: gunicorn --worker-class=gevent -R --log-level=debug --logger-class=simple --reload -b 0.0.0.0:8000 -w 1 next.api.api:app
+    # -w 2: a second worker keeps serving while one is recycled or stuck.
+    # --max-requests: safety net against any residual per-process growth (the
+    # 2026-08-21 connection leak is fixed in next/broker/broker.py; ec2/templates
+    # always had this and never hit it). Jitter spreads the two recycles apart.
+    command: gunicorn --worker-class=gevent -R --log-level=debug --logger-class=simple --reload -b 0.0.0.0:8000 -w 2 --max-requests 2000 --max-requests-jitter 200 --graceful-timeout 60 next.api.api:app
     volumes:
      - {{NEXT_DIR}}:/next_backend
      - {{NEXT_DIR}}:/opt/miniconda3
