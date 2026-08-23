@@ -22,7 +22,7 @@ for v in SUCCESS FAILURE TECHNICAL; do
 done
 mask(){ sed -E 's/(cc=)[A-Za-z0-9]{4}[A-Za-z0-9]*/\1****/g'; }
 TEMPLATES=("$@")
-[ ${#TEMPLATES[@]} -gt 0 ] || TEMPLATES=(ARankB-InfoTuple-cog_rank4.yaml ARankB-InfoTuple-cog_rank4_precompute.yaml)
+[ ${#TEMPLATES[@]} -gt 0 ] || TEMPLATES=(ARankB-InfoTuple-cog_rank4_precompute.yaml)
 for t in "${TEMPLATES[@]}"; do
   [ -f "$t" ] || { echo "no such template: $t"; exit 1; }
   out="${t%.yaml}_live.yaml"

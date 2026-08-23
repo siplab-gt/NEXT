@@ -57,28 +57,28 @@ shown by `docker ps -a` — that is the bug's debris.
 ## Launching an experiment
 
 ```bash
-cd /home/ubuntu/NEXT/local && ./local-venv/bin/python launch.py ARankB-InfoTuple-cog_rank4.yaml
+cd /home/ubuntu/NEXT/local && ./local-venv/bin/python launch.py ARankB-InfoTuple-cog_rank4_precompute_live.yaml
 ```
-Lab configs: `ARankB-InfoTuple-cog_rank{2,4,5,6}.yaml` and `cog_tutorial.yaml` in
-`local/`. The command prints the experiment UID; each launch creates a brand-new
-experiment (old data is untouched).
+Configs in `local/`: **`ARankB-InfoTuple-cog_rank4_precompute.yaml` is the production
+rank-4 study** (150 queries + 8 traps, one-step-ahead precompute on);
+`cog_rank4_sample_base.yaml` is its 32-query demo used by every test; `cog_rank2 / 5 /
+6.yaml` and `cog_tutorial.yaml` are other studies on the same Prolific standard. The
+command prints the experiment UID; each launch creates a brand-new experiment (old
+data is untouched).
 
 - **⚠ Prolific completion codes live only in `*_live.yaml` configs**, which are
   gitignored (`local/*_live.yaml`) because the GitHub repo is public — the tracked
   configs carry `YOUR_SUCCESS_CODE` / `YOUR_FAILURE_CODE` / `YOUR_TECHNICAL_CODE`
-  placeholders. **Launch real studies from the `_live` config**, e.g.
-  `ARankB-InfoTuple-cog_rank4_precompute_live.yaml` (rank4 + precompute) or
-  `ARankB-InfoTuple-cog_rank4_live.yaml` (rank4, no precompute). Regenerate them
-  with `cd local && ./make_live.sh`, which substitutes the three placeholders from
-  `local/prolific_codes.local.txt` (`SUCCESS_CODE=`, `FAILURE_CODE=`,
-  `TECHNICAL_CODE=`) — re-run it after editing a template. Never put real codes in
-  a tracked file.
-- **One-step-ahead precompute** (`precompute: true` in the YAML, off by default):
-  `cog_rank4_precompute.yaml` is the production rank4 config with it enabled;
-  `cog_rank4_sample_{pre,base}.yaml` are 32-query demos. Monitor with
-  `docker logs local_minionworker_1 2>&1 | grep PRECOMPUTE`. Sizing: near-instant
-  serves up to ~8–12 simultaneous participants on this 8-core box; details and
-  levers in `PRECOMPUTE_REPORT.md`.
+  placeholders. **Launch real studies from the `_live` config**
+  (`ARankB-InfoTuple-cog_rank4_precompute_live.yaml`), regenerated with
+  `cd local && ./make_live.sh` from the template + `local/prolific_codes.local.txt`
+  (`SUCCESS_CODE=`, `FAILURE_CODE=`, `TECHNICAL_CODE=`) — re-run it after editing the
+  template; pass another template as an argument for the other studies. Never put
+  real codes in a tracked file.
+- **One-step-ahead precompute** (`precompute: true` in the YAML, off by default) is
+  on in the production config. Monitor with
+  `docker logs local_minionworker_1 2>&1 | grep PRECOMPUTE`; design and levers in
+  `PRECOMPUTE_REPORT.md`, measured sizing in `CAPACITY_REPORT.md` (see "Machine").
 
 ## URLs (substitute the experiment UID)
 
