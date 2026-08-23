@@ -76,7 +76,41 @@ ramp belongs on a non-burstable instance, as planned. Worth tuning there regardl
 `CELERY_ASYNC_WORKER_PREFETCH` 4 → 1 (long tasks + prefetch = head-of-line blocking
 under load) and the sync-job time limit for precompute under contention.
 
-## Next: capacity ramp on a non-burstable instance
+## Capacity ramp on c6i.2xlarge (8 real cores, 2026-08-22/23)
+
+Same production config (rank-4, precompute on, 158 queries), think 8–15 s, 10 % wrong
+traps, through nginx, one fresh experiment per level, worker counts unchanged from the
+t2 (4 async + 6 sync). Driver: `local/capacity_ramp.sh`; log `local/ramp.log`.
+
+| Simultaneous participants | Requests | HTTP | getQuery p50 / p95 / max | Technical exits | Completed |
+|---|---|---|---|---|---|
+| 25 | 7,519 | all 200 | 13.6 s / 32 s / 68 s | 0 | 23 (+2 expelled as designed) |
+| 40 | 11,868 | all 200 | 20.1 s / 48 s / 76 s | 0 | 36 (+4 expelled) |
+| 60 | 14,368 | all 200 | 29.7 s / 68 s / 117 s | 0 | stopped by hand at ~120/158 answers (+6 expelled) |
+
+Whole ramp: 0 CLOSE_WAIT, 0 nginx 5xx, 0 Errno 99, **0 % steal** (real cores), worker
+pegged at ~790 % of 8 vCPUs from 25 upwards, RabbitMQ backlog 20 → 50 → 65 tasks.
+
+**Reading.** Nothing breaks up to 60 simultaneous participants — the reliability work
+holds — but the experience degrades linearly because the box is compute-bound from
+~15 participants on: each InfoTuple selection costs ~13 s of CPU here (9 s on the t2's
+older cores with credits; the c6i's 8 vCPUs are 4 physical cores with hyperthreading,
+and each of the 10 worker processes lets OpenBLAS run 2 threads — see tuning). Rule of
+thumb on 8 real cores with this config: **~10 simultaneous participants for near-instant
+serves, ~25 for tolerable (≈15 s median) waits, 40+ only if participants will accept
+half-minute waits.** Per query the cost is the selection, so the only ways to move the
+curve are more cores (c6i.4xlarge ≈ 2× throughput), cheaper selections (`down_sample`),
+or fewer wasted selections.
+
+**Tuning to try next (separate commits, each re-measured at 25):**
+1. `OPENBLAS_NUM_THREADS=1` on the worker (10 processes × 2 BLAS threads on 8 vCPUs
+   is pure contention; likely recovers part of the 13 s → 9 s gap).
+2. `CELERY_ASYNC_WORKER_PREFETCH` 4 → 1 (long tasks + prefetch = head-of-line blocking;
+   the 50–65-task backlog is partly prefetch).
+3. `worker_max_tasks_per_child` 5 → 200 (a re-import every 5 tasks).
+4. On a c6i.4xlarge: `CELERY_ASYNC_WORKER_COUNT` 4 → 8, `CELERY_SYNC_WORKER_COUNT` 6 → 12.
+
+## Next: capacity ramp on a larger instance
 
 After resizing (e.g. `c5.4xlarge`, 16 vCPU; the Elastic IP survives; restart with
 `docker start …`), run from this box or a laptop:
