@@ -40,7 +40,7 @@ initExp:
           optional: true
 
         debrief_fail:
-          description: Debrief message that appears as a popup on the query page once the user has responded to num_tries queries.
+          description: Debrief message shown when the participant is expelled for failing too many attention-check (trap) questions.
           type: str
           default: Thank you for participating, too
           optional: true
@@ -55,6 +55,24 @@ initExp:
           description: Link to display at the end if participant failed
           type: str
           default: https://www.linkedin.com/
+          optional: true
+
+        retry_attempts:
+          description: How many times the query page automatically retries a failed server call (getQuery, or the getQuery used to recover after a failed processAnswer) before showing the technical-problem exit. 0 disables retries.
+          type: num
+          default: 3
+          optional: true
+
+        debrief_error:
+          description: Message shown on the technical-problem exit, i.e. when the server could not be reached after all retries. Distinct from debrief_fail (attention-check failure).
+          type: str
+          default: A technical problem interrupted the study and it cannot continue right now. Your progress has been saved. Please use the link below to return to Prolific and message the researcher quoting your participant ID.
+          optional: true
+
+        debrief_link_error:
+          description: Link shown on the technical-problem exit, e.g. a Prolific completion code reserved for technical issues. Leave empty to show the message only.
+          type: str
+          default: ""
           optional: true
 
         num_tries:

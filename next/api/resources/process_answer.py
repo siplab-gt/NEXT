@@ -18,6 +18,7 @@ from flask_restful import Resource, reqparse
 from next.api.api_util import *
 from next.api.api_util import APIArgument
 import json
+import re
 import next.utils
 import next.utils as utils
 import next.broker.broker
@@ -43,6 +44,14 @@ meta_success = {
     'status': 'OK'
 }
 
+# An app signals a genuine attention-check expulsion by raising from
+# processAnswer (apps/ARankB/myApp.py: "Participant <uid> failed";
+# apps/ARankB/algs/InfoTuple/myAlg.py: "Bad participant <uid> is expelled").
+# That used to surface as a generic HTML 500 - indistinguishable from an outage -
+# so the query page could only guess. It is now returned as a structured 200
+# with meta.expelled=True, which the page maps to the attention-check fail exit.
+EXPULSION_RE = re.compile(r"(Participant .* failed|Bad participant .* is expelled)")
+
 # Answer resource class
 
 
@@ -64,18 +73,25 @@ class processAnswer(Resource):
         # Parse out a target_winner. If the argument doesn't exist, return a meta dictionary error.
         args_json = json.dumps(args_data)
         # Execute processAnswer
-        response_json, didSucceed, message = broker.applyAsync(app_id,
-                                                               exp_uid,
-                                                               'processAnswer',
-                                                               args_json)
+        try:
+            response_json, didSucceed, message = broker.applyAsync(app_id,
+                                                                   exp_uid,
+                                                                   'processAnswer',
+                                                                   args_json)
+        except Exception as e:
+            if EXPULSION_RE.search(str(e)):
+                meta = dict(meta_success, participant_failed=True, expelled=True,
+                            message=str(e)[:200])
+                return attach_meta({}, meta), 200
+            raise
 
-        # Add participant_failed to the meta_success if it exists
-        meta_success['participant_failed'] = args_data['args'].get(
-                                                              'participant_failed', 
-                                                              False)
+        # Per-request copy: meta_success is module-level and must not be mutated
+        # (concurrent requests would leak each other's flags).
+        meta = dict(meta_success)
+        meta['participant_failed'] = args_data['args'].get('participant_failed', False)
 
         if didSucceed:
-            return attach_meta(eval(response_json), meta_success), 200
+            return attach_meta(eval(response_json), meta), 200
         else:
             print("Failed to processAnswer", message)
             return attach_meta({}, custom_errors['ReportAnswerError'], backend_error=message)

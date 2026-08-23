@@ -1,5 +1,13 @@
 import mpld3
+import matplotlib.axis
 import matplotlib.pyplot as plt
+
+# mpld3 >= 0.5.11 calls Axis.get_converter(), which matplotlib only added in
+# 3.10; the image pins matplotlib 3.8.x, where the converter is a plain
+# attribute. Without this every dashboard plot fails with
+# "'XAxis' object has no attribute 'get_converter'".
+if not hasattr(matplotlib.axis.Axis, 'get_converter'):
+    matplotlib.axis.Axis.get_converter = lambda self: getattr(self, 'converter', None)
 import json
 import numpy
 import numpy.random

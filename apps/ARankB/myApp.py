@@ -148,14 +148,42 @@ class MyApp:
             butler.job('getModel', json.dumps({'exp_uid': butler.exp_uid, 'args': {
                        'alg_label': query['alg_label'], 'logging': True}}))
         participant_failed = butler.participants.get(uid=participant_uid, key='participant_failed')
-        if num_reported_answers >= num_tries and participant_failed:
-            raise ValueError("Participant {} failed".format(participant_uid))
-        alg({'target_winner': target_winner, 'participant_uid': participant_uid, 
-             'disregard_candidate': participant_failed})
         # trapped / num_trapped_so_far are persisted onto the query doc so the
         # per-trap outcome survives into the JSON/CSV exports
-        return {'target_winner': target_winner, 'targets': targets, 'participant_failed': participant_failed,
-                'trapped': trapped, 'num_trapped_so_far': num_trapped}
+        answer_record = {'target_winner': target_winner, 'targets': targets,
+                         'participant_failed': participant_failed,
+                         'trapped': trapped, 'num_trapped_so_far': num_trapped}
+        try:
+            if num_reported_answers >= num_tries and participant_failed:
+                raise ValueError("Participant {} failed".format(participant_uid))
+            alg({'target_winner': target_winner, 'participant_uid': participant_uid,
+                 'disregard_candidate': participant_failed})
+        except Exception:
+            # An expulsion is signalled by raising (here, or in the algorithm
+            # when expel is on). App.processAnswer only writes the answer to the
+            # query document after this function returns, so the expelling
+            # answer - the wrong trap that tripped the limit - used to be lost
+            # from the export. Record it ourselves, with the same timing fields
+            # the framework adds, before letting the raise propagate.
+            self._record_answer_before_raise(butler, query, args, answer_record)
+            raise
+        return answer_record
+
+    @staticmethod
+    def _record_answer_before_raise(butler, query, args, answer_record):
+        try:
+            record = dict(answer_record)
+            response_time = float(args.get('response_time', 0.))
+            received = args.get('timestamp_answer_received')
+            record['response_time'] = response_time
+            record['timestamp_answer_received'] = received
+            if received and query.get('timestamp_query_generated'):
+                round_trip = (utils.str2datetime(received) -
+                              utils.str2datetime(query['timestamp_query_generated'])).total_seconds()
+                record['network_delay'] = round_trip - response_time
+            butler.queries.set_many(uid=args['query_uid'], key_value_dict=record)
+        except Exception as e:  # never mask the expulsion itself
+            utils.debug_print('could not record expelling answer: {}'.format(e))
 
     def getModel(self, butler, alg, args):
         return alg()

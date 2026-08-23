@@ -98,7 +98,13 @@
 ## 2. Preparation
 ### 2.1. AWS Instance Setup
 This section describes how to set up an AWS instance to host the NEXT ML platform. Instructions for how to run the system locally can be found in the README.md of the local directory in the NEXT github repository. We assume that you have an AWS account and are familiar with computer systems, linux, SSH and the terminal.
-- **Instance Type** - We suggest at minimum using an instance type of t2.2xlarge to run the NEXT system. This may need to be increased depending on the scale of your experiments. It is a good idea to monitor system performance during the experiments. This will inform you about the resources needed and can help determine the optimal instance type. You should select ubuntu 22.04 LTS as your operating system. This operating system is stable and has been tested with the NEXT implementation.
+- **Instance Type** - Use a **non-burstable** type: `c6i.2xlarge` (8 cores, 16 GB, ≈$0.34/h) for up to ~10–15 simultaneous participants, `c6i.4xlarge` (16 cores, ≈$0.68/h) for more; `m6i.*` if you want 32 GB of RAM. Select Ubuntu 22.04 LTS as the operating system.
+
+  **Avoid the `t2`/`t3` "burstable" families for data collection.** They advertise 8 CPUs but only guarantee 40 % of them (≈3.2 CPUs on a t2.2xlarge); the rest is paid for with "CPU credits" that accumulate while the machine idles and run out after a few hours of heavy use — after which AWS throttles the machine to the baseline and every query computation takes 2–3× longer. That is exactly what happened during the Aug 2026 testing: a 25-participant run that passed on a full credit bank failed the next morning when the bank was empty (`CAPACITY_REPORT.md`). A `c6i.2xlarge` is cheaper than a `t2.2xlarge` and never throttles. If you must stay on a t2/t3, enable *Unlimited* mode or keep concurrency at ≤10, and watch the **CPU credit balance** graph in the instance's Monitoring tab; `local/healthcheck.sh` and `local/leak_monitor.sh` report the throttling as `steal %`.
+
+  **Sizing for a collection day (measured Aug 2026, rank-4 config with precompute, `CAPACITY_REPORT.md`).** On 8 real cores (`c6i.2xlarge`) the platform stayed fully reliable up to 60 simultaneous participants — no errors, no lost answers, no leaked connections — but each query's wait grows with the crowd, because every query costs ~13 s of CPU and participants share the cores: about **10–15 at a time for a comfortable study, ~25 for tolerable ~15-second waits (p95 ≈ 30 s), 40+ only if a half-minute wait per query is acceptable.** So a `c6i.2xlarge` is enough for 10–15 concurrent participants; move to a `c6i.4xlarge` (16 cores) if you want ~25 comfortably. Plan your Prolific concurrency from this (release places in batches) rather than from the nominal CPU count. Every failure mode seen in the Aug 2026 study — the connection leak, server errors mislabelled as failed attention checks, no alerting — is handled (§3.2, §3.3, §3.5).
+
+  **Changing the instance type later needs no reinstall:** the root disk is an EBS volume that moves with the instance. Stop the instance (not terminate), *Actions → Instance settings → Change instance type*, start it again; the Elastic IP stays attached. After the start only nginx restarts by itself — bring the rest back with `docker start local_mongodb_1 local_rabbitmq_1 local_rabbitmqredis_1 local_minionredis_1 local_minionworker_1 local_nextbackenddocker_1 local_cadvisor_1`, then re-check the worker counts in `local/docker-compose.yml.pre` against the new core count (DEV_DOCUMENTATION.md §6).
 ![instance](picRef/instance_spec.png) 
 - **Key Pair** -
 In order to SSH into the system, you will need to use a pre-existing key pair that you have on AWS, or create a new one. We recommend creating a new one as a good security practice. Select create key pair and then do the following:
@@ -205,6 +211,7 @@ You now have created and activated a Python environment named local-venv. You ha
     ./docker_up.sh YOUR_PUBLIC_IP
     ```
     (also `docker rm -f` any hash-prefixed leftover shown by `docker ps -a`). Freshly *created* containers don't trigger the bug; only recreation does. **Never `docker rm` the `local_mongodb_1` container** — unlike the backend/worker it owns the anonymous data volume, and removing it orphans your database (see §4.2 and §5). If compose ever insists on recreating `mongodb` itself, stop and take a backup first (§5.3).
+  - **Troubleshooting: every request suddenly fails while the machine is idle.** If participants report an error screen the moment they start, and the backend log (`docker logs local_nextbackenddocker_1`) shows `Error 99 connecting to rabbitmqredis:6379. Cannot assign requested address`, the backend has run out of network ports — historically caused by a Redis connection leak that is now fixed (see `REPRO_REDIS_LEAK.md`). Confirm with `./leak_monitor.sh 10` in `local/` (the `close_wait` column should be near zero; thousands means the leak is back) and recover with `docker restart local_nextbackenddocker_1` (2 s, no data affected). Participants who were inside the study keep their progress and can continue from their link.
   - Next, run ```source local-venv/bin/activate``` to activate a python virtual env.
   - Finally, you can launch the experiment with:
   ```python launch.py NAME_OF_YAML_FILE_YOU_CONFIGURED```. And to make sure the experiment has successfully launched, go to the home page of NEXT and find ***Experiment List***. Click it and you should be able to find the experiment you just launched by looking at the ***start date***. 
@@ -217,17 +224,25 @@ You now have created and activated a Python environment named local-venv. You ha
 - **Download Participant Data**
   - At the same dashboard page, you can spot ***Participant data*** that contains all the participant-related information including participant ID, response, decision_time, etc (actual content depends on types of query). You can download it in JSON or in CSV format.
   - **A Rank B CSV column key:** one row per answered query with `participant_uid` (the entered Prolific ID, prefixed by the experiment UID), `anchor`/`anchor_id` (the anchor item), `rank_1..rank_B` with matching `rank_k_id` columns (the participant's ranking, left to right), `target_position_k`/`position_k_id` (what was displayed), `isTrap`, `query_id`, and timing fields (`response_time`, timestamps). Trap rows intentionally have blank ranking columns (their raw answer is a sentinel, not a real ranking). Queries that were served but never answered (e.g. abandoned by a page refresh) are excluded from the CSV but remain in the JSON without a `target_winner` field.
-  - **Trap outcome columns:** every answered row carries `trapped` (for a trap row: `True` means the participant answered it *wrong*; always `False` on normal rows) and `num_trapped_so_far` (the participant's running count of wrong traps at that point). Four participant-level columns are repeated on every row: `participant_num_trapped`, `participant_failed_final`, `participant_traps_seen`, and `participant_traps_answered`. The JSON download has the same aggregates under a top-level `participant_summaries` key (per participant: `num_trapped`, `participant_failed`, `num_answers`, `traps_seen`, `traps_answered`) alongside the unchanged `participant_responses`. The aggregate columns populate for experiments collected before this feature too; the per-row `trapped` field exists only for data collected after it. One nuance: if a participant is **expelled** on their final wrong trap, that last trap's outcome appears only in the aggregates (the expulsion interrupts the write to the query document).
+  - **Trap outcome columns:** every answered row carries `trapped` (for a trap row: `True` means the participant answered it *wrong*; always `False` on normal rows) and `num_trapped_so_far` (the participant's running count of wrong traps at that point). Four participant-level columns are repeated on every row: `participant_num_trapped`, `participant_failed_final`, `participant_traps_seen`, and `participant_traps_answered`. The JSON download has the same aggregates under a top-level `participant_summaries` key (per participant: `num_trapped`, `participant_failed`, `num_answers`, `traps_seen`, `traps_answered`) alongside the unchanged `participant_responses`. The aggregate columns populate for experiments collected before this feature too; the per-row `trapped` field exists only for data collected after it. (Data collected before Aug 2026 has one gap: for an **expelled** participant the final wrong trap's outcome appears only in the aggregates; the expelling answer is now recorded on its row like any other.)
   - **Download URLs:** the dashboard links use `/api/experiment/<EXP_UID>/participants?zip=1` (JSON) and `?csv=1&zip=1` (CSV). `?csv=1` without `zip` returns the raw CSV body directly.
 - **Tips on Customize Static Sampling Process with Example** 
   - In  ```Next/local/csv ``` folder, a example CSV file is provided as well as other simple python scripts that are used to extract information from the CSV file.
   It serves as an example of how you could transform each query from your source of file to dictionary format in ```*-init.yaml```. Files in this folder extract queries and initialize a Binary Word Sentinement Classification task introduced in section one. Set configs in ```config.yaml``` and launch experiment by running ```python easy_launch.py ```.
 - **Monitor System Performance**
   - It is always a good idea to monitor and test system performance. This can inform you about the needs of your system and about which processes or services are consuming resources. 
+    - **Automatic health check and alerts:** `local/healthcheck.sh` probes the whole request path (nginx → backend → celery → Redis), counts the backend's dead Redis sockets, checks that every container is up and how many 5xx nginx served in the last 5 minutes, and writes one line per run to `local/health.log`. It alerts when the status changes (and every 30 min while not OK) by posting to a Slack/Discord-style webhook, and on the connection-leak signature it restarts the stateless backend container by itself. Install it once with `crontab -e`:
+      ```
+      */5 * * * * /home/ubuntu/NEXT/local/healthcheck.sh >/dev/null 2>&1
+      ```
+      and put `WEBHOOK_URL=https://hooks.slack.com/...` (plus any threshold overrides listed in the script header) in the gitignored `local/alert.local.conf`. Without a webhook the alerts are still written to `health.log`. `tail -3 local/health.log` is the quickest way to see how the stack is doing.
+    - **Connection health (manual):** `cd local && ./leak_monitor.sh 30 > leak.csv &` samples the backend's connections to the Redis result store every 30 s (live, dead/`close_wait`, Redis's own client count, load, memory, nginx 5xx and `Errno 99` counts). Healthy: `close_wait` ≈ 0 and the live count returns to zero within a minute of participants finishing. Run it during any collection day and glance at the last line now and then (`tail -1 local/leak.csv`).
     - **Cadvisor** allows you to monitor cpu, memory, and disk usage on the system wide level, as well as per process and per container. We have implemented a password protected version for you. The default user and password is admin and password. To change these, simply change the content in the ```cadvisor_user.txt``` and ```cadvisor_password.txt``` files respectively. The docker environment will use these to set the username and password for cadvisor. To sign into cadvisor, go to this url: ``` instance-public-ipaddress/cadvisor ```
 
 ### 3.4. Linking Participants to Prolific / Qualtrics IDs
 - Before the first query, every participant is shown a popup asking for their **Prolific ID**. The entered ID becomes their `participant_uid`, so it appears on every response row in the downloaded JSON/CSV participant data (see 3.3).
+
+  ![Prolific ID popup, pre-filled from the URL parameter](picRef/QueryPage_ProlificModal.png)
 - The popup is **pre-filled automatically** when the query page URL carries a `participant` parameter:
   ```
   http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=PROLIFIC_ID
@@ -238,9 +253,41 @@ You now have created and activated a Python environment named local-venv. You ha
   - Set the Qualtrics End-of-Survey redirect to: ```http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=${e://Field/PROLIFIC_PID}```
   - If the parameter is ever missing, the popup simply shows an empty box and the participant types their ID by hand — nothing breaks.
 - **Analysis note:** the exported `participant_uid` is prefixed with the experiment UID (i.e. `EXPUID_PROLIFICID`). Strip the prefix (or match by suffix) when joining against Qualtrics/Prolific records.
-- **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — a refresh costs **zero** queries: all prior answers are kept, and the unanswered query that was on screen is re-served at the same position, so the participant still answers the full configured number of queries. A participant who reloads the page after finishing is taken directly to the completion (debrief) screen instead of being served extra queries.
+- **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — a refresh costs **zero** queries: all prior answers are kept, and the unanswered query that was on screen is re-served at the same position, so the participant still answers the full configured number of queries. A participant who reloads the page after finishing is taken directly to the completion (debrief) screen instead of being served extra queries. The same applies after the "Technical problem" exit (§3.5): reopening the link continues the study where it stopped.
 - Only the main query page (`/query/query_page/query_page/...`) has this feature. Do not send participants to `query_page_popup`.
-  
+
+### 3.5. Completion codes and what participants see when something goes wrong
+The query page has **three** exits, each with its own text and link in the experiment YAML, so a Prolific submission code tells you exactly what happened:
+
+| Exit | When | YAML text / link | Use a Prolific code meaning |
+|---|---|---|---|
+| Success | all `num_tries` queries answered | `debrief` / `debrief_link` | completed |
+| Attention-check failure | the participant missed enough trap questions to be expelled (`tolerance × num_trap_questions`) | `debrief_fail` / `debrief_link_fail` | failed attention checks |
+| Technical problem | the server could not be reached after `retry_attempts` automatic retries | `debrief_error` / `debrief_link_error` | technical issue (**do not** reuse the failure code) |
+
+What the participant sees in each case (test experiment; the links carry placeholder codes):
+
+![Connection problem banner: the page retries on its own](picRef/QueryPage_RetryBanner.png)
+
+*A failed server call — the page retries automatically; the participant can also press "Retry now".*
+
+![Technical problem exit](picRef/QueryPage_TechnicalProblem.png)
+
+*Retries exhausted — the separate "Technical problem" screen with the technical-issue link. Never the fail code.*
+
+![Attention-check failure exit](picRef/QueryPage_AttentionFail.png)
+
+*A genuine attention-check failure — the only way to reach the fail link.*
+
+![Successful completion](picRef/QueryPage_Success.png)
+
+*Completion — the success link.*
+
+- A failed server call (timeout, 5xx, nginx error page) is **never** shown as an attention-check failure. The page shows a "Connection problem — retrying in N s (attempt k of `retry_attempts`)" banner with a *Retry now* button and retries on its own with growing delays (5, 15, 30 s). Progress is kept on the server, so a participant who lands on the technical exit can re-open their link later and continue where they left off. Each attempt waits up to 2 minutes for a hanging server, so the technical exit appears after ~50 s if the server is down and up to ~8 minutes if it is merely hanging.
+- An interrupted answer is never re-sent: recovery re-requests the query, and the server re-serves the one that was on screen (or the next one if the answer did get through), so nothing is double-counted.
+- Create three completion codes on Prolific and put them in the gitignored `local/prolific_codes.local.txt` (`SUCCESS_CODE=`, `FAILURE_CODE=`, `TECHNICAL_CODE=`), then run `cd local && ./make_live.sh` to generate the `*_live.yaml` launch configs from the tracked templates — re-run it whenever a template changes. Review a "technical issue" submission by checking the participant's progress in the export rather than treating it as a failure.
+- These screens are exercised automatically by `local/test_query_page_retry.py` (DEV_DOCUMENTATION.md §6.5) — run it after any change to the query page.
+
 ---
 
 ## 4. End Experiment & Shutdown server
@@ -319,3 +366,10 @@ Then ```mongorestore``` the dump into the live database if desired. As of Aug 20
 ## 6. Link to Media Instructions
 ``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_1/1_p9fujklo ```
 ``` https://mediaspace.gatech.edu/media/NEXT_install_instructions_part_2/1_ucyud9f3```
+
+---
+
+## 7. Further Reading
+- `PRECOMPUTE_REPORT.md` — one-step-ahead query precompute: design, verification, and the first load test (numbers predate the Aug 2026 stability fixes).
+- `CAPACITY_REPORT.md` — acceptance results after the stability fixes (10 and 25 simultaneous participants) and the plan for a capacity ramp on a larger instance.
+- `REPRO_REDIS_LEAK.md` — the Aug 2026 outage: how the Redis connection leak was reproduced, what it really was, and the before/after numbers.

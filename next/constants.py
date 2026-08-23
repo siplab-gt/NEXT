@@ -85,21 +85,11 @@ CELERY_RESULT_BACKEND = 'redis://{hostname}:{port}/{db}/'.format(
     port=RABBITREDIS_PORT,
     db=os.environ.get('RABBITREDIS_DB', '0'))
 
-# Add connection pool and socket options to the Redis result backend
-redis_transport_options = {
-    'max_connections': 20,                # Maximum number of connections
-    # Seconds before a socket read/write operation times out
-    'socket_timeout': 30,
-    'retry_on_timeout': True,             # Retry on timeout
-}
-
-CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = redis_transport_options
-
-# CELERY_RESULT_BACKEND = BROKER_URL
-TASK_RESULT_EXPIRES = 60
-TASK_SERIALIZER = 'json'
-ACCEPT_CONTENT = ['json']  # Ignore other content
-RESULT_SERIALIZER = 'json'
+# Result expiry, serializers and redis socket options are configured in
+# next/broker/celery_app/celery_broker.py (new-style keys). The old
+# TASK_RESULT_EXPIRES / TASK_SERIALIZER / ACCEPT_CONTENT / RESULT_SERIALIZER
+# names here were neither valid old-style (CELERY_*) nor new-style keys and
+# were silently ignored by celery.
 
 CELERY_ON = eval(os.environ.get('CELERY_ON', 'True'))
 

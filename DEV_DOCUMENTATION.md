@@ -75,8 +75,15 @@ flowchart TB
         P1["myApp.py processAnswer()<br>query_id becomes k+1"] --> P2["myAlg.py processAnswer()<br>updates embedding state"]
     end
     processAnswer -->|"queries remaining"| getQuery
-    processAnswer -->|"all answered"| Debrief["debrief screen"]
+    processAnswer -->|"all answered"| Debrief["success debrief<br>debrief_link"]
+    processAnswer -->|"200 meta.expelled"| Fail["attention-check debrief<br>debrief_link_fail"]
+    getQuery -. "timeout / 5xx / app error" .-> Retry["Connection problem banner<br>retry_attempts x, growing delays"]
+    processAnswer -. "timeout / 5xx" .-> Retry
+    Retry -->|"retry = fresh getQuery<br>(answer never re-POSTed)"| getQuery
+    Retry -->|"retries exhausted"| Tech["Technical problem exit<br>debrief_link_error"]
 ```
+
+Error handling (the dotted edges) is described under "Server-error handling, retries and the three exits" in Framework Contracts.
 
 The following sections will provide concrete example for the above illustration. In most cases, since the YAML file defines the parameters that get passed to the corresponding functions in the Python files, **it's crucial that these align properly.** 
 
@@ -130,7 +137,13 @@ args:
   your_arg_1: 25
   your_flag_1: true
   #-----------------------------------------------------------------------#
-  debrief: Test debrief 
+  debrief: Thank you - you have completed the study.
+  debrief_fail: You did not pass enough attention checks, so the study ends here.
+  debrief_link: https://app.prolific.com/submissions/complete?cc=YOUR_SUCCESS_CODE
+  debrief_link_fail: https://app.prolific.com/submissions/complete?cc=YOUR_FAILURE_CODE
+  retry_attempts: 3            # server-error retries before the technical-problem exit
+  debrief_error: A technical problem interrupted the study. Your progress has been saved.
+  debrief_link_error: https://app.prolific.com/submissions/complete?cc=YOUR_TECHNICAL_CODE
   instructions: Drag the slider until the color on the right matches the color on the left. 
   participant_to_algorithm_management: one_to_many
   # Where you store your resources. You can access them in app level when you see an object called target_manager. Don't have to use them tho.
@@ -677,10 +690,10 @@ class MyAlg:
 This is the final step where you integrate the user interface that renders your query. It should be standard a HTML, CSS, Javascript all in one Jinja 2 template.To better explain how it would look like, an UI rendered by `apps/ARankB/widgets/getQuery_widget.html` is attached below. ![ARankB_UI_Illustration](picRef/ARankB_UI_Illustration.png) Note that you do not have to understand the entire functionality of this particular file as your query will more than likely look and work very differently from it. The goal is to give you a big picture.
 
 **⚠️ Key Takeaway**: 
-1. Your UI is inserted into a larger frame created by `next/query_page`. When your implementation fails, the `widget_failure()` function in `next_widget.js` will be triggered, showing a pre-coded debrief screen. Study `next_widget.js` to understand the integration points and error handling.
+1. Your UI is inserted into a larger frame created by `next/query_page`. Every failed server call (`getQuery` or `processAnswer`: timeout, 5xx, nginx error page, or a 200 without a widget) ends in the page's `widget_failure(jqXHR, textStatus, errorThrown, phase, data)` callback, which **classifies and retries** — it does not show a debrief. Only a genuine expulsion reaches the attention-check debrief; everything else is retried and, if retries run out, lands on the separate "Technical problem" screen. Details and the API contract are in Framework Contracts → "Server-error handling". Study `next_widget.js` for the integration points.
 2.  To access an argument within the dictionary returned from `getQuery()` that you wrote at app level, use `{{query.your_arg}}`.
 3. In your `submit()` function, make sure to call `next_widget.processAnswer(participant_response)`.
-4. The query page (`next/query_page/templates/query_page.html`) has **four terminal states**: (a) the success debrief after the last answer, (b) an immediate debrief when a finished participant reloads the page (`query_id > total_queries`), (c) `widget_failure()` → failure debrief on any failed request (this includes an expelled trap-failing participant), and (d) the pre-experiment Prolific ID modal that gates everything. Your experiment template should therefore always define all four yaml keys: `debrief`, `debrief_fail`, `debrief_link`, `debrief_link_fail` — a template with only `debrief` renders empty strings for the rest.
+4. The query page (`next/query_page/templates/query_page.html`) has **five terminal states**: (a) the success debrief after the last answer, (b) an immediate success debrief when a finished participant reloads the page (`query_id > total_queries`), (c) the attention-check debrief when the server reports an expulsion (`200 {meta.expelled: true}` from `processAnswer`), (d) the "Technical problem" screen when a server error survives all retries, and (e) the pre-experiment Prolific ID modal that gates everything. Seven YAML keys drive them: `debrief`, `debrief_fail`, `debrief_link`, `debrief_link_fail` (a template with only `debrief` renders empty strings for the other three) and `retry_attempts`, `debrief_error`, `debrief_link_error` (read with defaults, so experiments launched before they existed still render).
 
 ---
 
@@ -740,7 +753,7 @@ flowchart TD
         G --> I["num_trapped + 1"]
         I --> J{"Tolerance<br>exceeded?"}
         J -->|"no"| H
-        J -->|"yes"| K["participant_failed<br>failure debrief shown"]
+        J -->|"yes"| K["participant_failed<br>processAnswer answers 200 meta.expelled<br>attention-check debrief shown"]
     end
 ```
 
@@ -748,12 +761,55 @@ Key facts:
 - **Data format** (targetset entries after the regular targets): `primary_description` is the comma-separated option list and **the first option is the correct answer**; `alt_description` is the question shown in the anchor card. The separator is exactly `", "`.
 - **Scheduling** is a pure function of the participant's `query_id` (`apps/ARankB/myApp.py`), so a refreshed participant sees the trap at the same slot. `total_queries = num_tries + trap_count`.
 - **Scoring is client-side**: the widget accepts any submission with **at least one** card in the rank box and checks whether the leftmost card's text equals the correct option, sending only the boolean. The payload is always the sentinel `target_winner=[0]` plus `trapped` — trap answers contribute **nothing** to the active-learning algorithm (the comparison lists extract empty from `[0]`), they only advance the head counter.
-- **Escape/expulsion** (`myApp.processAnswer` + `myAlg.processAnswer`): each wrong trap increments `num_trapped`; reaching `tolerance × num_trap_questions` sets `participant_failed`, and with `expel: true` the offending answer raises — the failed request triggers `widget_failure()` and the participant lands on the failure debrief.
-- **Persistence and export**: `processAnswer` writes `trapped` and `num_trapped_so_far` onto the answered query document, so the per-trap outcome survives into both JSON and CSV. The participants export additionally joins the participants collection (scalar projection only — participant docs also carry pickled embeddings that must never reach JSON) to produce per-participant aggregates: a `participant_summaries` key in the JSON and `participant_num_trapped` / `participant_failed_final` / `participant_traps_seen` / `participant_traps_answered` columns in the CSV, which populate for pre-existing experiments too. Trap rows keep `isTrap=True` with intentionally blank ranking columns. Caveat: when `expel: true` fires, the fatal trap's `trapped` field never lands on its query document (the raise happens first) — the aggregates are authoritative.
+- **Escape/expulsion** (`myApp.processAnswer` + `myAlg.processAnswer`): each wrong trap increments `num_trapped`; reaching `tolerance × num_trap_questions` sets `participant_failed`, and with `expel: true` the offending answer raises. `next/api/resources/process_answer.py` catches that raise and answers `200` with `meta.expelled = true` (and `participant_failed = true`); the page's `processAnswer_success` sees the flag and shows the attention-check debrief. (Before Aug 2026 the raise surfaced as a generic HTML 500, indistinguishable from an outage — see "Server-error handling" below.)
+- **Persistence and export**: `processAnswer` writes `trapped` and `num_trapped_so_far` onto the answered query document, so the per-trap outcome survives into both JSON and CSV. The participants export additionally joins the participants collection (scalar projection only — participant docs also carry pickled embeddings that must never reach JSON) to produce per-participant aggregates: a `participant_summaries` key in the JSON and `participant_num_trapped` / `participant_failed_final` / `participant_traps_seen` / `participant_traps_answered` columns in the CSV, which populate for pre-existing experiments too. Trap rows keep `isTrap=True` with intentionally blank ranking columns. When `expel: true` fires, `myApp.processAnswer` writes the fatal trap's answer (with the usual timing fields) to its query document itself before the raise propagates — `App.processAnswer` would otherwise skip the write, which is why exports from before Aug 2026 lack that one row.
+
+### Server-error handling, retries and the three exits (added Aug 2026)
+
+A participant session has three ways to end, each with its own text and link in the experiment YAML, so the Prolific completion code says exactly what happened:
+
+| Exit | Trigger | YAML | Screen |
+|---|---|---|---|
+| Success | last answer recorded, or a finished participant reloads | `debrief`, `debrief_link` | `#debrief` modal |
+| Attention-check failure | `processAnswer` returns `200 {meta.expelled: true}` | `debrief_fail`, `debrief_link_fail` | `#debrief` modal |
+| Technical problem | a server error survived `retry_attempts` retries | `debrief_error`, `debrief_link_error` | `#technical_modal` (separate element, amber header) |
+
+**API contract.** `processAnswer` answers `200` with `meta.status = "OK"` on success, and `200` with `meta.expelled = true, meta.participant_failed = true` when the app raised an expulsion (`next/api/resources/process_answer.py` matches the messages `Participant … failed` / `Bad participant … is expelled`). Anything else that goes wrong is an infrastructure error: an nginx HTML page (502/504), a timeout, or a generic 500. `getQuery` can also answer `200` with `meta.status = "FAIL"` and no `html` when the app raised; `next_widget.js` reports that as a failure (`textStatus = "appfail"`) instead of throwing inside the success handler, which used to hang the page silently.
+
+**Client state machine** (`next/query_page/templates/query_page.html`):
+
+```mermaid
+flowchart TD
+    R["server call<br>getQuery / processAnswer"] -->|"200 OK"| OK["continue"]
+    R -->|"200 meta.expelled"| F["attention-check debrief"]
+    R -->|"timeout / 5xx / HTML / appfail"| C{"attempt < retry_attempts?"}
+    C -->|"yes"| B["banner: Connection problem,<br>retrying in N s (attempt k of max)<br>+ Retry now"]
+    B -->|"delay 5 / 15 / 30 s"| G["fresh getQuery"]
+    G --> R
+    C -->|"no"| T["Technical problem modal<br>debrief_link_error"]
+```
+
+Rules that matter when you touch this code:
+- **Recovery is always a fresh `getQuery`, never a re-POST of the answer.** The refresh-resume contract above guarantees the server re-serves a query that was served but not answered, and serves the next one if the answer did land before the error — so the client never needs to know whether a timed-out `processAnswer` was recorded, and nothing is double-counted. `local/check_export.py` verifies this (contiguous, duplicate-free `query_id` per participant).
+- The retry budget resets on any successful call; delays are `[5000, 15000, 30000]` ms (last value repeats). Each request has a 120 s client timeout (`next_widget.setOptions`), so a *hanging* server can keep a participant in retry mode for ~8 minutes before the technical exit; a *refusing* server gets there in ~50 s.
+- New YAML keys are read with `.get()` defaults in the template; never reference a new `experiment['args']` key without a default, because existing experiment documents lack it and Jinja renders a missing key as an empty token that breaks the whole script.
+- `widget_failure` still accepts the legacy zero-argument form, so older templates (`query_page_popup.html`, `queries_unlimited.html`) keep working; they have no retry logic.
+
+What the participant sees (test experiment, placeholder codes):
+
+![Retry banner](picRef/QueryPage_RetryBanner.png)
+
+![Technical problem modal](picRef/QueryPage_TechnicalProblem.png)
+
+![Attention-check debrief](picRef/QueryPage_AttentionFail.png)
+
+`local/test_query_page_retry.py` (§6.5) drives all of these in a real browser — run it after any change to `query_page.html`, `next_widget.js` or `process_answer.py`. User-facing description and the three Prolific codes: README §3.5.
 
 ### Background jobs: sync queues and one-step-ahead precompute
 
 Two celery worker pools exist (counts are env vars consumed by `next/broker/next_worker_startup.sh`): **async workers** all consume one shared queue and handle every HTTP-facing task (`getQuery`, `processAnswer`, `getModel`), while **sync workers** each own a private queue (`sync_queue_k@<host>`) for background jobs. `broker.applySyncByNamespace` assigns each *namespace* to a queue round-robin and every job in a namespace runs FIFO on that one concurrency-1 worker — that ordering guarantee is the platform's only serialization primitive (it is how `full_embedding_update` has always run, namespace = `expuid_alglabel`).
+
+Celery settings live in `next/broker/celery_app/celery_broker.py` (new-style keys: result expiry, serializers, socket options, task time limits); `next/constants.py` only supplies the broker URL, result backend URL and queue declarations. The API process waits for worker results through `JobBroker` in `next/broker/broker.py`, which releases the request's celery result backend after every call — see "System architecture" for why that matters.
 
 ⚠️ **Routing (fixed 2026):** the sync queues were historically bound to a single **fanout** exchange, so every sync job was delivered to — and executed by — *every* sync worker (`CELERY_SYNC_WORKER_COUNT`× duplicated work). `next/constants.py` now declares a **direct** exchange (`sync_direct@<host>`) with per-queue routing keys; a job runs exactly once. The new exchange name is deliberate: an existing exchange's type cannot be redeclared, so the old fanout exchange is simply left unused.
 
@@ -768,6 +824,38 @@ The serve path is **consume-if-present**: it uses the stored tuple only when the
 - **Monitoring**: the worker logs one line per event — `PRECOMPUTE SCHEDULED / DONE / HIT / STALE / FUTURE / ABANDONED / SKIP-WRAP` — grep `docker logs` of the worker container for `PRECOMPUTE`. (Celery's logger prints each line once per worker process; dedupe by job id when counting.)
 
 Design rationale, edge-case verification, and a 30-participant load test with sizing guidance live in `PRECOMPUTE_REPORT.md` at the repository root.
+
+---
+
+## System architecture (updated Aug 2026)
+
+```mermaid
+flowchart LR
+    B["Browser<br>participants + dashboard"] --> N["nginx<br>proxy timeouts 330 s"]
+    N --> A["API server<br>Flask + gunicorn gevent<br>-w 2, --max-requests 2000"]
+    A -->|"publish task"| MQ["RabbitMQ<br>task broker"]
+    MQ -->|"async@host"| WA["Async workers<br>HTTP-facing tasks"]
+    WA -->|"background jobs<br>(embedding updates, precompute)"| MQ
+    MQ -->|"sync_direct@host<br>routing key per queue"| WS["Sync workers<br>one private queue each<br>FIFO per namespace"]
+    WA -->|"store result"| RR["rabbitmqredis<br>celery result backend<br>stock redis:8"]
+    WS -->|"store result"| RR
+    RR -->|"result via pubsub<br>released per request"| A
+    WA --> MR["minionredis<br>Butler memory cache"]
+    WA --> DB
+    WS --> DB
+    A -->|"JSON / CSV downloads"| DB
+    subgraph DB["MongoDB - anonymous volume /data/db - never prune"]
+        D1["app_data<br>queries, participants,<br>experiments, algorithms"]
+        D2["logs<br>timings + exceptions"]
+    end
+```
+
+Request path: the browser talks only to nginx; the API publishes every `getQuery` / `processAnswer` as a celery task to RabbitMQ and **blocks until the result arrives** through the Redis result backend (`JobBroker` in `next/broker/broker.py`, up to 320 s). Two details of that wait caused the Aug 2026 outage and are now handled explicitly:
+
+- Under gunicorn's gevent worker, celery gives **each request its own result backend** (greenlet-local). `JobBroker` tears it down after every call — pubsub closed, pool disconnected, drainer greenlet killed — otherwise each request pins two sockets to `rabbitmqredis` forever, the port range fills up, and every request fails with `Errno 99`. `local/diag_result_backend.py` is the regression check; the full story is in `REPRO_REDIS_LEAK.md`.
+- nginx waits **330 s** for the backend (was 60 s), slightly longer than the backend's own 320 s limit, so a slow-but-successful request is never reported as a 504 while the answer is still being recorded.
+
+`rabbitmqredis` is the stock `redis:8` image (the former custom image with a connection-reaping cron is gone); `minionredis` is a separate Redis used only by `Butler` memory. Worker pool sizes are environment variables in `local/docker-compose.yml.pre`; celery settings live in `next/broker/celery_app/celery_broker.py`.
 
 ---
 
@@ -830,24 +918,7 @@ This approach ensures that query generation remains fast and memory-efficient wh
 
 All experiment data lives in MongoDB inside the `local_mongodb_1` container. The image ships **`mongosh` only** — the legacy `mongo` shell does not exist, and any old snippet using it will fail.
 
-```mermaid
-flowchart LR
-    B["Browser<br>participants + dashboard"] --> N["nginx"]
-    N --> A["API server<br>Flask + gunicorn"]
-    A -->|"getQuery / processAnswer"| QA["async@host<br>direct, one shared queue"]
-    QA --> WA["Async workers<br>HTTP-facing tasks"]
-    WA -->|"background jobs<br>(embedding updates, precompute)"| QS["sync_direct@host<br>direct, routing key per queue"]
-    QS --> WS["Sync workers<br>one private queue each<br>FIFO per namespace"]
-    WA --> DB
-    WS --> DB
-    A -->|"JSON / CSV downloads"| DB
-    subgraph DB["MongoDB - anonymous volume /data/db - never prune"]
-        D1["app_data<br>queries, participants,<br>experiments, algorithms"]
-        D2["logs<br>timings + exceptions"]
-    end
-```
-
-Where things live: `app_data` holds one document per query (including the answer and `participant_uid`) in `<app>:queries`, per-participant state (`query_id`, algorithm state such as embeddings) in `<app>:participants`, experiment configs in `<app>:experiments`, model state in `<app>:algorithms`, plus global `experiments_admin` (the experiment index) and `targets` (target sets, re-inserted per launch). `logs` grows fastest (`ALG-DURATION` per algorithm call).
+(The system diagram is in "System architecture" above.) Where things live: `app_data` holds one document per query (including the answer and `participant_uid`) in `<app>:queries`, per-participant state (`query_id`, algorithm state such as embeddings) in `<app>:participants`, experiment configs in `<app>:experiments`, model state in `<app>:algorithms`, plus global `experiments_admin` (the experiment index) and `targets` (target sets, re-inserted per launch). `logs` grows fastest (`ALG-DURATION` per algorithm call).
 
 Quick inspection (read-only, safe while an experiment runs):
 
@@ -866,7 +937,9 @@ For cleanup between data collections and recovery of orphaned volumes, follow RE
 
 ---
 
-## Step 6: Using stress_test.py
+## Step 6: Load, leak and browser testing
+
+Four kinds of test tool live in `local/`: a browser-per-participant stress test (`stress_test.py`, §6.1–6.3), a pure-HTTP load generator with an export checker and a connection monitor (§6.4), a browser test of the query page's error handling (§6.5), and `acceptance_driver.sh`, which strings the load and soak tests together for an unattended run (§6.6).
 
 `local/stress_test.py` simulates N participants answering an ARankB experiment **simultaneously**, one thread and one headless-Chrome session per participant. Each simulated participant goes through the real flow: the Prolific ID modal (distinct alphanumeric ID per driver), normal queries (ranks all cards), and trap questions (detected via the `#target-trap` element and answered with the flexible one-card rule; a configurable number of drivers answer traps *wrongly* to exercise trap counting and expulsion under load).
 
@@ -900,6 +973,35 @@ cd local/
 - Server-side counterparts to correlate with: `docker logs` of the worker container (`PRECOMPUTE` lines, task durations), RabbitMQ queue depths (`rabbitmqctl list_queues`), and cAdvisor for per-container CPU/memory.
 
 For a worked 30-participant example with results and interpretation, see `PRECOMPUTE_REPORT.md`.
+
+### 6.4 Pure-HTTP load generation: load_sim.py, check_export.py, leak_monitor.sh
+
+For capacity and leak testing a browser per participant is unnecessary. `local/load_sim.py` drives simulated ARankB participants straight against the API with the real payload shapes (`getQuery` with `widget: false`, `processAnswer` with the prefixed `participant_uid`), answers traps correctly or deliberately wrong, and classifies every outcome the way the query page does (`ok` / `transient` / `expelled` / `app_fail` / `technical_exit`), never re-POSTing an answer. It runs from this box or from a laptop:
+
+```bash
+cd local/
+# through nginx, like real participants (from the box: use the Host header)
+./local-venv/bin/python load_sim.py --base http://127.0.0.1 --host-header 52.2.236.217 \
+    --exp EXP_UID --participants 25 --think 8,15 --wrong-trap-fraction 0.1 --tag run1
+# from a laptop
+python3 load_sim.py --base http://52.2.236.217 --exp EXP_UID --participants 25 --tag run1
+```
+
+Output: `loadsim_<tag>.csv` (one row per request with latency, HTTP status and outcome) and a summary (p50/p95/p99 per call type, status counts, completions, expulsions, technical exits, peak in-flight). `--fault bad-url:K` makes every K-th request hit a wrong URL to exercise the retry path; `--no-retry` reproduces the old page behaviour.
+
+Afterwards, `./local-venv/bin/python check_export.py EXP_UID --prefix sim` verifies the export: contiguous duplicate-free `query_id` per participant (the double-record detector), traps in the expected slots, `num_trapped` / `participant_failed` consistency and the expected expulsion shape.
+
+`./leak_monitor.sh 30 > leak_run1.csv &` samples the backend's sockets to the Redis result backend by TCP state, Redis's client count, load, memory and nginx 5xx / `Errno 99` counts every 30 s — the instrument behind `REPRO_REDIS_LEAK.md`. After the fix the CLOSE_WAIT column must stay near zero and ESTABLISHED must return to its idle baseline within a minute of load stopping. `docker exec -i local_nextbackenddocker_1 python /next_backend/local/diag_result_backend.py EXP_UID 40 8` is the in-process regression check for that leak (must print `FLAT`).
+
+### 6.5 Browser test of the query page's error handling
+
+`local/test_query_page_retry.py EXP_UID` (needs the Selenium container from 6.1 and a throwaway sample experiment) drives the scenarios in headless Chrome: normal flow, worker paused mid-submit → retry banner → recovery with no duplicate answers, retries exhausted → technical-problem exit → resume, genuine expulsion → attention-check fail exit, refresh-resumes, and (`--only=S`) a full run to the success exit. `--screenshots=DIR` saves a PNG of each screen (the images in README §3.5 were made this way). Run it after any change to `next_widget.js`, `query_page.html` or `process_answer.py`. What the screens mean for participants and Prolific codes: README §3.5.
+
+### 6.6 Unattended acceptance run and live-config generation
+
+`local/acceptance_driver.sh EXP_UID` runs, in order: 10 HTTP participants on the given experiment, `check_export.py`, a 2 h idle soak, 25 simultaneous participants, `check_export.py` again, and a summary of the connection monitor (max live / dead sockets, 5xx and `Errno 99` totals). Start it in tmux (`tmux new-session -d -s acceptance "./acceptance_driver.sh EXP_UID"`) and read `local/acceptance.log`; results of the Aug 2026 run are in `CAPACITY_REPORT.md`.
+
+Real completion codes never go into a tracked config: `local/make_live.sh` generates the gitignored `*_live.yaml` files from the templates (README §3.5).
 
 ---
 
@@ -951,12 +1053,6 @@ Before testing, verify these alignments:
 ---
 
 ## Legacy System Notes
-
-### **System Architecture**
-- **Backend**: Maintains existing structure and implementation patterns
-- **Frontend**: Widgets handle rendering and user interaction
-- **Storage**: Butler system manages data persistence
-- **Workers**: Celery workers handle task processing with memory constraints
 
 ### **Development Workflow**
 1. **Study existing apps** (`ARankB`, `PAQ`, `DynamicPAQ`) for patterns

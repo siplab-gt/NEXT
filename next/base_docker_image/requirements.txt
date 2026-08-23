@@ -35,7 +35,7 @@ kombu~=5.3.7
 line-profiler~=4.1.2
 MarkupSafe~=2.1.5
 matplotlib~=3.8.4
-mpld3~=0.5.10
+mpld3==0.5.10  # 0.5.11 needs matplotlib>=3.10 (Axis.get_converter); see next/apps/AppDashboard.py
 numpy~=1.26.4
 packaging~=24.0
 pandas~=2.2.2
