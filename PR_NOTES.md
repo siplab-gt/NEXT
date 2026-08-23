@@ -2,7 +2,7 @@
 
 *Branch `fix/redis-leak-and-retry` → `master`. Written 2026-08-22. Everything below is already running on the lab box; merging only publishes it.*
 
-_Integration run (2026-08-22 06:40–10:37 UTC, `local/integration.log`): **code checks all PASS** — leak regression FLAT, all six browser scenarios, export integrity incl. the stored expelling answer, dashboard plots, 10-participant load (2,407 requests all 200, 0 CLOSE_WAIT), 2 h idle soak (0 sockets), health check + cron. **The 25-participant step failed on machine capacity, not code**: 35 minutes in, the t2.2xlarge's burst credits ran out (23% of all non-idle CPU time since boot is hypervisor steal), everything slowed ~2.5×, background jobs hit their 60 s limit, queries crossed the 120 s client timeout and 21 of 25 simulated participants took the technical exit — no 5xx, no leak, no restart. The same 25-participant run passed in full last night on a fresh credit balance (`CAPACITY_REPORT.md`). Re-run it after moving to a non-burstable instance._
+_Integration run (2026-08-22, `local/integration.log`): **all code checks PASS** — leak regression FLAT, six browser scenarios, export integrity incl. the stored expelling answer, dashboard plots, 10-participant load, 2 h idle soak, health check + cron. Its 25-participant step failed only because the burstable t2.2xlarge ran out of CPU credits (no 5xx, no leak); the instance was then replaced by a c6i.2xlarge and the capacity ramp (25/40/60, all clean) is in the verification section below._
 
 ## Why
 
@@ -41,7 +41,8 @@ Plus the things found on the way: expulsions arrived as unclassifiable HTML 500s
 ## How it was verified
 
 - Leak: reproduced the exact outage on old code (port range squeezed → `Errno 99`, every request 500); on the fix the same protocol gives all-200 and 0 `Errno 99`. In-process regression FLAT at 8-way concurrency.
-- Acceptance on the rebuilt stack: 10 participants (2,407 requests, all 200, 0 CLOSE_WAIT), 2 h idle (0 sockets, RSS flat), **25 simultaneous participants through nginx: 7,519 requests, all 200, 0 technical exits, 0 CLOSE_WAIT**, export integrity PASS. Latency at 25 on the t2.2xlarge is poor (p50 9 s) — a capacity question for a bigger instance, not a reliability one (`CAPACITY_REPORT.md`).
+- Acceptance on the rebuilt stack: 10 participants (2,407 requests, all 200, 0 CLOSE_WAIT), 2 h idle (0 sockets, RSS flat), **25 simultaneous participants through nginx: 7,519 requests, all 200, 0 technical exits, 0 CLOSE_WAIT**, export integrity PASS. Latency at 25 on the t2.2xlarge was poor (p50 9 s) — a capacity question, not a reliability one.
+- **Capacity ramp on the replacement box (c6i.2xlarge, 8 real cores):** 25 / 40 / 60 simultaneous participants → 7,519 / 11,868 / 14,368 requests, **every one HTTP 200, 0 technical exits, 0 leaked sockets, 0 % steal**; getQuery p50 13.6 s / 20.1 s / 29.7 s (p95 32 / 48 / 68 s). Reliability holds to 60; the comfortable range on 8 cores is 10–15 concurrent, ~25 with ~15 s waits; a c6i.4xlarge is the step up (`CAPACITY_REPORT.md`). The t2.2xlarge was retired after its burst credits ran out mid-test and slowed everything 2.5× — README §2.1 now explains burstable instances and the type change.
 - Browser: normal flow, worker paused mid-submit → banner → recovery with no duplicate answer, retries exhausted → technical exit → resume, genuine expulsion → fail exit, refresh → resume, full run → success exit: all PASS.
 - Dashboard plots, expelling-answer storage, and every health-check path (healthy / probe failure / leak signature with auto-restart / recovery) each reproduced-then-verified.
 
@@ -49,9 +50,13 @@ Plus the things found on the way: expulsions arrived as unclassifiable HTML 500s
 
 `docker pull redis:8`; `docker rm -f local_nextbackenddocker_1 local_minionworker_1 local_rabbitmqredis_1` (never mongodb); `cd local && ./docker_up.sh <PUBLIC_IP>`; `docker exec reverse_proxy nginx -s reload`. Create a venv from `local/requirements.txt`; `./make_live.sh` for live configs; install the cron line from README §3.3.
 
-## Commits (25)
+## Reviewing this PR
+
+GitHub will show ~5,400 changed files because the stale tracked venv (`local/local-venv/`, 5,343 files) is removed; the real change is **49 files, +2,168 / −599**. Filter out `local/local-venv` when reviewing. The commit list below also appears in the PR tab together with the pre-squash history of `prolific-id` (already in master via #3); the new work is these 33:
 
 ```
+2fd98d3 Keep Prolific completion codes in gitignored _live configs
+0bf646a Add post-incident proposal: query page error handling, Redis leak, dashboard stats
 efbed2e Add leak_monitor.sh and load_sim.py for reproducing the Redis leak
 a545ee6 load_sim: add --host-header so nginx can be exercised from localhost
 d19676b Reproduce the Redis connection leak outage on demand (before-fix results)
@@ -72,9 +77,15 @@ d09cfc9 Runbook: stability fixes, three completion codes, test tools; proposal m
 97afcb3 Acceptance results: leak soaks and 25-participant run all clean; capacity ramp plan
 d9e60a4 Add make_live.sh: generate the gitignored _live launch configs from tracked templates
 a431d76 Docs: retry/technical exit with screenshots, architecture with Redis, test tools
-544250f Docs: prune duplication — drop the implemented proposal note, trim runbook and legacy
+544250f Docs: prune duplication — drop the implemented proposal note, trim runbook and legacy n
 7c5d312 Dashboard: fix every stats plot failing with 'XAxis has no attribute get_converter'
 f5530d5 ARankB: record the expelling trap answer before the expulsion propagates
 eff1aa9 Add healthcheck.sh: cron health probe with alerts and auto-restart on the leak signatur
 647eecd Stop tracking the local venv and the generated docker-compose.yml
+de5dc1f Add PR notes and an unattended integration driver
+c9c0245 Integration re-run results; track CPU steal in the monitor and health check
+77aa439 Docs: burstable instances throttle after a few hours - recommend c6i, document the type
+6666299 Capacity ramp on c6i.2xlarge: 25/40/60 simultaneous participants, all stable, latency s
+a919175 Configs: one production rank-4 config, one sample; rank2/5/6/tutorial on the Prolific s
+095c4c5 Docs: lab box is a c6i.2xlarge; measured sizing; PR notes with ramp results
 ```

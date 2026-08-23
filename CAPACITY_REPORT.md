@@ -1,7 +1,9 @@
 # Acceptance and capacity results — leak fix + retry feature
 
-*2026-08-22, branch `fix/redis-leak-and-retry`, on the lab box (t2.2xlarge, 8 vCPU
-burstable, 31 GiB) after the rollout (plain `redis:8` result backend, gunicorn
+*2026-08-22/23, branch `fix/redis-leak-and-retry`. Sections "Leak acceptance",
+"Retry feature", "Combined" and "Integration re-run" ran on the original lab box (a
+t2.2xlarge, 8 vCPU burstable, 31 GiB); the "Capacity ramp" ran on its replacement, a
+c6i.2xlarge (8 real cores). All after the rollout (plain `redis:8` result backend, gunicorn
 `-w 2 --max-requests 2000`, nginx 330 s proxy timeouts). Throwaway experiment
 launched from the production config `ARankB-InfoTuple-cog_rank4_precompute.yaml`
 (158 queries incl. 8 traps, precompute on). Driver: `local/acceptance_driver.sh`;
@@ -102,44 +104,21 @@ half-minute waits.** Per query the cost is the selection, so the only ways to mo
 curve are more cores (c6i.4xlarge ≈ 2× throughput), cheaper selections (`down_sample`),
 or fewer wasted selections.
 
-**Tuning to try next (separate commits, each re-measured at 25):**
-1. `OPENBLAS_NUM_THREADS=1` on the worker (10 processes × 2 BLAS threads on 8 vCPUs
-   is pure contention; likely recovers part of the 13 s → 9 s gap).
-2. `CELERY_ASYNC_WORKER_PREFETCH` 4 → 1 (long tasks + prefetch = head-of-line blocking;
-   the 50–65-task backlog is partly prefetch).
-3. `worker_max_tasks_per_child` 5 → 200 (a re-import every 5 tasks).
-4. On a c6i.4xlarge: `CELERY_ASYNC_WORKER_COUNT` 4 → 8, `CELERY_SYNC_WORKER_COUNT` 6 → 12.
+Tuning: see "Next: c6i.4xlarge pass" below.
 
-## Next: capacity ramp on a larger instance
+## Next: c6i.4xlarge pass (when ~25 comfortable participants are needed)
 
-After resizing (e.g. `c5.4xlarge`, 16 vCPU; the Elastic IP survives; restart with
-`docker start …`), run from this box or a laptop:
+Stop → change instance type → start → `docker start …` (README §2.1), then in this order,
+each as its own commit and each re-measured at 25 participants with
+`./capacity_ramp.sh 25` (one level is enough to compare):
 
-```bash
-cd /home/ubuntu/NEXT/local
-./leak_monitor.sh 30 > leak_ramp.csv &
-for n in 25 40 60 100; do
-  ./local-venv/bin/python load_sim.py --base http://127.0.0.1 --host-header 52.2.236.217 \
-      --exp <EXP_UID> --participants $n --think 8,15 --wrong-trap-fraction 0.1 --tag ramp$n --quiet
-  ./local-venv/bin/python check_export.py <EXP_UID> --prefix simramp$n
-done
-```
-
-Record p50/p95 per level, `docker stats` CPU per container and RabbitMQ
-`messages_ready` on `async@localhost`; the levers (as separate commits) are
-`CELERY_ASYNC_WORKER_COUNT` 4→8/12 and `CELERY_SYNC_WORKER_COUNT` in
-`local/docker-compose.yml.pre`, `worker_max_tasks_per_child` 5→200 and
-`broker_pool_limit` 10→30 in `next/broker/celery_app/celery_broker.py`, gunicorn
-`-w 2→4`, and `down_sample` in the experiment YAML if still compute-bound. Target:
-the largest N with getQuery p95 under ~5 s (precompute keeping ahead of think time)
-and zero failures.
-
-## Alerting (added 2026-08-22)
-
-`local/healthcheck.sh` runs from cron every 5 minutes: full-path probe, dead-socket
-count, container liveness, nginx 5xx, load; one log line per run, webhook alert on
-state change, automatic backend restart on the leak signature. The 7-hour silent
-outage becomes a 5-minute one.
+1. Raise the worker counts to use the cores: `CELERY_ASYNC_WORKER_COUNT` 4 → 8,
+   `CELERY_SYNC_WORKER_COUNT` 6 → 12 in `local/docker-compose.yml.pre`; recreate the
+   worker (`docker rm -f local_minionworker_1 && ./docker_up.sh <IP>`).
+2. `OPENBLAS_NUM_THREADS=1` on the worker (BLAS thread contention).
+3. `CELERY_ASYNC_WORKER_PREFETCH` 4 → 1 (head-of-line blocking).
+4. `worker_max_tasks_per_child` 5 → 200.
+Then the full ramp (`./capacity_ramp.sh 25 40 60 100`) for the 16-core rule of thumb.
 
 ## Open items
 

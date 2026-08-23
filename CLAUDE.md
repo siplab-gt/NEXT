@@ -28,12 +28,11 @@ bind-mounted into the Docker containers. The instance has an **Elastic IP:
 
 ## Machine
 
-The lab instance is a **burstable t2.2xlarge** (8 vCPU on paper, 3.2 guaranteed): after a
-few hours of heavy load its CPU credits run out and everything slows 2–3× (the
-2026-08-22 25-participant re-run failed this way; README §2.1). Capacity numbers are
-only valid with a healthy credit balance — `healthcheck.sh`/`leak_monitor.sh` show
-`steal %`. Plan: move to `c6i.2xlarge`/`c6i.4xlarge` (stop → change type → start; EBS
-root and Elastic IP persist; then `docker start …` below).
+`c6i.2xlarge` (8 real cores, 15 GB, no burst credits) since 2026-08-22; the t2.2xlarge
+before it ran out of CPU credits mid-test. Measured with the production config:
+**10–15 simultaneous participants is comfortable, ~25 means ~15 s waits; reliable to
+60.** Sizing, the step up to a `c6i.4xlarge` and the type-change procedure: README
+§2.1 and `CAPACITY_REPORT.md`. `steal %` in `healthcheck.sh` must stay 0.
 
 ## Starting the stack
 
