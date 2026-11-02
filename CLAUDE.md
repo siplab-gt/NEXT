@@ -29,12 +29,12 @@ bind-mounted into the Docker containers. The instance has an **Elastic IP:
 ## Machine
 
 `c6i.4xlarge` (16 vCPU, 30 GB, no burst credits) since 2026-11-02 (c6i.2xlarge before,
-t2.2xlarge before that — it ran out of CPU credits mid-test). Measured with the production
-config and the **old 8-core worker counts** (4 async + 6 sync), wait per question =
-`processAnswer` + `getQuery`: **20 simultaneous ≈ 7 s median, 40 ≈ 23 s median**, no
-errors. The worker still caps at ~10 of 16 cores until the worker counts are raised
-(`CAPACITY_REPORT.md` "c6i.4xlarge, worker counts unchanged" and "Next: c6i.4xlarge
-pass"). Type-change procedure: README §2.1. `steal %` in `healthcheck.sh` must stay 0.
+t2.2xlarge before that — it ran out of CPU credits mid-test). Workers: 8 async + 12 sync.
+Measured with the production config, wait per question = `processAnswer` + `getQuery`:
+**20 simultaneous ≈ 5.6 s median**, no errors; estimated 25 ≈ 7–9 s, 30 ≈ 9–12 s,
+40 ≈ 16–19 s (`CAPACITY_REPORT.md`, 2026-11-02 sections). The 16 vCPUs are 8 physical
+cores, so more worker processes won't help further. Type-change procedure: README §2.1.
+`steal %` in `healthcheck.sh` must stay 0.
 
 ## Starting the stack
 

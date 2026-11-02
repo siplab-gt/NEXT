@@ -140,6 +140,32 @@ worker processes each run one job at a time (about one core each), so they cap t
 machine at ~10 cores. The fix is the worker-count step below, a config-only change (no
 code), expected to shorten waits further at both levels; it has to be measured.
 
+## c6i.4xlarge, worker counts raised to 8 async + 12 sync (2026-11-02)
+
+Commit `9cc324e`; worker and backend recreated, rest unchanged. `./capacity_ramp.sh 20`:
+5,934 requests all 200, 18 completed + 2 expelled as designed, export check PASS, 0
+technical exits, 0 CLOSE_WAIT, 0 % steal. Steady-state wait per question (first 10 min
+excluded): **p50 5.6 s, p90 12.7 s, max 28 s**, compared with 7.0 / 12.9 / 26 s with 10
+processes. The worker now uses ~12.5 of 16 vCPUs (peak ~15.6), up from ~7.7, but
+throughput rose only ~5–15 %. The 16 vCPUs are **8 physical cores with hyperthreading**:
+10 processes already occupied the real cores, and the extra processes mostly add
+hyperthread siblings and contention. Kept as the production setting (nothing got worse).
+
+Estimates for this setting, not measured. They come from the closed-loop model: once
+saturated, throughput is fixed at ~1.25–1.4 questions/s, so wait ≈ N / throughput −
+think. The model reproduces the measured 20 and 40 points. Simulated think time is 8–15 s:
+
+| Simultaneous | Median wait per question | Study length (158 questions) |
+|---|---|---|
+| 20 | **5.6 s (measured)** | ~45–50 min |
+| 25 | ~7–9 s | ~50–55 min |
+| 30 | ~9–12 s | ~55–60 min |
+| 40 | ~16–19 s | ~75 min |
+
+Further levers if needed: `OPENBLAS_NUM_THREADS=1` (less contention, modest gain), a
+c6i.8xlarge (16 physical cores, ~2× throughput), or a lower `down_sample` (an algorithm
+choice).
+
 ## Next: c6i.4xlarge pass (when ~25 comfortable participants are needed)
 
 Stop → change instance type → start → `docker start …` (README §2.1), then in this order,
