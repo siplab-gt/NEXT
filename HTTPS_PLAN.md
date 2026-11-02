@@ -46,9 +46,10 @@ registrar token in a gitignored local file, never in the repo (the repo is publi
    serves `/.well-known/acme-challenge/` from a host folder on port 80.
 5. **nginx + compose** (one change, then recreate only nginx):
    - `local/nginx.conf`: new `server { listen 443 ssl; http2 on; ... }` with the
-     certificate and the same `location` blocks as today (incl. the 330 s timeouts);
-     port 80 keeps the ACME location and otherwise `return 308 https://$host$request_uri;`
-     (308, not 301, so an in-flight `processAnswer` POST stays a POST).
+     certificate and the same `location` blocks as today (incl. the 330 s timeouts).
+     Port 80 keeps serving everything as today, plus the ACME location. **No global
+     HTTP→HTTPS redirect and no HSTS header** — the choice is made per experiment
+     (step 9).
    - `local/docker-compose.yml.pre`: publish `443:443`; mount `/etc/letsencrypt`
      (read-only) and the ACME webroot into the nginx container.
    - Apply: `docker rm -f reverse_proxy`, then `docker-compose up -d nginx`
@@ -64,6 +65,45 @@ registrar token in a gitignored local file, never in the repo (the repo is publi
    HTTPS before any image study. Details in "Images, video and audio" below.
 8. **Links and docs** — Prolific study URL, Qualtrics end-of-survey redirect, CLAUDE.md
    URLs, README. Then a manual click-through and a short load test.
+9. **Per-experiment `protocol` setting** — see the next section.
+
+## Choosing HTTP or HTTPS per experiment
+
+Requirement: each experiment's YAML decides whether participants use HTTP or HTTPS,
+because some studies may need one or the other, and the server may have only one
+HTTPS hostname (or none, e.g. on a second machine).
+
+**Idea:** nginx serves both ports all the time; the query page enforces the choice.
+
+- **YAML:** new key `args.protocol: http | https`, default `http` — experiments
+  launched before this change (no key) keep working exactly as today. Declared in
+  `apps/ARankB/myApp.yaml` (same pattern as `precompute`) so a typo is rejected at
+  launch.
+- **Server setting, not YAML:** the HTTPS hostname belongs to the server, so it is
+  one env var, `NEXT_HTTPS_HOST` (e.g. the DuckDNS/GT name), set by `docker_up.sh`
+  next to `NEXT_BACKEND_GLOBAL_HOST`. Every `https` experiment on this server shares
+  it — they differ only by experiment UID in the path, so one domain is enough.
+- **Query page** (`next/query_page/query_page.py`): reads `experiment['args']['protocol']`
+  and the scheme the visitor came in on (`X-Forwarded-Proto`, already set by nginx).
+  - `https` experiment visited over HTTP → redirect to
+    `https://$NEXT_HTTPS_HOST/query/...` keeping the query string (so
+    `?participant=<PROLIFIC_ID>` survives).
+  - `http` experiment visited over HTTPS → **served as-is, no downgrade redirect.**
+    Browsers (Chrome's automatic HTTPS upgrade) would fight a redirect to HTTP and
+    can loop; serving it is harmless. In practice "http" means "HTTP allowed".
+  - API calls and media are relative, so they follow whatever scheme the page is on.
+- **Launch check:** `launch.py` refuses `protocol: https` when the server has no
+  `NEXT_HTTPS_HOST` (or its certificate is missing/expired), instead of handing out
+  a link that won't work.
+- **Links:** `launch.py` and the experiment dashboard print the participant link with
+  the right scheme and host — `https://<NEXT_HTTPS_HOST>/query/query_page/query_page/<EXP_UID>`
+  or `http://52.2.236.217/query/...` — so the link pasted into Prolific/Qualtrics is
+  always the correct one.
+- **Never enable HSTS** on the HTTPS hostname: it would make browsers refuse HTTP on
+  that name for months, breaking `http` experiments linked through it.
+- **Test:** launch the 32-query demo twice (`protocol: http` and `protocol: https`),
+  open each link over both schemes, check redirects, `?participant=` pre-fill, a full
+  run-through with answers recorded, and the image demo (`/media/cats/`).
 
 ## Images, video and audio (planned for future studies)
 
@@ -91,8 +131,9 @@ target's `primary_description` straight into `<img src>`, `<video><source src>` 
 
 ## Cutover timing and caveats
 
-- Switch over only **between collections**: participants mid-study on the old
-  `http://` page would otherwise go through the redirect for every answer.
+- No forced cutover: existing and running experiments default to `http` and are
+  untouched. Still, recreate the nginx container (step 5) between collections — it
+  drops connections for a few seconds.
 - `local/healthcheck.sh` probes `http://127.0.0.1/...` and keeps working (port 80
   still answers locally). Dashboard links to `:8000` stay HTTP — admin only.
 - HTTPS does not close the other published ports: MongoDB 27017, Redis 6379,
