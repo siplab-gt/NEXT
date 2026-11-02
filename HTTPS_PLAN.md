@@ -16,16 +16,27 @@ Status: **plan only, nothing implemented yet** (branch `feature/https`, 2026-11-
 - The instance only has an IP (Elastic IP 52.2.236.217) and AWS's default name.
   Let's Encrypt refuses `*.amazonaws.com` names, so we need our own hostname.
 
-## Decision: hostname
+## Decision: hostname (open)
 
-Use a free **DuckDNS** name (e.g. `<name>.duckdns.org`) with an A record pointing at
-52.2.236.217. The Elastic IP is stable, so no dynamic-update cron is needed. Keep the
-DuckDNS token in a gitignored local file, never in the repo (the repo is public).
+Everything below works with any hostname; switching later only means re-issuing the
+certificate and updating the Prolific/Qualtrics links (media paths are relative, so
+configs don't change).
+
+| Option | Cost | Time | Trade-off |
+|---|---|---|---|
+| **DuckDNS** (`<name>.duckdns.org`) | free | minutes | Good for building and testing now. Dynamic-DNS domains are sometimes flagged by corporate/school web filters and security tools, and look less trustworthy to participants. |
+| **Bought domain** (Cloudflare Registrar, Porkbun, Namecheap) | ~$10–15/yr | under an hour | Clean reputation, lab controls it. Someone must keep the renewal paid. |
+| **Georgia Tech subdomain** (`*.gatech.edu`) | usually free | days–weeks | Most trustworthy to participants; depends on GT's process for a server hosted on AWS — ask the advisors / OIT. |
+
+Leaning: DuckDNS now to build and test, then a bought or GT domain before the next
+real collection. Whichever is used, it gets an A record pointing at 52.2.236.217 (the
+Elastic IP is stable, so no dynamic-update cron is needed). Keep any DuckDNS or
+registrar token in a gitignored local file, never in the repo (the repo is public).
 
 ## Steps
 
-1. **Hostname** — register the DuckDNS name, point it at 52.2.236.217, confirm with
-   `dig +short <name>.duckdns.org`.
+1. **Hostname** — set up the chosen name (see above), point it at 52.2.236.217, confirm with
+   `dig +short <hostname>`.
 2. **Security group** — allow inbound TCP 443 (AWS console; the AWS CLI is not
    installed on the instance).
 3. **Fix mixed content** — `http://code.jquery.com` → `https://code.jquery.com` in the
@@ -44,7 +55,14 @@ DuckDNS token in a gitignored local file, never in the repo (the repo is public)
      (stateless container; a few seconds of downtime). The user runs compose.
 6. **Renewal** — certbot's systemd timer renews automatically; add a deploy hook
    `docker exec reverse_proxy nginx -s reload`.
-7. **Links and docs** — Prolific study URL, Qualtrics end-of-survey redirect, CLAUDE.md
+7. **Media paths (rule for all future configs)** — image/video/audio targets are
+   written as **relative paths** to files in `local/media/`, e.g.
+   `primary_description: '/media/cats/cat01.png'`, never `http://<ip>/...`.
+   Fix the example comment in `ARankB-InfoTuple-cog_rank4_precompute.yaml` (and the
+   other configs) to show this form, document the rule in README, and change
+   `next/assistant/s3.py` to build `https://` URLs. Test with the `cats/` images over
+   HTTPS before any image study. Details in "Images, video and audio" below.
+8. **Links and docs** — Prolific study URL, Qualtrics end-of-survey redirect, CLAUDE.md
    URLs, README. Then a manual click-through and a short load test.
 
 ## Images, video and audio (planned for future studies)
