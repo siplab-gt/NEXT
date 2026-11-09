@@ -71,6 +71,10 @@ initExp:
           description: Number of trap questions available
           type: num
           optional: true
+        mi_samples:
+          description: Samples per candidate query for the InfoTuple information score (omit for ceil(n/10)). InfoTuple only; RandomSampling does not accept it.
+          type: num
+          optional: true
         precompute:
           description: Precompute the next InfoTuple query in the background while the participant answers the current one (InfoTuple only; RandomSampling does not support the trap/precompute kwargs)
           type: bool

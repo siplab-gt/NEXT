@@ -4,6 +4,7 @@ from scipy.spatial.distance import pdist
 import math
 from math import ceil
 from functools import reduce
+from scipy.special import xlogy
 
 
 
@@ -50,127 +51,104 @@ def tuple_probability_model(distances, mu):
     return tuple_probability
 
 
-def mutual_information(X, head, body, n_samples, dist_std, mu, rng):
+# Upper bound on the floats held per working array in mutual_information_batch
+# (~16 MB at float64). Candidates are scored in chunks sized to stay under it,
+# so memory doesn't grow with n_samples or the downsample rate.
+MI_CHUNK_ELEMENTS = 2000000
+
+
+def mutual_information_batch(X, heads, bodies, n_samples, dist_std, mu, rng):
     """
-    This method corresponds to the mutual information calculation specified in Section 3.1
-    Specifically, the method returns the result of inputting the method parameters into formula (9).
-    
+    Score many candidate queries at once (formula (9) of the InfoTuple paper,
+    estimated by Monte Carlo as in its Algorithm 1).
+
+    One sample is one plausible version of the head-to-body distances: each
+    distance is drawn from N(embedding distance, dist_std^2), and that one set
+    of draws is shared by every ordering of the body. The score is
+        H(average over samples of p(ranking))  -  average over samples of H(p(ranking))
+    i.e. how much the samples disagree about the answer, beyond the noise in
+    the answer itself. It needs >= 2 samples to be non-zero.
+
     Inputs:
         X: An Nxd embedding of objects
-        head: The head of the tuple comparison under consideration
-        body: The body of the tuple comparison under consideration
-        n_samples: Number of samples to estimate D_s as described in (A3)
-        dist_std: Variance parameter as specified in (A3)
-        mu: Optional regularization parameter for the probabilistic response model
+        heads: length-T array of head indices (one per candidate)
+        bodies: TxK array of body indices
+        n_samples: Number of samples per candidate (floored at 1)
+        dist_std: Std of the distance noise (A3)
+        mu: Regularization parameter of the response model
+        rng: numpy RandomState; consumes T*n_samples*K normals, drawn in
+             candidate order so the result doesn't depend on chunking
     returns:
-        information: Mutual information as specified in (9) in Section 3.1
+        information: length-T array of scores
     """
+    X = np.asarray(X, dtype=float)
+    heads = np.asarray(heads, dtype=int)
+    bodies = np.asarray(bodies, dtype=int)
     n_samples = max(int(n_samples), 1)
-    
-    nrank = math.factorial(len(body))
-    # print(f"nrank: {nrank}")
-    # print(f"n_samples: {n_samples}")
-    first_term_sampled_probabilities  = np.zeros((n_samples,nrank))
-    second_term_sampled_entropies = []
+    T, K = bodies.shape
+    orders = np.array(list(permutations(range(K))))           # K! x K
+    chunk = max(1, MI_CHUNK_ELEMENTS // (n_samples * len(orders) * K))
 
-    for d in range(n_samples):
-        p_rab = []
-
-        for permutation in permutations(body, len(body)):
-            B = permutation
-            head_distances = []
-
-            for i in range(len(body)):
-                dist = abs(rng.normal(np.linalg.norm(X[head] - X[B[i]]), dist_std))
-                head_distances.append(dist)
-
-            p_rab.append(tuple_probability_model(head_distances, mu))
-
-        normalization_constant = sum(p_rab)
-        p_rab = [p / normalization_constant for p in p_rab]
-
-        first_term_sampled_probabilities[d,:] = p_rab
-
-        sample_entropy = -sum([p *np.log(p) for p in p_rab if p > 0])
-        second_term_sampled_entropies.append(sample_entropy)
-
-    first_term_expected_probabilities = np.sum(first_term_sampled_probabilities,axis=0) / n_samples
-    first_term_expected_entropy  = -np.sum(first_term_expected_probabilities * np.log(first_term_expected_probabilities))
-    second_term_expected_entropy = sum(second_term_sampled_entropies) / len(second_term_sampled_entropies)
-    information = first_term_expected_entropy - second_term_expected_entropy
-    
+    information = np.empty(T)
+    for start in range(0, T, chunk):
+        h = heads[start:start + chunk]
+        b = bodies[start:start + chunk]
+        # true head-to-body distances in the current embedding: c x K
+        dist = np.linalg.norm(X[h][:, None, :] - X[b], axis=-1)
+        noise = rng.normal(0.0, dist_std, size=(len(b), n_samples, K))
+        sq = (dist[:, None, :] + noise) ** 2                  # c x S x K
+        sq = sq[..., orders]                                  # c x S x K! x K
+        # tuple_probability_model for every ordering: product over adjacent pairs
+        p = np.prod((mu + sq[..., 1:]) / (2 * mu + sq[..., :-1] + sq[..., 1:]), axis=-1)
+        p /= p.sum(axis=-1, keepdims=True)                    # c x S x K!
+        within = -xlogy(p, p).sum(axis=-1).mean(axis=1)
+        pooled = p.mean(axis=1)
+        information[start:start + chunk] = -xlogy(pooled, pooled).sum(axis=-1) - within
     return information
 
-def fast_mutual_information(X, head, body, n_samples, dist_std, mu):
 
-    ix_permutations = list(permutations(body, len(body)))
-    #print(f"ix_permutations: {ix_permutations}")
-    #print(f"n_samples: {n_samples}")
-    first_term_sampled_probabilities  = np.zeros((n_samples,len(ix_permutations)))
-    second_term_sampled_entropies = np.zeros(n_samples)
+def mutual_information(X, head, body, n_samples, dist_std, mu, rng):
+    """
+    Score a single (head, body) query; see mutual_information_batch.
+    """
+    return float(mutual_information_batch(X, [head], [list(body)], n_samples,
+                                          dist_std, mu, rng)[0])
 
-    for d in range(n_samples):
 
-        full_distances = X[head] - X[ix_permutations]
-        head_distances = abs(np.random.normal(np.linalg.norm(full_distances), dist_std, size=(len(ix_permutations), len(body))))
-
-        windows = np.lib.stride_tricks.sliding_window_view(head_distances, 2, axis=1)
-        windows = windows.reshape((windows.shape[0]*windows.shape[1],2))
-        numerator = mu + (windows[:, 1])**2
-        denominator = 2 * mu + windows[:,0]**2 + windows[:,1]**2
-
-        probabilities = numerator / denominator
-        p_rab = np.multiply.reduce(probabilities, axis=-1)
-        p_rab /= np.sum(p_rab)
-        first_term_sampled_probabilities[d,:] = p_rab
-
-        sample_entropy = -sum([p *np.log(p) for p in probabilities if p > 0])
-        second_term_sampled_entropies[d] = sample_entropy
-
-    first_term_expected_probabilities = np.sum(first_term_sampled_probabilities,axis=0) / n_samples
-    first_term_expected_entropy  = -np.sum(first_term_expected_probabilities * np.log(first_term_expected_probabilities))
-    second_term_expected_entropy = sum(second_term_sampled_entropies) / len(second_term_sampled_entropies)
-    information = first_term_expected_entropy - second_term_expected_entropy
-
-    return information
-
-def primal_body_selector(M, tuples, rng, mu = 0.05, tuple_downsample_rate = 0.1):
+def primal_body_selector(M, tuples, rng, mu = 0.05, tuple_downsample_rate = 0.1,
+                         n_samples = None):
     """
     Inner loop of Algorithm 1, this method selects the tuple body that maximizes our mutual information metric
     Used at each algorithm iteration to compute an optimal query to request, as described in section 3.1.
     Inputs:
         M: Nxd coordinates with respect to which to select an informative query
-        tuples: list of possible tuples over M
-        __: Placeholder for the list of previous selections to standardize the method header
-            across tested selection algorithms. Not used in this method.
+        tuples: list of possible tuples over M ([head] + body)
+        rng: numpy RandomState
+        mu: Regularization parameter of the response model
+        tuple_downsample_rate: Fraction of the tuples to score (picked at random)
+        n_samples: Samples per candidate for the information estimate;
+                   None -> ceil(N/10)
     Returns:
-    infogains, tuple_probabilities, intermediate_params
         selected_tuple: The selected informative tuple
-        infogains: A list of information gains from all tuples,
+        infogains: A list of information gains from all scored tuples,
                     provided for visualization purposes.
         tuple_probabilities: A list of probabilities for each tuple,
                     provided for visualization purposes
     """
-
-    # downsample_rate = intermediate_params['tuple_downsample_rate']
-    # TODO: pass in argument from infotuple caller
     tuples = list(tuples)
     downsample_rate = float(tuple_downsample_rate)
     downsample_indices = rng.choice(range(len(tuples)), math.ceil(len(tuples)*downsample_rate), replace=False)
     tuples = [tuples[i] for i in downsample_indices]
 
     tuple_probabilities = np.ones(len(tuples))
-    infogains = np.zeros(len(tuples))
-   
 
     distances = pdist(M)
     dist_std  = np.sqrt(np.var(distances, axis=0))
+    if n_samples is None:
+        n_samples = math.ceil(M.shape[0]/10)
 
-    for i in range(len(tuples)):
-        a = tuples[i][0]
-        B = tuples[i][1:]
-
-        infogains[i] = mutual_information(M, a, B, math.ceil(M.shape[0]/10), dist_std, mu, rng)
+    arr = np.asarray(tuples, dtype=int)
+    infogains = mutual_information_batch(M, arr[:, 0], arr[:, 1:], n_samples, dist_std, mu, rng)
 
     selected_tuple = tuples[np.argmax(infogains)]
 

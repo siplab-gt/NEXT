@@ -54,6 +54,10 @@ initExp:
       description: Number of trap questions available
       type: num
       optional: true
+    mi_samples:
+      description: Samples per candidate query for the InfoTuple information score (omit for ceil(n/10)). InfoTuple only.
+      type: num
+      optional: true
       
   rets:
     type: bool

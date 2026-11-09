@@ -18,11 +18,15 @@ class MyAlg:
     def initExp(self, butler, A, B, n, d 
                 ,random_seed, failure_probability
                 ,iteration, burn_in, down_sample, mu, debug,
-                setTrap, expel, tolerance, trapRatio, num_trap_questions):
+                setTrap, expel, tolerance, trapRatio, num_trap_questions,
+                mi_samples=None):
         #For InfoTuple
         butler.algorithms.set(key='debug_flag', value=debug)
         butler.algorithms.set(key='mu', value=mu)
         butler.algorithms.set(key='down_sample', value=down_sample)
+        # samples per candidate for the information score; unset -> ceil(n/10)
+        if mi_samples is not None:
+            butler.algorithms.set(key='mi_samples', value=int(mi_samples))
         butler.algorithms.set(key='burn_in', value=burn_in)
         butler.algorithms.set(key='iteration', value=iteration)
         butler.algorithms.set(key='responses', value=list()) #store all responses in list
@@ -71,13 +75,15 @@ class MyAlg:
         A = butler.algorithms.get(key='A')
         mu = butler.algorithms.get(key='mu')
         down_sample = butler.algorithms.get(key='down_sample')
+        mi_samples = butler.algorithms.get(key='mi_samples')  # None on pre-existing experiments
         X_part = np.array(butler.participants.get(uid=participant_uid, key='embedding'))
         n, d = X_part.shape
 
         rng = self._restore_rng(butler)
         candidates = permutations(filter(lambda x: x is not h, range(n)), A)
         tuples = map(lambda x: [h] + list(x), candidates)
-        selected_tuple, _, _ = utilsInfoTuple.primal_body_selector(X_part, tuples, rng, mu, down_sample)
+        selected_tuple, _, _ = utilsInfoTuple.primal_body_selector(X_part, tuples, rng, mu, down_sample,
+                                                                   n_samples=mi_samples)
         selected_tuple = list(map(lambda x: int(x), selected_tuple))
         self._save_rng(butler, rng)
         return selected_tuple
