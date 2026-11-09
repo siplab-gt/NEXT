@@ -46,7 +46,10 @@ BURN_IN = 1
 MU = 0.05
 
 SETTINGS = {
-    # name: (burn_in, mi_samples, down_sample)
+    # name: (burn_in, mi_samples, down_sample[, options])
+    # options: noise_scale multiplies the score's distance noise (dist_std);
+    #          oracle=True scores candidates on the TRUE map instead of the
+    #          participant's current estimate (diagnostic only).
     'random':       (ROUNDS, None, 0.05),
     'bug_1sample':  (BURN_IN, 1, 0.05),
     's3_ds0.05':    (BURN_IN, 3, 0.05),
@@ -54,6 +57,11 @@ SETTINGS = {
     's50_ds0.05':   (BURN_IN, 50, 0.05),
     's20_ds0.25':   (BURN_IN, 20, 0.25),
     's20_ds1':      (BURN_IN, 20, 1.0),
+    's20_noise0.3': (BURN_IN, 20, 0.05, {'noise_scale': 0.3}),
+    's20_noise0.1': (BURN_IN, 20, 0.05, {'noise_scale': 0.1}),
+    's20_oracle':   (BURN_IN, 20, 0.05, {'oracle': True}),
+    's20_oracle_noise0.3': (BURN_IN, 20, 0.05, {'oracle': True, 'noise_scale': 0.3}),
+    's20_oracle_noise0.1': (BURN_IN, 20, 0.05, {'oracle': True, 'noise_scale': 0.1}),
 }
 COST_ORDER = ['s20_ds1', 's20_ds0.25', 's50_ds0.05', 's20_ds0.05', 's3_ds0.05',
               'bug_1sample', 'random']
@@ -121,6 +129,15 @@ def heldout_triplets(n, rng, count=20000):
     return t
 
 
+def local_triplets(X_true, rng, k=6, count=20000):
+    """Held-out comparisons among each head's k nearest true neighbours."""
+    n = len(X_true)
+    nn = np.argsort(np.linalg.norm(X_true[:, None] - X_true[None], axis=-1), axis=1)[:, 1:k + 1]
+    h = rng.randint(0, n, count)
+    ij = np.array([rng.choice(k, 2, replace=False) for _ in range(count)])
+    return np.stack([h, nn[h, ij[:, 0]], nn[h, ij[:, 1]]], axis=1)
+
+
 def agreement(X_est, X_true, trip):
     def side(X):
         X = np.asarray(X)
@@ -132,21 +149,48 @@ def agreement(X_est, X_true, trip):
 def run_one(job):
     pidx, setting, true_X, response = job
     from apps.ARankB.algs.InfoTuple.myAlg import MyAlg
+    from apps.ARankB.algs.InfoTuple import utilsInfoTuple as U
     true_X = np.asarray(true_X)
     n = true_X.shape[0]
-    burn_in, mi_samples, down_sample = SETTINGS[setting]
+    burn_in, mi_samples, down_sample = SETTINGS[setting][:3]
+    opts = SETTINGS[setting][3] if len(SETTINGS[setting]) > 3 else {}
+
+    # noise_scale: wrap the score function primal_body_selector calls (reset every job,
+    # pool processes are reused)
+    if not hasattr(U, '_sim_orig_batch'):
+        U._sim_orig_batch = U.mutual_information_batch
+    scale = float(opts.get('noise_scale', 1.0))
+    U.mutual_information_batch = (lambda X, h, b, S, std, mu, rng:
+                                  U._sim_orig_batch(X, h, b, S, std * scale, mu, rng))
+
+    class Alg(MyAlg):
+        def _select_infotuple(self, butler, participant_uid, h):
+            if not opts.get('oracle'):
+                return MyAlg._select_infotuple(self, butler, participant_uid, h)
+            est = butler.participants.get(participant_uid, 'embedding')
+            butler.participants.set(participant_uid, 'embedding', true_X)
+            try:
+                return MyAlg._select_infotuple(self, butler, participant_uid, h)
+            finally:
+                butler.participants.set(participant_uid, 'embedding', est)
+
     butler = FakeButler()
-    alg = MyAlg()
+    alg = Alg()
     alg.initExp(butler, A, B, n, D, random_seed=1000 + pidx, failure_probability=0.01,
                 iteration=ROUNDS - 1, burn_in=burn_in, down_sample=down_sample, mu=MU,
                 debug=False, setTrap=False, expel=False, tolerance=0.3, trapRatio=0.0,
                 num_trap_questions=0, mi_samples=mi_samples)
     answer_rng = np.random.RandomState(5000 + pidx)    # same answer stream per participant
     trip = heldout_triplets(n, np.random.RandomState(9000 + pidx))
+    trip_local = local_triplets(true_X, np.random.RandomState(9500 + pidx))
     uid = 'p%d' % pidx
-    curve, select_s = [], 0.0
+    curve, curve_local, select_s = [], [], 0.0
     counts = np.zeros(n)
     exact_answers = 0
+    # profile of the questions asked after burn-in, on the TRUE map: rank of each
+    # body item's distance from the head among the other n-1 items (0 = closest)
+    true_rank = np.argsort(np.argsort(np.linalg.norm(true_X[:, None] - true_X[None], axis=-1), axis=1), axis=1) - 1
+    prof_mean, prof_spread = [], []
     for r in range(ROUNDS):
         for _ in range(n):
             t0 = time.time()
@@ -155,12 +199,18 @@ def run_one(job):
             ans = sample_ranking(true_X, tup, answer_rng, response)
             exact_answers += ans == sample_ranking(true_X, tup, None, 'exact')
             counts[tup[1:]] += 1
+            if r >= BURN_IN:
+                ranks = true_rank[tup[0], tup[1:]]
+                prof_mean.append(ranks.mean())
+                prof_spread.append(ranks.max() - ranks.min())
             alg.processAnswer(butler, ans, uid, False)
         curve.append(agreement(butler.participants.get(uid, 'embedding'), true_X, trip))
+        curve_local.append(agreement(butler.participants.get(uid, 'embedding'), true_X, trip_local))
     return {'participant': pidx, 'setting': setting, 'response': response,
-            'agreement_by_round': curve, 'getQuery_seconds_total': round(select_s, 2),
+            'agreement_by_round': curve, 'local_agreement_by_round': curve_local, 'getQuery_seconds_total': round(select_s, 2),
             'answers_fully_correct': exact_answers / float(ROUNDS * n),
-            'body_appearances_min_max': [int(counts.min()), int(counts.max())]}
+            'body_appearances_min_max': [int(counts.min()), int(counts.max())],
+            'asked_rank_mean': float(np.mean(prof_mean)), 'asked_rank_spread': float(np.mean(prof_spread))}
 
 
 def summarize(path):
@@ -169,7 +219,7 @@ def summarize(path):
     for r in rows:
         by.setdefault(r['setting'], {})[r['participant']] = r
     base = by.get('random', {})
-    print('%-12s %3s  %-38s %-22s %s' % ('setting', 'n', 'agreement after round 1..6 (mean)',
+    print('%-20s %3s  %-38s %-22s %s' % ('setting', 'n', 'agreement after round 1..6 (mean)',
                                            'final vs random (paired)', 's per question'))
     for s in SETTINGS:
         if s not in by:
@@ -184,9 +234,16 @@ def summarize(path):
         perq = np.mean([r['getQuery_seconds_total'] for r in rs.values()]) / (ROUNDS * 25)
         cov = np.mean([r.get('body_appearances_min_max', [np.nan, np.nan]) for r in rs.values()], axis=0)
         exact = np.mean([r.get('answers_fully_correct', np.nan) for r in rs.values()])
-        print('%-12s %3d  %-38s %+.4f ± %.4f (%2d/%2d up) %.3f   item appears %4.1f..%4.1f times; %.0f%% answers exactly right' % (
+        loc = [p for p in common if 'local_agreement_by_round' in rs[p] and 'local_agreement_by_round' in base[p]]
+        ldiff = np.array([rs[p]['local_agreement_by_round'][-1] - base[p]['local_agreement_by_round'][-1] for p in loc])
+        lfin = np.mean([rs[p]['local_agreement_by_round'][-1] for p in loc]) if loc else np.nan
+        lse = ldiff.std(ddof=1) / np.sqrt(len(ldiff)) if len(ldiff) > 1 else float('nan')
+        rk = np.mean([r.get('asked_rank_mean', np.nan) for r in rs.values()])
+        sp = np.mean([r.get('asked_rank_spread', np.nan) for r in rs.values()])
+        print('%-20s %3d  %-38s %+.4f ± %.4f (%2d/%2d up) %.3f  appears %4.1f..%4.1f; %3.0f%% exact; asked rank %.1f spread %.1f | local %.3f (%+.4f ± %.4f)' % (
             s, len(rs), ' '.join('%.3f' % c for c in curve), diff.mean() if len(diff) else 0,
-            se, wins, len(diff), perq, cov[0], cov[1], 100 * exact))
+            se, wins, len(diff), perq, cov[0], cov[1], 100 * exact, rk, sp,
+            lfin, ldiff.mean() if len(ldiff) else np.nan, lse))
 
 
 def main():
