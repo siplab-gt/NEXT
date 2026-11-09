@@ -90,6 +90,67 @@ Selection time per query on one core (full path, including building the candidat
 | 0.25 | 0.41 s | 1.23 s | 2.71 s |
 | 1.0 (all candidates) | 1.23 s | 4.68 s | 10.56 s |
 
+### 3b. Candidates are body sets, not orderings (Nov 2026)
+
+The candidate list above was every **ordering** of 4 of the 24 other items (255,024), so
+each screen appeared 4! = 24 times. The score doesn't depend on the order (it already sums
+over all 24 orderings), so down-sampling the list scored many screens 2–3 times with fresh
+noise, and the `argmax` favoured screens that happened to be drawn repeatedly.
+
+Now (`utilsInfoTuple.select_query`):
+
+- Candidates are the **C(n−1, A) distinct body sets** (10,626 for 25 items, A = 4), each
+  scored at most once. `down_sample` is the fraction of those sets scored, picked uniformly
+  at random; all study configs now use **1.0** (every set once). This is fewer scored
+  candidates than before for every study (rank-4: 10,626 vs 12,752; rank-6: 134,596 vs
+  ~969,000), so selection is no slower.
+- Sets are never enumerated when sampling: a sampled set number is decoded straight into
+  its items (`unrank_combinations`, the combinatorial number system, vectorized with
+  `np.searchsorted`), and the numbers are drawn with numpy's `Generator.choice`
+  (O(sample) memory), seeded from the experiment's saved random state.
+- The chosen body is **shuffled** before it is shown, so the screen order is random rather
+  than increasing item index.
+- The saved random state is restored and saved exactly as before (one restore, one save
+  per question); it now also feeds the sampling seed and the display shuffle, so a seed
+  no longer reproduces the question sequence of older runs.
+
+Measured in the worker image, one core:
+
+| | 3 samples (default) | 20 samples |
+|---|---|---|
+| 25 items, old: orderings at 0.05 (12,752 scored) | 0.16 s | 0.30 s |
+| 25 items, new: all 10,626 sets at 1.0 | 0.03 s | 0.14 s |
+| 100 items, new: 0.3% of 3,764,376 sets (11,294 scored) | 0.10 s (10 samples) | 0.17 s |
+
+At 100 items, generating the 11,294 candidates takes 4 ms and under 1 MB. Scoring all
+3.76 M sets would take roughly 30–60 s per question, so a 100-item study needs
+`down_sample` around 0.003–0.01. Tests: `apps/ARankB/tests/test_infotuple_candidates.py`
+(21 tests: unranking matches `itertools.combinations` exactly, no set scored twice,
+uniform sampling by chi-square, uniform display order, saved random state equals a replay).
+Three deliberate bugs (no shuffle, off-by-one when skipping the head, biased sampler) each
+fail at least two of them.
+
+Compared with `itertools.combinations` (fastest form: `np.fromiter` into a numpy array),
+building the candidates only (best of several runs):
+
+| | itertools | `candidate_queries` |
+|---|---|---|
+| 25 items, all 10,626 sets | 2.9 ms, 0.3 MB | 0.5 ms, 0.7 MB |
+| 25 items, 5% | 3.2 ms, 0.4 MB | 0.3 ms, 0.1 MB |
+| 100 items, all 3,764,376 sets | 1,073 ms, 121 MB | 222 ms, 211 MB |
+| 100 items, 0.3% | 1,136 ms, 151 MB | **2.2 ms, 0.7 MB** |
+
+With itertools, down-sampling is slightly *slower* than taking everything: it has to build
+the full list first, then pick from it (`RandomState.choice` shuffles all the numbers:
+0.23 ms for 10,626, 56 ms for 3.76 M). `candidate_queries` never builds the full list, so
+its cost grows with the number of sets scored, not the number that exist. Listing every
+set at 100 items peaks higher than itertools (it holds the 3.76 M set numbers alongside
+the result), but scoring all of them isn't practical anyway. At 25 items building
+candidates is ~0.5 ms of a ~28 ms selection; the scoring dominates.
+
+The simulation results in section 4 were run with the ordering-based candidates; the
+`dsX` labels there are fractions of the 255,024 orderings.
+
 ## 4. Does the fixed InfoTuple ask better questions? (simulation)
 
 `local/sim_infotuple.py` runs the app's real InfoTuple code (first round random, then
@@ -164,8 +225,8 @@ questions.
 ## 6. Not done yet
 
 - End-to-end test on the stack and the 20- and 30-participant load tests.
-- Changes to README / DEV_DOCUMENTATION / CAPACITY_REPORT, and the production configs
-  (`mi_samples`, `down_sample`) — waiting on the decision above.
+- Changes to README / DEV_DOCUMENTATION / CAPACITY_REPORT, and the production configs’
+  `mi_samples` — waiting on the decision above. (`down_sample` is now 1.0, section 3b.)
 
 ## Appendix: re-running
 
