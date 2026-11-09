@@ -155,7 +155,7 @@ def run_one(job):
     burn_in, mi_samples, down_sample = SETTINGS[setting][:3]
     opts = SETTINGS[setting][3] if len(SETTINGS[setting]) > 3 else {}
 
-    # noise_scale: wrap the score function primal_body_selector calls (reset every job,
+    # noise_scale: wrap the score function select_query calls (reset every job,
     # pool processes are reused)
     if not hasattr(U, '_sim_orig_batch'):
         U._sim_orig_batch = U.mutual_information_batch

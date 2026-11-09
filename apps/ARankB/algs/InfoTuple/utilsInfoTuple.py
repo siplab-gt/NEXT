@@ -115,44 +115,127 @@ def mutual_information(X, head, body, n_samples, dist_std, mu, rng):
                                           dist_std, mu, rng)[0])
 
 
-def primal_body_selector(M, tuples, rng, mu = 0.05, tuple_downsample_rate = 0.1,
-                         n_samples = None):
+def unrank_combinations(ranks, m, k):
     """
-    Inner loop of Algorithm 1, this method selects the tuple body that maximizes our mutual information metric
-    Used at each algorithm iteration to compute an optimal query to request, as described in section 3.1.
+    Turn combination numbers into the combinations themselves, vectorized.
+
+    Every k-subset of range(m) has one number in 0 .. C(m, k)-1 (the
+    "combinatorial number system", colex order):
+        rank({c_1 < c_2 < ... < c_k}) = C(c_1, 1) + C(c_2, 2) + ... + C(c_k, k)
+    Decoding goes from the largest element down: c_k is the largest c with
+    C(c, k) <= rank; subtract C(c_k, k) and repeat for k-1. Each step is one
+    np.searchsorted over a table of m binomials, so the whole thing is
+    O(len(ranks) * k * log m) time and O(len(ranks) * k) memory, with no
+    enumeration of the C(m, k) subsets.
+
     Inputs:
-        M: Nxd coordinates with respect to which to select an informative query
-        tuples: list of possible tuples over M ([head] + body)
-        rng: numpy RandomState
-        mu: Regularization parameter of the response model
-        tuple_downsample_rate: Fraction of the tuples to score (picked at random)
-        n_samples: Samples per candidate for the information estimate;
-                   None -> ceil(N/10)
+        ranks: integer array of distinct or repeated numbers in [0, C(m, k))
+        m: size of the ground set range(m)
+        k: subset size
     Returns:
-        selected_tuple: The selected informative tuple
-        infogains: A list of information gains from all scored tuples,
-                    provided for visualization purposes.
-        tuple_probabilities: A list of probabilities for each tuple,
-                    provided for visualization purposes
+        len(ranks) x k int64 array; each row strictly increasing.
+        unrank_combinations(np.arange(C(m, k)), m, k) lists every subset once,
+        in the order of sorted(itertools.combinations(range(m), k), key=reversed).
     """
-    tuples = list(tuples)
-    downsample_rate = float(tuple_downsample_rate)
-    downsample_indices = rng.choice(range(len(tuples)), math.ceil(len(tuples)*downsample_rate), replace=False)
-    tuples = [tuples[i] for i in downsample_indices]
+    total = math.comb(m, k)
+    if total >= 2 ** 62:
+        raise ValueError('C(%d, %d) does not fit in int64' % (m, k))
+    ranks = np.array(ranks, dtype=np.int64).ravel()       # copy: modified below
+    if ranks.size and (ranks.min() < 0 or ranks.max() >= total):
+        raise ValueError('ranks must lie in [0, C(%d, %d)) = [0, %d)' % (m, k, total))
+    out = np.empty((ranks.size, k), dtype=np.int64)
+    for j in range(k, 0, -1):
+        # binom[c] = C(c, j) for c in 0..m-1: non-decreasing (0 for c < j), so
+        # searchsorted(side='right') - 1 is the largest c with C(c, j) <= rank
+        binom = np.array([math.comb(c, j) for c in range(m)], dtype=np.int64)
+        c = np.searchsorted(binom, ranks, side='right') - 1
+        out[:, j - 1] = c
+        ranks -= binom[c]
+    return out
 
-    tuple_probabilities = np.ones(len(tuples))
 
-    distances = pdist(M)
-    dist_std  = np.sqrt(np.var(distances, axis=0))
+def sample_distinct_integers(total, size, rng):
+    """
+    `size` distinct integers drawn uniformly from range(total), using
+    O(size) memory when size is small next to total.
+
+    numpy's Generator.choice(replace=False) does that (Floyd's algorithm for
+    small samples, a partial shuffle otherwise); the legacy RandomState.choice
+    shuffles all of range(total) first. The Generator is seeded from `rng`, so
+    the result is fully determined by rng's state and rng advances by a fixed
+    amount (one draw of 4 integers) per call.
+    """
+    size = int(size)
+    if size >= total:
+        return np.arange(total, dtype=np.int64)
+    seed = rng.randint(0, 2 ** 32, size=4, dtype=np.uint64)
+    gen = np.random.Generator(np.random.PCG64(np.random.SeedSequence([int(s) for s in seed])))
+    return gen.choice(total, size=size, replace=False, shuffle=False).astype(np.int64)
+
+
+def candidate_queries(n, head, body_size, rate, rng):
+    """
+    Candidate queries for one head: the head plus a SET of body_size other
+    items. Each set appears at most once; the order of a body doesn't matter
+    to the score (it already sums over every ordering of the body).
+
+    Inputs:
+        n: number of items
+        head: the head item
+        body_size: items per body (A)
+        rate: fraction of the C(n-1, body_size) possible bodies to score,
+              picked uniformly at random without repeats; rate >= 1 means
+              all of them (and draws nothing from rng)
+        rng: numpy RandomState
+    Returns:
+        k x (1 + body_size) int64 array, k = ceil(C(n-1, body_size) * rate)
+        clipped to [1, C(n-1, body_size)]; column 0 is the head, each body
+        is in increasing item order.
+    """
+    m = n - 1                                    # items other than the head
+    total = math.comb(m, body_size)
+    k = min(total, max(1, math.ceil(total * float(rate))))
+    bodies = unrank_combinations(sample_distinct_integers(total, k, rng), m, body_size)
+    bodies += bodies >= head                     # 0..m-1 -> items, skipping the head
+    return np.column_stack([np.full(len(bodies), head, dtype=np.int64), bodies])
+
+
+def score_queries(M, queries, rng, mu, n_samples=None):
+    """
+    Information score of each query row ([head] + body) on the embedding M.
+    n_samples None -> ceil(N/10). The distance-noise width is the spread of
+    all pairwise distances in M.
+    """
+    dist_std = np.sqrt(np.var(pdist(M), axis=0))
     if n_samples is None:
-        n_samples = math.ceil(M.shape[0]/10)
+        n_samples = math.ceil(M.shape[0] / 10)
+    queries = np.asarray(queries)
+    return mutual_information_batch(M, queries[:, 0], queries[:, 1:], n_samples, dist_std, mu, rng)
 
-    arr = np.asarray(tuples, dtype=int)
-    infogains = mutual_information_batch(M, arr[:, 0], arr[:, 1:], n_samples, dist_std, mu, rng)
 
-    selected_tuple = tuples[np.argmax(infogains)]
+def select_query(M, head, body_size, rng, mu=0.05, rate=1.0, n_samples=None):
+    """
+    Inner loop of Algorithm 1: pick the body for `head` that maximizes the
+    mutual-information score (section 3.1 of the InfoTuple paper).
 
-    return selected_tuple, infogains, tuple_probabilities
+    Scores a uniform random fraction `rate` of the distinct body sets (each at
+    most once), takes the best, then shuffles the body with rng so the order
+    shown to the participant is random rather than increasing item index.
+
+    rng use, in order: candidate sampling (only when rate < 1), the score's
+    noise, the display shuffle.
+
+    Returns:
+        selected: [head] + body as a list of python ints, body in display order
+        queries: the scored candidates (k x (1 + body_size), bodies sorted)
+        infogains: their scores
+    """
+    M = np.asarray(M, dtype=float)
+    queries = candidate_queries(M.shape[0], head, body_size, rate, rng)
+    infogains = score_queries(M, queries, rng, mu, n_samples)
+    selected = queries[np.argmax(infogains)].copy()
+    rng.shuffle(selected[1:])                    # in place on the body view
+    return [int(x) for x in selected], queries, infogains
 
 def sliding_window(arr, window_size, random_state=None):
     arr_extended = np.concatenate((arr, arr[:window_size-1]))

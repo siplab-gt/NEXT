@@ -106,22 +106,20 @@ class TestMutualInformation(unittest.TestCase):
         X, _, _ = make_case(seed=9)
 
         def gains(n_samples):
-            cands = ([0] + list(c) for c in permutations(range(1, N_ITEMS), BODY))
-            return U.primal_body_selector(X, cands, np.random.RandomState(0), MU, 0.005,
-                                          n_samples=n_samples)[1]
+            return U.select_query(X, 0, BODY, np.random.RandomState(0), MU, 0.1,
+                                  n_samples=n_samples)[2]
         self.assertLess(np.abs(gains(1)).max(), 1e-12)
         self.assertGreater(np.ptp(gains(20)), 1e-3)
 
     def test_production_size_is_fast(self):
-        """A full production selection (25 items, 5% of 255,024 candidates,
-        20 samples) runs in well under the precompute job's 60 s limit."""
+        """A full production selection (25 items, all C(24, 4) = 10,626 body
+        sets, 20 samples) runs in well under the precompute job's 60 s limit."""
         X, _, _ = make_case(seed=10)
-        cands = ([0] + list(c) for c in permutations(range(1, N_ITEMS), BODY))
         t0 = time.time()
-        _, gains, _ = U.primal_body_selector(X, cands, np.random.RandomState(0), MU, 0.05,
-                                             n_samples=20)
+        _, _, gains = U.select_query(X, 0, BODY, np.random.RandomState(0), MU, 1.0,
+                                     n_samples=20)
         elapsed = time.time() - t0
-        self.assertEqual(len(gains), 12752)
+        self.assertEqual(len(gains), 10626)
         self.assertLess(elapsed, 5.0)
 
     def test_scores_are_not_zero(self):
@@ -159,13 +157,11 @@ class TestMutualInformation(unittest.TestCase):
         self.assertLess(np.std(many), 0.6 * np.std(few))
 
     def test_selector_scores_differ(self):
-        """The production path (primal_body_selector, sample count from the
+        """The production path (select_query, sample count from the
         item count) must give candidates different scores, otherwise its
         argmax is a pick on rounding noise."""
         X, _, _ = make_case(seed=4)
-        cands = ([0] + list(c) for c in permutations(range(1, N_ITEMS), BODY))
-        _, infogains, _ = U.primal_body_selector(X, cands, np.random.RandomState(0),
-                                                 MU, 0.005)
+        _, _, infogains = U.select_query(X, 0, BODY, np.random.RandomState(0), MU, 0.1)
         self.assertGreater(np.ptp(infogains), 1e-3)
 
 

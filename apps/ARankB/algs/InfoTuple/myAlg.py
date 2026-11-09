@@ -2,7 +2,6 @@ import time
 import numpy as np
 from apps.ARankB.algs.InfoTuple import utilsInfoTuple
 import next.utils as utils
-from itertools import permutations
 from cblearn.embedding import SOE
 from sklearn.utils import check_random_state
 
@@ -77,14 +76,12 @@ class MyAlg:
         down_sample = butler.algorithms.get(key='down_sample')
         mi_samples = butler.algorithms.get(key='mi_samples')  # None on pre-existing experiments
         X_part = np.array(butler.participants.get(uid=participant_uid, key='embedding'))
-        n, d = X_part.shape
 
         rng = self._restore_rng(butler)
-        candidates = permutations(filter(lambda x: x is not h, range(n)), A)
-        tuples = map(lambda x: [h] + list(x), candidates)
-        selected_tuple, _, _ = utilsInfoTuple.primal_body_selector(X_part, tuples, rng, mu, down_sample,
-                                                                   n_samples=mi_samples)
-        selected_tuple = list(map(lambda x: int(x), selected_tuple))
+        # scores down_sample of the C(n-1, A) distinct body sets, each once;
+        # the chosen body comes back in a random display order
+        selected_tuple, _, _ = utilsInfoTuple.select_query(X_part, h, A, rng, mu, down_sample,
+                                                           n_samples=mi_samples)
         self._save_rng(butler, rng)
         return selected_tuple
 
