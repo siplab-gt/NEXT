@@ -50,6 +50,9 @@ SETTINGS = {
     # options: noise_scale multiplies the score's distance noise (dist_std);
     #          oracle=True scores candidates on the TRUE map instead of the
     #          participant's current estimate (diagnostic only).
+    #          embedding='SOE'|'LORE' (+ embedding_max_iter) picks the map
+    #          fit; settings without it use SOE, as when their results were
+    #          recorded (the app's own default is now LORE).
     'random':       (ROUNDS, None, 0.05),
     'bug_1sample':  (BURN_IN, 1, 0.05),
     's3_ds0.05':    (BURN_IN, 3, 0.05),
@@ -62,6 +65,12 @@ SETTINGS = {
     's20_oracle':   (BURN_IN, 20, 0.05, {'oracle': True}),
     's20_oracle_noise0.3': (BURN_IN, 20, 0.05, {'oracle': True, 'noise_scale': 0.3}),
     's20_oracle_noise0.1': (BURN_IN, 20, 0.05, {'oracle': True, 'noise_scale': 0.1}),
+    # SOE vs LORE map fitting (LORE_EMBEDDING.md); prod_* = production settings
+    'random_soe':    (ROUNDS, None, 1.0, {'embedding': 'SOE'}),
+    'random_lore':   (ROUNDS, None, 1.0, {'embedding': 'LORE'}),
+    'prod_soe':      (BURN_IN, None, 1.0, {'embedding': 'SOE'}),
+    'prod_lore':     (BURN_IN, None, 1.0, {'embedding': 'LORE'}),
+    'prod_lore1500': (BURN_IN, None, 1.0, {'embedding': 'LORE', 'embedding_max_iter': 1500}),
 }
 COST_ORDER = ['s20_ds1', 's20_ds0.25', 's50_ds0.05', 's20_ds0.05', 's3_ds0.05',
               'bug_1sample', 'random']
@@ -179,12 +188,14 @@ def run_one(job):
     alg.initExp(butler, A, B, n, D, random_seed=1000 + pidx, failure_probability=0.01,
                 iteration=ROUNDS - 1, burn_in=burn_in, down_sample=down_sample, mu=MU,
                 debug=False, setTrap=False, expel=False, tolerance=0.3, trapRatio=0.0,
-                num_trap_questions=0, mi_samples=mi_samples)
+                num_trap_questions=0, mi_samples=mi_samples,
+                embedding_method=opts.get('embedding', 'SOE'),
+                embedding_max_iter=opts.get('embedding_max_iter'))
     answer_rng = np.random.RandomState(5000 + pidx)    # same answer stream per participant
     trip = heldout_triplets(n, np.random.RandomState(9000 + pidx))
     trip_local = local_triplets(true_X, np.random.RandomState(9500 + pidx))
     uid = 'p%d' % pidx
-    curve, curve_local, select_s = [], [], 0.0
+    curve, curve_local, select_s, map_ranks = [], [], 0.0, []
     counts = np.zeros(n)
     exact_answers = 0
     # profile of the questions asked after burn-in, on the TRUE map: rank of each
@@ -206,21 +217,26 @@ def run_one(job):
             alg.processAnswer(butler, ans, uid, False)
         curve.append(agreement(butler.participants.get(uid, 'embedding'), true_X, trip))
         curve_local.append(agreement(butler.participants.get(uid, 'embedding'), true_X, trip_local))
+        map_ranks.append(butler.participants.get(uid, 'embedding_rank'))
+    X_fit = np.asarray(butler.participants.get(uid, 'embedding'))
+    pd = np.linalg.norm(X_fit[:, None] - X_fit[None], axis=-1)[np.triu_indices(n, 1)]
     return {'participant': pidx, 'setting': setting, 'response': response,
             'agreement_by_round': curve, 'local_agreement_by_round': curve_local, 'getQuery_seconds_total': round(select_s, 2),
             'answers_fully_correct': exact_answers / float(ROUNDS * n),
             'body_appearances_min_max': [int(counts.min()), int(counts.max())],
-            'asked_rank_mean': float(np.mean(prof_mean)), 'asked_rank_spread': float(np.mean(prof_spread))}
+            'asked_rank_mean': float(np.mean(prof_mean)) if prof_mean else None,
+            'asked_rank_spread': float(np.mean(prof_spread)) if prof_spread else None,
+            'embedding_rank_by_round': map_ranks, 'fit_median_distance': float(np.median(pd))}
 
 
-def summarize(path):
+def summarize(path, baseline='random'):
     rows = [json.loads(l) for l in open(path)]
     by = {}
     for r in rows:
         by.setdefault(r['setting'], {})[r['participant']] = r
-    base = by.get('random', {})
+    base = by.get(baseline, {})
     print('%-20s %3s  %-38s %-22s %s' % ('setting', 'n', 'agreement after round 1..6 (mean)',
-                                           'final vs random (paired)', 's per question'))
+                                           'final vs %s (paired)' % baseline, 's per question'))
     for s in SETTINGS:
         if s not in by:
             continue
@@ -238,12 +254,17 @@ def summarize(path):
         ldiff = np.array([rs[p]['local_agreement_by_round'][-1] - base[p]['local_agreement_by_round'][-1] for p in loc])
         lfin = np.mean([rs[p]['local_agreement_by_round'][-1] for p in loc]) if loc else np.nan
         lse = ldiff.std(ddof=1) / np.sqrt(len(ldiff)) if len(ldiff) > 1 else float('nan')
-        rk = np.mean([r.get('asked_rank_mean', np.nan) for r in rs.values()])
-        sp = np.mean([r.get('asked_rank_spread', np.nan) for r in rs.values()])
+        rk = np.mean([r.get('asked_rank_mean') or np.nan for r in rs.values()])
+        sp = np.mean([r.get('asked_rank_spread') or np.nan for r in rs.values()])
         print('%-20s %3d  %-38s %+.4f ± %.4f (%2d/%2d up) %.3f  appears %4.1f..%4.1f; %3.0f%% exact; asked rank %.1f spread %.1f | local %.3f (%+.4f ± %.4f)' % (
             s, len(rs), ' '.join('%.3f' % c for c in curve), diff.mean() if len(diff) else 0,
             se, wins, len(diff), perq, cov[0], cov[1], 100 * exact, rk, sp,
             lfin, ldiff.mean() if len(ldiff) else np.nan, lse))
+        fr = [r['embedding_rank_by_round'][-1] for r in rs.values() if (r.get('embedding_rank_by_round') or [None])[-1] is not None]
+        if 'fit_median_distance' in next(iter(rs.values())):
+            print('%-20s      map rank after last round: %s; median fitted distance %.2f' % (
+                '', ' '.join('%d:%d' % (k, fr.count(k)) for k in sorted(set(fr))) or 'n/a (SOE)',
+                np.median([r['fit_median_distance'] for r in rs.values()])))
 
 
 def main():
@@ -255,9 +276,10 @@ def main():
     ap.add_argument('--response', choices=['model', 'exact'], default='model')
     ap.add_argument('--participants', type=int, default=None, help='use only the first N truth maps')
     ap.add_argument('--summarize')
+    ap.add_argument('--baseline', default='random', help='setting the paired column compares against')
     a = ap.parse_args()
     if a.summarize:
-        return summarize(a.summarize)
+        return summarize(a.summarize, a.baseline)
     truths = json.load(open(a.truth))[:a.participants]
     settings = a.settings.split(',')
     done = set()
