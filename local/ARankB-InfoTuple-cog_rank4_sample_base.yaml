@@ -21,7 +21,7 @@ args:
   failure_probability: 0.01
   iteration: 5 # each cycle of normal iteration involves every target being the head once
   burn_in: 0 # SAMPLE: InfoTuple selection from query 1 so the compute cost is visible; main study uses 1
-  down_sample: 0.05 
+  down_sample: 1.0 # fraction of the distinct body sets (C(n-1, A)) scored per question
   mu: 0.05 
   debug: false # please set to true at the moment
   #-----------------------------For Trap Questions------------------------------------#
