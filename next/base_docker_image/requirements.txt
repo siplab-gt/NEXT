@@ -61,8 +61,8 @@ wcwidth~=0.2.13
 Werkzeug~=3.0.2
 zope.event~=5.0
 zope.interface~=6.3
-cblearn==0.3.0
-scikit-learn==1.5.1
+cblearn==0.4.0  # LORE (InfoTuple default map fit); needs scikit-learn>=1.6, numba>=0.59, sparse~=0.15
+scikit-learn==1.9.1  # cblearn 0.4.0 needs >=1.6; version tested with it (LORE_EMBEDDING.md)
 colormath
 opencv-python
 av~=11.0.0
