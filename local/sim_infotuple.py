@@ -53,6 +53,8 @@ SETTINGS = {
     #          embedding='SOE'|'LORE' (+ embedding_max_iter) picks the map
     #          fit; settings without it use SOE, as when their results were
     #          recorded (the app's own default is now LORE).
+    #          d=<int> sets the fitted map's dimension (default D; the truth
+    #          maps keep their own dimension).
     'random':       (ROUNDS, None, 0.05),
     'bug_1sample':  (BURN_IN, 1, 0.05),
     's3_ds0.05':    (BURN_IN, 3, 0.05),
@@ -71,6 +73,10 @@ SETTINGS = {
     'prod_soe':      (BURN_IN, None, 1.0, {'embedding': 'SOE'}),
     'prod_lore':     (BURN_IN, None, 1.0, {'embedding': 'LORE'}),
     'prod_lore1500': (BURN_IN, None, 1.0, {'embedding': 'LORE', 'embedding_max_iter': 1500}),
+    'prod_lore_d4':  (BURN_IN, None, 1.0, {'embedding': 'LORE', 'd': 4}),
+    'prod_lore_d6':  (BURN_IN, None, 1.0, {'embedding': 'LORE', 'd': 6}),
+    'prod_lore_d8':  (BURN_IN, None, 1.0, {'embedding': 'LORE', 'd': 8}),
+    'prod_lore_d10': (BURN_IN, None, 1.0, {'embedding': 'LORE', 'd': 10}),
 }
 COST_ORDER = ['s20_ds1', 's20_ds0.25', 's50_ds0.05', 's20_ds0.05', 's3_ds0.05',
               'bug_1sample', 'random']
@@ -185,7 +191,7 @@ def run_one(job):
 
     butler = FakeButler()
     alg = Alg()
-    alg.initExp(butler, A, B, n, D, random_seed=1000 + pidx, failure_probability=0.01,
+    alg.initExp(butler, A, B, n, int(opts.get('d', D)), random_seed=1000 + pidx, failure_probability=0.01,
                 iteration=ROUNDS - 1, burn_in=burn_in, down_sample=down_sample, mu=MU,
                 debug=False, setTrap=False, expel=False, tolerance=0.3, trapRatio=0.0,
                 num_trap_questions=0, mi_samples=mi_samples,
