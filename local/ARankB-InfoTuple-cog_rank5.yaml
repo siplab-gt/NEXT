@@ -35,8 +35,9 @@ args:
   #-----------------------------------------------------------------------#
   # text to display at the end if participant successfully answered all questions
   debrief: Thank you - you have completed the study. Click the link to return to Prolific and register your completion.
-  # text to display at the end if participant failed
-  debrief_fail: You did not pass enough attention checks, so the study ends here. Click the link to return to Prolific.
+  # REJECT exit: shown to participants expelled for failing attention checks (fail code).
+  # Keep it neutral - never tell them they failed; just send them back to Prolific.
+  debrief_fail: Click on this link to return to Prolific.
   # link to display at the end if participant successfully answered all questions
   debrief_link: https://app.prolific.com/submissions/complete?cc=YOUR_SUCCESS_CODE # set your study's completion code before launching
   # link to display at the end if participant failed
