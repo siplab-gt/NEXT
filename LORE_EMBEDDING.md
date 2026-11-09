@@ -22,10 +22,10 @@ SOE can still be chosen per experiment.
   Held-out accuracy is unchanged by the subsample.
 - **1000 iterations, not 1500.** 1500 is ~25% slower and is not better: about the same on
   real data, and worse on noise-free simulated answers.
-- **Map size:** all current configs fit 3-D maps (`d: 3`; "rank 4" in the study name is
-  the 4 items ranked per question). Starting LORE bigger costs no question-selection time,
-  and LORE trims the extra dimensions itself. It helps in simulation but not measurably on
-  real data. **Keep `d: 3` as the default; `d: 6` is a cheap, safe option** (§4).
+- **Map size: the configs now use `d: 6`** (previously 3; "rank 4" in the study name is the
+  4 items ranked per question). LORE starts at 6 dimensions and keeps only those the answers
+  support. It costs no question-selection time and ~0.1 s more per refit. It helps in
+  simulation and is neutral on real data (§4).
 - **Deploying needs a rebuild of the worker/backend image** (steps below). Until then the
   code is safe on the current image: running experiments keep SOE, and a new LORE launch
   fails at once with a clear message.
@@ -216,15 +216,18 @@ participants and 3 for the rest. With noisy answers (InfoTuple's own response mo
 noisier than real participants) nothing differs beyond noise. d = 10 is never better than
 d = 6.
 
-**Recommendation.** Keep `n_components = d` (no separate setting) and keep scoring in the
-full d.
-- **Keep d = 3 as the default.** It is what real data supports and what all past studies
-  used.
-- **d = 6 is the setting to choose if you want LORE to find the dimension itself.** It
-  costs no selection time, ~0.1 s more per refit, and nothing on the pooled job (the cap
-  adapts). It is never worse than d = 3 here, and it is the best or near-best setting in
-  every simulation.
-- **Don't go above ~8.** There is no further gain and fitting cost keeps rising.
+**Decision: `d: 6` in all six InfoTuple configs.** `n_components = d` (no separate
+setting), and InfoTuple keeps scoring in the full d.
+- d = 6 costs no selection time, ~0.1 s more per refit, and nothing on the pooled job (the
+  cap adapts).
+- It is never worse than d = 3 here, and it is the best or near-best setting in every
+  simulation.
+- It lets LORE find each participant's dimension instead of having it fixed at 3.
+- Don't go above ~8: there is no further gain and fitting cost keeps rising.
+- For a study that should match the old 3-D maps exactly, set `d: 3` (and
+  `embedding_method: SOE` for the old method).
+- The dashboard's scatter plot now shows the map's two main directions (PCA) instead of its
+  first two columns.
 
 Two things to know before raising `d`:
 - Exported participant maps and the pooled `X` then have d columns in a rotated basis. The
@@ -279,7 +282,9 @@ GitHub PR and checked out in `/home/ubuntu/NEXT` as usual (`CLAUDE.md` git rules
    It should print 0. The participant document should now have `embedding_rank`. Also
    check `tail -3 local/health.log`.
 
-**Configs.** Nothing to change: new launches use LORE with 1000 iterations by default. For
+**Configs.** The tracked configs already have `d: 6`; new launches use LORE with 1000
+iterations by default. Regenerate the gitignored `_live` configs with `./make_live.sh`, since
+they still say `d: 3`. For
 SOE, add `embedding_method: SOE` to the experiment YAML; for another cap, add
 `embedding_max_iter: N`. Then re-run `./make_live.sh` for the `_live` copy. The conda
 `environment.yml` files still say cblearn 0.3.0, but the Docker build doesn't use them (the

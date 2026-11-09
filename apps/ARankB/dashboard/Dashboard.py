@@ -126,6 +126,16 @@ class MyAppDashboard(AppDashboard):
         item = app.getModel(json.dumps(
             {'exp_uid': app.exp_uid, 'args': {'alg_label': alg_label}}))
         embedding = item['X']
+        # plot the map's two main directions: with LORE the dimensions it kept
+        # are spread over all d columns, so the first two columns alone can
+        # miss most of the structure (darray keeps the raw map)
+        plot_xy = numpy.zeros((len(embedding), 2))
+        if len(embedding):
+            E = numpy.asarray(embedding, dtype=float)
+            E = E - E.mean(axis=0)
+            U, sv, _ = numpy.linalg.svd(E, full_matrices=False)
+            k = min(2, len(sv))
+            plot_xy[:, :k] = U[:, :k] * sv[:k]
         data = []
         x_min = float('inf')
         x_max = -float('inf')
@@ -137,18 +147,14 @@ class MyAppDashboard(AppDashboard):
             target_dict['target'] = TargetManager.get_target_item(
                 app.exp_uid, idx)
             # this is what will actually be plotted,
-            target_dict['x'] = target[0]
-            try:
-                # takes first two components, (could be replaced by PCA)
-                target_dict['y'] = target[1]
-            except:
-                target_dict['y'] = 0.
+            target_dict['x'] = float(plot_xy[idx, 0])
+            target_dict['y'] = float(plot_xy[idx, 1])
             target_dict['darray'] = target
 
-            x_min = min(x_min, target[0])
-            x_max = max(x_max, target[0])
-            y_min = min(y_min, target[1])
-            y_max = max(y_max, target[1])
+            x_min = min(x_min, target_dict['x'])
+            x_max = max(x_max, target_dict['x'])
+            y_min = min(y_min, target_dict['y'])
+            y_max = max(y_max, target_dict['y'])
             data.append(target_dict)
 
         return_dict = {'timestamp': str(utils.datetimeNow()),

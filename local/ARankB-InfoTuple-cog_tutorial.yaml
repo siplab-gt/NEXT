@@ -12,7 +12,7 @@ args:
     # - {alg_label: RandomSampling, proportion: 0.5}
     # - {alg_label: InfoTuple, proportion: 0.5}
     - {alg_label: InfoTuple, proportion: 1}
-  d: 3 # embedding dimension
+  d: 6 # map dimension: LORE starts here and keeps only the dimensions the answers support (LORE_EMBEDDING.md §4)
   A: 3 # how many targets in total
   B: 3 # how many targets among all that a participant needs to rank
   random_seed: 12 # 

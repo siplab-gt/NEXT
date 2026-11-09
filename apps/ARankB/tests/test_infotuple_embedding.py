@@ -54,8 +54,8 @@ class FakeButler:
         self.jobs.append(name)
 
 
-def init(butler, **kw):
-    M.MyAlg().initExp(butler, 4, 4, N_ITEMS, DIM, random_seed=13, failure_probability=0.01,
+def init(butler, dim=DIM, **kw):
+    M.MyAlg().initExp(butler, 4, 4, N_ITEMS, dim, random_seed=13, failure_probability=0.01,
                       iteration=5, burn_in=1, down_sample=1.0, mu=0.05, debug=False,
                       setTrap=False, expel=False, tolerance=0.3, trapRatio=0.0,
                       num_trap_questions=0, **kw)
@@ -166,6 +166,23 @@ class TestLoreUpdates(unittest.TestCase):
         self.assertEqual(self.b.participants.get(uid, 'head'), 0)
         self.assertEqual(len(self.b.participants.get(uid, 'responses')), 2 * N_ITEMS * 6)
         self.assertIsNotNone(self.b.participants.get(uid, 'embedding_rank'))
+
+    def test_six_dim_map_through_process_answer(self):
+        """The configs' d: 6 - LORE starts at 6 dimensions and keeps what the
+        answers support; question selection works on the 6-D map."""
+        b = FakeButler()
+        init(b, dim=6)
+        uid, q = 'p', M.MyAlg()
+        for _ in range(3 * N_ITEMS):
+            tup = q.getQuery(b, uid)
+            self.assertEqual(len(set(tup)), 5)
+            head, body = tup[0], np.array(tup[1:])
+            order = body[np.argsort(np.linalg.norm(self.true_X[body] - self.true_X[head], axis=1))]
+            q.processAnswer(b, [head] + [int(i) for i in order], uid, False)
+        X = np.array(b.participants.get(uid, 'embedding'))
+        self.assertEqual(X.shape, (N_ITEMS, 6))
+        self.assertIn(b.participants.get(uid, 'embedding_rank'), range(1, 7))
+        self.assertGreater(agreement(X, answers(self.true_X, 100, self.rng)), 0.8)
 
     def test_full_update_fits_a_bounded_subsample(self):
         resp = answers(self.true_X, 600, self.rng)               # 3600 comparisons

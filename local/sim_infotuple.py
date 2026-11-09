@@ -40,7 +40,7 @@ sys.path.insert(0, REPO)
 
 # Production rank-4 study (local/ARankB-InfoTuple-cog_rank4_precompute.yaml)
 A = B = 4
-D = 3
+D = 3                 # map dimension of the earlier runs; the configs now use d: 6 (setting prod_lore_d6)
 ROUNDS = 6            # burn_in 1 + 5 adaptive rounds = 150 questions for 25 items
 BURN_IN = 1
 MU = 0.05
