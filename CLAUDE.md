@@ -6,12 +6,12 @@ bind-mounted into the Docker containers. The instance has an **Elastic IP:
 
 ## Critical safety rules
 
-- **Never switch git branches on this machine** (`git checkout master`, etc.) and
-  never use `git add -A` / `git stash` / `git reset --hard` / `git clean`. Until
-  `fix/redis-leak-and-retry` is merged, `master` still tracks the Python venv
-  (`local/local-venv/`, untracked on this branch since Aug 2026) and the generated
-  `local/docker-compose.yml`, so a checkout would write stale files into the live
-  environment under the running containers. Work stays on the lab branch
+- **Be careful with git on this machine**: this checkout is the live deployment.
+  Never use `git add -A` / `git stash` / `git reset --hard` / `git clean`. Since
+  v0.3.0 (PR #4) `master` no longer tracks the Python venv or the generated
+  `local/docker-compose.yml`, so switching between `master` and the lab branches is
+  safe again — but never check out anything older than v0.3.0 here (those commits
+  would write a stale venv under the running containers). Work stays on the lab branch
   (`prolific-id`, or a feature branch created from it such as
   `fix/redis-leak-and-retry`) — never check out a branch with a different tree;
   merge to master only via GitHub PRs. Commit with targeted `git add <file>`.
@@ -28,11 +28,13 @@ bind-mounted into the Docker containers. The instance has an **Elastic IP:
 
 ## Machine
 
-`c6i.2xlarge` (8 real cores, 15 GB, no burst credits) since 2026-08-22; the t2.2xlarge
-before it ran out of CPU credits mid-test. Measured with the production config:
-**10–15 simultaneous participants is comfortable, ~25 means ~15 s waits; reliable to
-60.** Sizing, the step up to a `c6i.4xlarge` and the type-change procedure: README
-§2.1 and `CAPACITY_REPORT.md`. `steal %` in `healthcheck.sh` must stay 0.
+`c6i.4xlarge` (16 vCPU, 30 GB, no burst credits) since 2026-11-02 (c6i.2xlarge before,
+t2.2xlarge before that — it ran out of CPU credits mid-test). Workers: 8 async + 12 sync.
+Measured with the production config, wait per question = `processAnswer` + `getQuery`:
+**20 simultaneous ≈ 5.6 s median**, no errors; estimated 25 ≈ 7–9 s, 30 ≈ 9–12 s,
+40 ≈ 16–19 s (`CAPACITY_REPORT.md`, 2026-11-02 sections). The 16 vCPUs are 8 physical
+cores, so more worker processes won't help further. Type-change procedure: README §2.1.
+`steal %` in `healthcheck.sh` must stay 0.
 
 ## Starting the stack
 

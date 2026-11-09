@@ -106,6 +106,66 @@ or fewer wasted selections.
 
 Tuning: see "Next: c6i.4xlarge pass" below.
 
+## c6i.4xlarge, worker counts unchanged (2026-11-02)
+
+Instance resized to a c6i.4xlarge (16 vCPU, 30 GiB); stack restarted with `docker start`,
+**nothing else changed** (still 4 async + 6 sync worker processes, commit `671bc81`). Same
+driver and config as above: `./capacity_ramp.sh 20 40`, production rank-4 precompute
+config, think 8–15 s, 10 % wrong traps, through nginx.
+
+**Measure the wait the participant sees.** After a submit, the query page calls
+`processAnswer`, waits for it, then calls `getQuery` and waits again
+(`query_page.html`, `processAnswer_success`). The participant's wait per question is
+therefore the **sum** of the two latencies, measured from the client through nginx. Only
+their own internet round trip (~0.1–0.3 s) is missing, and the targets are text, so
+rendering is negligible. Earlier tables quoted `getQuery` alone, which understates the
+wait by roughly half. The table below recomputes every run as the sum, steady state only
+(first 10 minutes excluded):
+
+| Run | Wait per question p50 / p90 / max | Waits > 20 s | > 30 s | Study length |
+|---|---|---|---|---|
+| c6i.2xlarge, 25 (Aug) | 26.7 s / 42.1 s / 93 s | 72 % | 39 % | ~92 min |
+| c6i.2xlarge, 40 (Aug) | 45.2 s / 65.9 s / 125 s | 97 % | 87 % | ~136 min |
+| **c6i.4xlarge, 20** | **7.0 s / 12.9 s / 26 s** | 1 % | 0 % | **~48 min** |
+| **c6i.4xlarge, 40** (stopped by hand at ~50/158 answers, 22 min) | **22.9 s / 33.0 s / 47 s** | 69 % | 17 % | ~1 h 40 min projected |
+
+Reliability: 20 → 5,934 requests, all 200; 18 completed + 2 expelled as designed; export
+check PASS. 40 → all requests 200 and export check PASS up to the stop; 0 technical
+exits, 0 CLOSE_WAIT, 0 % steal throughout.
+
+**Reading.** The new box roughly halves the wait at 40 and gives ~7 s at 20, but **it is
+not using half its cores**: the worker sat at ~750–900 % CPU of 1,600 % at both levels
+(peak ~1,070 %), while 10–16 jobs (20) and ~40–48 jobs (40) waited in RabbitMQ. The 10
+worker processes each run one job at a time (about one core each), so they cap the
+machine at ~10 cores. The fix is the worker-count step below, a config-only change (no
+code), expected to shorten waits further at both levels; it has to be measured.
+
+## c6i.4xlarge, worker counts raised to 8 async + 12 sync (2026-11-02)
+
+Commit `9cc324e`; worker and backend recreated, rest unchanged. `./capacity_ramp.sh 20`:
+5,934 requests all 200, 18 completed + 2 expelled as designed, export check PASS, 0
+technical exits, 0 CLOSE_WAIT, 0 % steal. Steady-state wait per question (first 10 min
+excluded): **p50 5.6 s, p90 12.7 s, max 28 s**, compared with 7.0 / 12.9 / 26 s with 10
+processes. The worker now uses ~12.5 of 16 vCPUs (peak ~15.6), up from ~7.7, but
+throughput rose only ~5–15 %. The 16 vCPUs are **8 physical cores with hyperthreading**:
+10 processes already occupied the real cores, and the extra processes mostly add
+hyperthread siblings and contention. Kept as the production setting (nothing got worse).
+
+Estimates for this setting, not measured. They come from the closed-loop model: once
+saturated, throughput is fixed at ~1.25–1.4 questions/s, so wait ≈ N / throughput −
+think. The model reproduces the measured 20 and 40 points. Simulated think time is 8–15 s:
+
+| Simultaneous | Median wait per question | Study length (158 questions) |
+|---|---|---|
+| 20 | **5.6 s (measured)** | ~45–50 min |
+| 25 | ~7–9 s | ~50–55 min |
+| 30 | ~9–12 s | ~55–60 min |
+| 40 | ~16–19 s | ~75 min |
+
+Further levers if needed: `OPENBLAS_NUM_THREADS=1` (less contention, modest gain), a
+c6i.8xlarge (16 physical cores, ~2× throughput), or a lower `down_sample` (an algorithm
+choice).
+
 ## Next: c6i.4xlarge pass (when ~25 comfortable participants are needed)
 
 Stop → change instance type → start → `docker start …` (README §2.1), then in this order,
