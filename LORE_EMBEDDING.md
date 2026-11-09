@@ -22,6 +22,10 @@ SOE can still be chosen per experiment.
   Held-out accuracy is unchanged by the subsample.
 - **1000 iterations, not 1500.** 1500 is ~25% slower and is not better: about the same on
   real data, and worse on noise-free simulated answers.
+- **Map size:** all current configs fit 3-D maps (`d: 3`; "rank 4" in the study name is
+  the 4 items ranked per question). Starting LORE bigger costs no question-selection time,
+  and LORE trims the extra dimensions itself. It helps in simulation but not measurably on
+  real data. **Keep `d: 3` as the default; `d: 6` is a cheap, safe option** (§4).
 - **Deploying needs a rebuild of the worker/backend image** (steps below). Until then the
   code is safe on the current image: running experiments keep SOE, and a new LORE launch
   fails at once with a clear message.
@@ -33,7 +37,7 @@ SOE can still be chosen per experiment.
 | `apps/ARankB/algs/InfoTuple/myAlg.py` | `_embedder()` builds the estimator for both call sites (`incremental_embedding_update`, inline in processAnswer at the end of each round; `full_embedding_update`, a `butler.job` with `time_limit=30`). |
 | New settings (experiment YAML, optional) | `embedding_method: LORE` or `SOE` (default **LORE**) and `embedding_max_iter` (default **1000** for LORE, 20 for SOE). Declared in `myApp.yaml` and `Algs.yaml` and passed through `myApp.py`, like `mi_samples`. Like `mi_samples`, RandomSampling does not accept them, so don't set them when RandomSampling is in `alg_list`. |
 | Experiments created before this change | They have no stored method and **keep SOE with the old settings**. After the upgrade SOE output is bit-identical (cblearn 0.3.0/sklearn 1.5.1 vs 0.4.0/1.9.1, 20 real participants × 6 refits: max difference 0.0). |
-| Pooled map (`full_embedding_update`) | With LORE it fits at most `FULL_UPDATE_MAX_RESPONSES = 20000` comparisons, a seeded random subsample. It uses its own random generator, so the question-selection random stream is untouched. This map is only read by `getModel` (the dashboard), never by question selection. |
+| Pooled map (`full_embedding_update`) | With LORE it fits at most 20,000 × 3/d comparisons (`full_update_cap`: 20k at d = 3, 10k at d = 6), a seeded random subsample. It uses its own random generator, so the question-selection random stream is untouched. This map is only read by `getModel` (the dashboard), never by question selection. |
 | Participant document | New `embedding_rank`: the number of dimensions LORE kept after the latest refit. |
 | Old image safety | `from cblearn.embedding import LORE` is guarded. On cblearn 0.3.0 the module still imports, SOE experiments run, and launching a LORE experiment raises `embedding_method LORE needs cblearn >= 0.4.0 ...` at initExp. |
 | `next/base_docker_image/requirements.txt` | `cblearn==0.4.0`, `scikit-learn==1.9.1` (cblearn 0.4.0 needs ≥ 1.6; it also pulls in numba and sparse). |
@@ -147,7 +151,88 @@ kept them at 2 dimensions. So 2 dimensions is LORE's estimate, not an artefact. 
 are still better fit by LORE than by SOE (74.8% vs 73.8%). `embedding_rank` on the
 participant document makes this visible during a study.
 
-## 4. Deploying (worker/backend image rebuild)
+## 4. How many dimensions to start LORE with (`d` / n_components)
+
+LORE is meant to start with more dimensions than the data needs and shrink the extra ones.
+`n_components` is the experiment's `d`. Every current config uses `d: 3`. ("Rank 4" in
+the study name is the 4 items ranked per question, A = B = 4, not the map's dimension.)
+Measured at d = 3, 4, 6, 8, 10 with production settings.
+
+**Question-selection time doesn't depend on `d`.** `d` only enters the head-to-body
+distances; all the scoring runs on those scalar distances. `select_query` over all 10,626
+body sets took 0.034–0.038 s at every d with the default 3 samples, and 0.16–0.19 s with 20
+samples. Directions LORE has zeroed add nothing to any distance: a 10-D map with its extra
+dimensions zeroed picks exactly the same question as the same map cut down to 4-D.
+**Cutting the map down to LORE's `rank_` before selection would therefore save nothing and
+change nothing**, so InfoTuple keeps scoring in the full d.
+
+**What does grow with d is LORE's own fitting.**
+
+| d | refit per round, median / 95th pct / max | pooled 20k, real / noise-free |
+|---|---|---|
+| 3 | 0.28 / 0.50 / 0.74 s | 4.1 / 10.4 s |
+| 4 | 0.32 / 0.60 / 0.89 s | 6.3 / 17.2 s |
+| 6 | 0.40 / 0.74 / 1.06 s | 9.9 / 22.6 s |
+| 8 | 0.45 / 0.84 / 1.27 s | 11.5 / 28.3 s |
+| 10 | 0.49 / 0.95 / 1.40 s | 14.3 / 34.2 s |
+
+(Measured while the sweeps ran, so slower than §2.) The refit is still well under a second
+on the one answer in 25 that triggers it. The pooled update would pass 30 s at d ≥ 8, so its
+cap now shrinks with d (20k × 3/d). The noise-free worst case is now 8.0 s at d = 3, 6.9 s at
+d = 6 and 5.9 s at d = 10. On real pooled data 10k comparisons score the same as 128k.
+
+**Dimensions recovered and accuracy.**
+
+*Real data* (198 participants, the same held-out split as §3; held-out accuracy after 150
+answers, change vs starting at d = 3):
+
+| start d | held-out | vs d = 3 | dimensions kept (2 / 3 / 4 / 5) |
+|---|---|---|---|
+| 3 | 69.9% | — | 17 / 181 / – / – |
+| 4 | 70.1% | +0.2 ± 0.2 | 8 / 152 / 38 / – |
+| 6 | 70.0% | +0.1 ± 0.2 | 7 / 146 / 45 / – |
+| 8 | 70.0% | +0.1 ± 0.2 | 7 / 139 / 52 / – |
+| 10 | 70.0% | +0.1 ± 0.2 | 6 / 139 / 53 / – |
+
+Whatever the start, LORE settles on 3 dimensions for most participants and 4 for about a
+quarter, and never goes above 4. So this data really is about 3-dimensional, and starting
+bigger doesn't predict answers measurably better.
+
+*Simulation* (24 participants per cell; final agreement with the true map, change vs
+starting at d = 3, ± standard error):
+
+| truth maps | answers | d=4 | d=6 | d=8 | d=10 |
+|---|---|---|---|---|---|
+| real 3-D maps | noisy | −0.000 ± 0.013 | +0.016 ± 0.012 | +0.016 ± 0.013 | −0.006 ± 0.010 |
+| real 3-D maps | exact | +0.010 ± 0.009 | **+0.016 ± 0.007** | +0.009 ± 0.009 | +0.005 ± 0.009 |
+| made-up 4-D maps | noisy | +0.007 ± 0.008 | +0.003 ± 0.010 | −0.003 ± 0.012 | −0.002 ± 0.009 |
+| made-up 4-D maps | exact | **+0.031 ± 0.008** | **+0.033 ± 0.009** | **+0.030 ± 0.010** | **+0.023 ± 0.009** |
+
+Starting above 3 helps when answers are clean. With 3-D truths and d = 3, LORE sometimes
+drops to 2 dimensions on the first round and can't get back (§3); started bigger, it keeps
+all 3. With 4-D truths, d = 3 can't represent them. Rank recovery is only partial in 150
+answers, though: with exact answers to 4-D truths LORE kept 4 dimensions for 8–12 of 24
+participants and 3 for the rest. With noisy answers (InfoTuple's own response model, much
+noisier than real participants) nothing differs beyond noise. d = 10 is never better than
+d = 6.
+
+**Recommendation.** Keep `n_components = d` (no separate setting) and keep scoring in the
+full d.
+- **Keep d = 3 as the default.** It is what real data supports and what all past studies
+  used.
+- **d = 6 is the setting to choose if you want LORE to find the dimension itself.** It
+  costs no selection time, ~0.1 s more per refit, and nothing on the pooled job (the cap
+  adapts). It is never worse than d = 3 here, and it is the best or near-best setting in
+  every simulation.
+- **Don't go above ~8.** There is no further gain and fitting cost keeps rising.
+
+Two things to know before raising `d`:
+- Exported participant maps and the pooled `X` then have d columns in a rotated basis. The
+  dimensions LORE kept are spread across all columns, not placed in the first few, so use
+  an SVD/PCA of the map for analysis or plots.
+- `d` also sets the map size for RandomSampling if it is in `alg_list`.
+
+## 5. Deploying (worker/backend image rebuild)
 
 Do this when no collection is live (check `http://52.2.236.217/dashboard/experiment_list`),
 after the InfoTuple MI branch has landed, with this branch merged into the lab branch via a
@@ -203,7 +288,7 @@ conda steps are commented out of the Dockerfile).
 **Rollback.** Set `embedding_method: SOE` for new launches, or rebuild with the old pins.
 Experiments started under LORE keep LORE, because the method is stored at launch.
 
-## 5. Reproducing
+## 6. Reproducing
 
 Python 3.11.9 venv outside the repo with `next/base_docker_image/requirements.txt`, minus
 `av`, which needs ffmpeg headers to build and isn't used here. Answers and fitted maps come
@@ -221,4 +306,6 @@ python -B local/sim_infotuple.py --summarize model.jsonl --baseline prod_soe
 ```
 (same with `--response exact`). The real-data held-out comparison and the timing scripts were
 one-off scratch scripts. They follow the procedure in §2–3: production chaining, a random
-starting map, 30 held-out answers per participant.
+starting map, 30 held-out answers per participant. Map-size runs: settings
+`prod_lore,prod_lore_d4,prod_lore_d6,prod_lore_d8,prod_lore_d10,prod_soe`, with the real
+truth maps and with 24 random 4-D point clouds scaled to the real maps' median distance.
