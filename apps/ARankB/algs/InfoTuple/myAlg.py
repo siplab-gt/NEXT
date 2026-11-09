@@ -19,9 +19,15 @@ LORE_PARAMS = dict(lamb=0.01, p=0.5, margin=0.1)
 # The pooled map (full_embedding_update) is only read by getModel/the dashboard.
 # LORE's cost grows with the number of comparisons (~30 s for 175 participants,
 # the job's hard limit), so it fits a fixed-size random subsample: 20k
-# comparisons give the same held-out accuracy as all of them and take <= ~10 s
-# even when LORE runs all 1000 iterations (LORE_EMBEDDING.md).
+# comparisons at d=3 give the same held-out accuracy as all of them and take
+# <= ~10 s even when LORE runs all 1000 iterations. LORE's time per comparison
+# grows ~linearly with d, so the cap is 20k * 3/d (10k at d=6; LORE_EMBEDDING.md).
 FULL_UPDATE_MAX_RESPONSES = 20000
+FULL_UPDATE_CAP_AT_DIM = 3
+
+
+def full_update_cap(d):
+    return max(1000, int(FULL_UPDATE_MAX_RESPONSES * FULL_UPDATE_CAP_AT_DIM / max(int(d), FULL_UPDATE_CAP_AT_DIM)))
 
 # When False (default) the one-step-ahead precompute skips any prediction that
 # crosses an anchor-cycle wrap (head n-1 -> 0), because the participant
@@ -346,10 +352,10 @@ class MyAlg:
         
         seed = butler.algorithms.get(key='seed')
         method = butler.algorithms.get(key='embedding_method') or 'SOE'
-        if method == 'LORE' and len(responses) > FULL_UPDATE_MAX_RESPONSES:
+        cap = full_update_cap(d)
+        if method == 'LORE' and len(responses) > cap:
             # own rng: the global rng_state drives question selection
-            pick = np.random.RandomState(seed).choice(len(responses), FULL_UPDATE_MAX_RESPONSES,
-                                                      replace=False)
+            pick = np.random.RandomState(seed).choice(len(responses), cap, replace=False)
             responses = [responses[i] for i in np.sort(pick)]
         try:
             embedder = self._embedder(butler, d)

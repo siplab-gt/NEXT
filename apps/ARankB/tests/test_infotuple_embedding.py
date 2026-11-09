@@ -189,6 +189,10 @@ class TestLoreUpdates(unittest.TestCase):
                          'must not consume the question-selection random stream')
         self.assertGreater(agreement(X1, answers(self.true_X, 100, self.rng)), 0.85)
 
+    def test_full_update_cap_shrinks_with_dimension(self):
+        self.assertEqual([M.full_update_cap(d) for d in (2, 3, 4, 6, 10)],
+                         [20000, 20000, 15000, 10000, 6000])
+
     def test_full_update_fits_the_job_time_limit(self):
         """~175 participants' comparisons pooled: ~30 s uncapped on real data
         (the job's hard limit is 30 s). Noise-free answers are LORE's slowest
