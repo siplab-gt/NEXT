@@ -4,6 +4,24 @@ from apps.ARankB.algs.InfoTuple import utilsInfoTuple
 import next.utils as utils
 from cblearn.embedding import SOE
 from sklearn.utils import check_random_state
+try:
+    from cblearn.embedding import LORE   # cblearn >= 0.4.0
+except ImportError:                       # older worker image (cblearn 0.3.0)
+    LORE = None
+
+# Map-fitting method for new experiments (YAML `embedding_method`). Experiments
+# created before the setting existed have no stored method and keep SOE.
+DEFAULT_EMBEDDING_METHOD = 'LORE'
+DEFAULT_EMBEDDING_MAX_ITER = {'LORE': 1000, 'SOE': 20}
+# LORE settings (cblearn defaults, = the paper's): lamb is the low-rank penalty
+# strength, p the Schatten-p exponent, margin the logistic-loss margin.
+LORE_PARAMS = dict(lamb=0.01, p=0.5, margin=0.1)
+# The pooled map (full_embedding_update) is only read by getModel/the dashboard.
+# LORE's cost grows with the number of comparisons (~30 s for 175 participants,
+# the job's hard limit), so it fits a fixed-size random subsample: 20k
+# comparisons give the same held-out accuracy as all of them and take <= ~10 s
+# even when LORE runs all 1000 iterations (LORE_EMBEDDING.md).
+FULL_UPDATE_MAX_RESPONSES = 20000
 
 # When False (default) the one-step-ahead precompute skips any prediction that
 # crosses an anchor-cycle wrap (head n-1 -> 0), because the participant
@@ -18,8 +36,18 @@ class MyAlg:
                 ,random_seed, failure_probability
                 ,iteration, burn_in, down_sample, mu, debug,
                 setTrap, expel, tolerance, trapRatio, num_trap_questions,
-                mi_samples=None):
+                mi_samples=None, embedding_method=None, embedding_max_iter=None):
         #For InfoTuple
+        method = embedding_method or DEFAULT_EMBEDDING_METHOD
+        if method not in DEFAULT_EMBEDDING_MAX_ITER:
+            raise ValueError('embedding_method must be LORE or SOE, got {!r}'.format(method))
+        if method == 'LORE' and LORE is None:
+            # fail the launch rather than silently running another method
+            raise ValueError('embedding_method LORE needs cblearn >= 0.4.0 in the worker image '
+                             '(rebuild it, see LORE_EMBEDDING.md) or set embedding_method: SOE')
+        butler.algorithms.set(key='embedding_method', value=method)
+        butler.algorithms.set(key='embedding_max_iter',
+                              value=int(embedding_max_iter or DEFAULT_EMBEDDING_MAX_ITER[method]))
         butler.algorithms.set(key='debug_flag', value=debug)
         butler.algorithms.set(key='mu', value=mu)
         butler.algorithms.set(key='down_sample', value=down_sample)
@@ -273,20 +301,34 @@ class MyAlg:
     def getModel(self, butler):
         return butler.algorithms.get(key=['X', 'num_reported_answers'])
 
+    def _embedder(self, butler, d):
+        """The map-fitting estimator for this experiment. Experiments created
+        before `embedding_method` existed have none stored and keep the
+        original SOE settings."""
+        seed = butler.algorithms.get(key='seed')
+        method = butler.algorithms.get(key='embedding_method') or 'SOE'
+        max_iter = butler.algorithms.get(key='embedding_max_iter') or DEFAULT_EMBEDDING_MAX_ITER[method]
+        if method == 'LORE':
+            if LORE is None:
+                raise ValueError('embedding_method LORE needs cblearn >= 0.4.0 in the worker image')
+            # n_components = d is LORE's upper bound; it may use fewer (rank_).
+            # scipy backend: torch is not installed in the worker image.
+            return LORE(n_components=d, random_state=seed, backend='scipy',
+                        max_iter=int(max_iter), **LORE_PARAMS)
+        return SOE(n_components=d, random_state=seed, n_init=10, backend='scipy',
+                   max_iter=int(max_iter), margin=5)
+
     def incremental_embedding_update(self, butler, participant_uid):
         responses = butler.participants.get(uid=participant_uid, key='responses')
-        seed = butler.algorithms.get(key='seed')
         X = np.array(butler.participants.get(uid=participant_uid, key='embedding'))
         n, d = X.shape
-        embedder = SOE(n_components=d, random_state=seed, n_init=10, backend='scipy', max_iter=20, margin=5) # Embedding algorithm to get the embeddings
-        # set maximum time allowed to update embedding
-        # t_max = 1.0
-        # take a single gradient step
-        #t_start = time.time()
-        #while (time.time()-t_start < 0.5*t_max):
         try:
+            embedder = self._embedder(butler, d)
             X = embedder.fit_transform(responses, n_objects=n, init=X)
             butler.participants.set(uid=participant_uid, key='embedding', value=X.tolist())
+            if hasattr(embedder, 'rank_'):
+                butler.participants.set(uid=participant_uid, key='embedding_rank',
+                                        value=int(embedder.rank_))
         except Exception as e:
             # Log the error but don't fail the entire process
             print(f"Warning: Embedding update failed for participant {participant_uid}: {e}")
@@ -303,11 +345,17 @@ class MyAlg:
             return  # Skip embedding update if no responses available
         
         seed = butler.algorithms.get(key='seed')
+        method = butler.algorithms.get(key='embedding_method') or 'SOE'
+        if method == 'LORE' and len(responses) > FULL_UPDATE_MAX_RESPONSES:
+            # own rng: the global rng_state drives question selection
+            pick = np.random.RandomState(seed).choice(len(responses), FULL_UPDATE_MAX_RESPONSES,
+                                                      replace=False)
+            responses = [responses[i] for i in np.sort(pick)]
         try:
-            embedder = SOE(n_components=d, random_state=seed, n_init=10, backend='scipy', max_iter=20, margin=5)
+            embedder = self._embedder(butler, d)
             X = embedder.fit_transform(responses, n_objects=n, init=X)
         except Exception as e:
-            raise ValueError("SOE embedding exception {}".format(e))
-       
+            raise ValueError("{} embedding exception {}".format(method, e))
+
         butler.algorithms.set(key='X', value=X.tolist())
         

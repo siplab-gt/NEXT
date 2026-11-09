@@ -75,6 +75,15 @@ initExp:
           description: Samples per candidate query for the InfoTuple information score (omit for ceil(n/10)). InfoTuple only; RandomSampling does not accept it.
           type: num
           optional: true
+        embedding_method:
+          description: How InfoTuple fits each participant's map after every round of questions, LORE (default for new experiments) or SOE (the original method). InfoTuple only; RandomSampling does not accept it.
+          type: str
+          values: [LORE, SOE]
+          optional: true
+        embedding_max_iter:
+          description: Iteration cap for each map fit (omit for 1000 with LORE, 20 with SOE). InfoTuple only; RandomSampling does not accept it.
+          type: num
+          optional: true
         precompute:
           description: Precompute the next InfoTuple query in the background while the participant answers the current one (InfoTuple only; RandomSampling does not support the trap/precompute kwargs)
           type: bool

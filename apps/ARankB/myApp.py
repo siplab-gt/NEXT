@@ -26,7 +26,7 @@ class MyApp:
                           'random_seed', 'burn_in', 'down_sample', 
                           'mu', 'iteration', 'debug', 'setTrap', 'expel', 
                           'tolerance', 'trapRatio', 'num_trap_questions',
-                          'mi_samples']
+                          'mi_samples', 'embedding_method', 'embedding_max_iter']
         for key in algorithm_keys:
             if key in args:
                 alg_data[key] = args[key]

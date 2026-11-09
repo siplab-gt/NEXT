@@ -58,6 +58,15 @@ initExp:
       description: Samples per candidate query for the InfoTuple information score (omit for ceil(n/10)). InfoTuple only.
       type: num
       optional: true
+    embedding_method:
+      description: Map-fitting method, LORE (default for new experiments) or SOE. InfoTuple only.
+      type: str
+      values: [LORE, SOE]
+      optional: true
+    embedding_max_iter:
+      description: Iteration cap for each map fit (omit for 1000 with LORE, 20 with SOE). InfoTuple only.
+      type: num
+      optional: true
       
   rets:
     type: bool
