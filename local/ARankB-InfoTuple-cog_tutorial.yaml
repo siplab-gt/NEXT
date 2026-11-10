@@ -54,8 +54,9 @@ args:
   participant_to_algorithm_management: one_to_many
   targets:
      # Allocate your resource locally and fill in the primary_description field with directory to each resource. 
-     # e.g. 'http://44.223.248.38/media/video01.mp4' make sure to change the primary_type field accordingly
-     # and use the correct Instance IP
+     # e.g. '/media/video01.mp4' for local/media/video01.mp4 - always a RELATIVE /media/... path, never
+     # 'http://<ip>/media/...': a relative path works over HTTP and HTTPS and survives an IP or
+     # hostname change (HTTPS_PLAN.md). Make sure to change the primary_type field accordingly.
      # The trap questions should come after the normal questions within this set and its number should match the num_trap_questions field
     targetset:
     - {primary_description: 'Computer Science', alt_description: '', primary_type: 'text', alt_type: ''}

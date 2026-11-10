@@ -33,6 +33,8 @@ args:
   trapRatio: 0.0
   num_trap_questions: 8 # number of trap questions available
   precompute: true # one-step-ahead: next query computed in the background while the participant answers
+  # protocol: https   # http (default) | https = participants use https://<NEXT_HTTPS_HOST> (HTTPS_PLAN.md)
+  # link_name: rank4  # optional short link /s/rank4 (must be unused; local/relink.sh moves one)
   #-----------------------------------------------------------------------#
   # text to display at the end if participant successfully answered all questions
   debrief: Thank you - you have completed the study. Click the link to return to Prolific and register your completion.
@@ -55,8 +57,9 @@ args:
   participant_to_algorithm_management: one_to_many
   targets:
      # Allocate your resource locally and fill in the primary_description field with directory to each resource. 
-     # e.g. 'http://44.223.248.38/media/video01.mp4' make sure to change the primary_type field accordingly
-     # and use the correct Instance IP
+     # e.g. '/media/video01.mp4' for local/media/video01.mp4 - always a RELATIVE /media/... path, never
+     # 'http://<ip>/media/...': a relative path works over HTTP and HTTPS and survives an IP or
+     # hostname change (HTTPS_PLAN.md). Make sure to change the primary_type field accordingly.
      # The trap questions should come after the normal questions within this set and its number should match the num_trap_questions field
     targetset:
     - {primary_description: 'Eating a meal.', alt_description: '', primary_type: 'text', alt_type: ''}

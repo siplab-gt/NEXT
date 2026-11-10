@@ -51,7 +51,7 @@ def upload(filename, file_object, AWS_BUCKET_NAME):
     object.Acl().put(ACL='public-read')
 
     # Generate the URL
-    url = "http://{}.s3.amazonaws.com/{}".format(AWS_BUCKET_NAME, filename)
+    url = "https://{}.s3.amazonaws.com/{}".format(AWS_BUCKET_NAME, filename)
     return url
 
 # Note: AWS_ID and AWS_KEY are your AWS credentials.
