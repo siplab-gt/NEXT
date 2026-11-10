@@ -1,91 +1,146 @@
-# PR: Fix the Redis connection leak, retry server errors on the query page, alerting, docs
+# PR: HTTPS on siplab-next.xyz with an admin password, per-experiment protocol and short links; duplicate answers fixed
 
-*Branch `fix/redis-leak-and-retry` → `master`. Written 2026-08-22. Everything below is already running on the lab box; merging only publishes it.*
-
-_Integration run (2026-08-22, `local/integration.log`): **all code checks PASS** — leak regression FLAT, six browser scenarios, export integrity incl. the stored expelling answer, dashboard plots, 10-participant load, 2 h idle soak, health check + cron. Its 25-participant step failed only because the burstable t2.2xlarge ran out of CPU credits (no 5xx, no leak); the instance was then replaced by a c6i.2xlarge and the capacity ramp (25/40/60, all clean) is in the verification section below._
+*Branch `dev` → `master`. Written 2026-11-10. Everything below already runs on the lab box
+(the live checkout is on `dev`); merging only publishes it. No InfoTuple changes: question
+selection is exactly `master`'s.*
 
 ## Why
 
-The Aug 20–21 2026 Prolific collection lost ~$1,000 and a day of recruiting to two bugs:
-
-1. **A backend Redis connection leak** took the whole platform down for 7 hours (every request `Error 99 connecting to rabbitmqredis:6379`). Reproduced on demand, root-caused, fixed, and re-proved: `REPRO_REDIS_LEAK.md`.
-2. **Every server error sent participants to the attention-check FAIL exit**, so dozens of clean participants showed on Prolific as "FAILED ATTENTION CHECKS". The query page now retries and has a separate "Technical problem" exit: README §3.5.
-
-Plus the things found on the way: expulsions arrived as unclassifiable HTML 500s, the dashboard graphs were broken by a library mismatch, the expelling trap answer was never stored, nothing alerted anyone, and git tracked a stale venv.
+1. **The dashboard and all participant data were public.** Anyone who found
+   `http://52.2.236.217/dashboard/...` could list experiments, download participant data
+   (Prolific IDs included), retire experiments or create new ones; the backend's own port
+   8000 bypassed nginx entirely. There was also no HTTPS, which upcoming image studies
+   and participant trust need.
+2. **Duplicate answers corrupted data.** When a browser re-sent an answer after a dropped
+   connection, the server processed it twice: the participant skipped a question, and a
+   duplicated wrong trap counted twice — enough to expel someone after 2 wrong traps
+   instead of 3. Reproduced first (`REPRO_DUPLICATE_ANSWER.md`); in the Nov 2026 study it
+   skipped questions for 4 of 236 participants and failed nobody unfairly.
 
 ## What changed
 
-**Backend reliability**
-- `next/broker/broker.py`: release each request's celery result backend after the call (celery keeps it greenlet-local under gevent; the drainer pinned 2 sockets per request forever). `result.get` polls at 0.1 s with a 320 s timeout; results are forgotten and detached. The "obvious" alternative (`result_backend_thread_safe=True`) deadlocks under gevent — tested and rejected.
-- `rabbitmqredis` is the stock `redis:8` image; the custom image whose cron `CLIENT KILL`ed idle connections (56k kills/day — the trigger) is deleted.
-- Celery settings that were silently ignored now take effect (`result_expires=3600`, json serializers, keepalive) in `next/broker/celery_app/celery_broker.py`.
-- gunicorn `-w 2 --max-requests 2000`; nginx proxy timeouts 330 s (slow answers are no longer cut off at 60 s and mislabelled as failures).
-- Hygiene: cached worker-domain lookup, no per-request Redis SET, shared minionredis pool.
+**Duplicate answers** (`next/apps/App.py`, all apps)
+- One answer per query: an atomic counter (`answer_posts`) on the query document lets
+  exactly one request process an answer; any copy changes nothing, waits (≤ 120 s) for the
+  original's outcome (`answer_outcome`) and returns the same result — OK, or the same
+  error, so an expulsion still reaches the participant when only the copy's reply arrives.
+  Copies are logged as `DUPLICATE-ANSWER` in the worker log.
 
-**Participant experience**
-- `next/query_page/templates/query_page.html`, `next/query_page/static/js/next_widget.js`: failed calls show a "Connection problem — retrying in N s (attempt k of `retry_attempts`)" banner with a Retry-now button; delays 5/15/30 s; recovery is always a fresh `getQuery` (never a re-POST, so nothing double-counts); retries exhausted → separate "Technical problem" modal with `debrief_link_error`. Only a genuine expulsion reaches the fail exit.
-- `next/api/resources/process_answer.py`: expulsion returns `200 {meta.expelled: true}` instead of a generic HTML 500.
-- `apps/base.yaml`: new fields `retry_attempts`, `debrief_error`, `debrief_link_error` (with defaults — old configs and experiments keep working). All tracked configs updated; explicit success/fail wording.
-- `apps/ARankB/myApp.py`: the wrong trap that expels a participant is now stored on its query document (it used to be lost).
-- `next/apps/AppDashboard.py`: dashboard plots work again (mpld3 0.5.11 vs matplotlib 3.8 API mismatch; shim + tighter pin).
+**HTTPS** (domain `siplab-next.xyz` + `www`, Let's Encrypt)
+- nginx config is now the folder `local/nginx/` mounted as the container's `conf.d/`
+  (`next.conf` + `snippets/*.inc`). The old single-file mount kept serving a stale file
+  after an editor replaced it, and the image's `default.conf` answered every hostname
+  except the IP.
+- Port 443: HTTP/2, TLS 1.2/1.3, **no HSTS** (it would break `protocol: http` studies).
+  Renewal: `certbot.timer` + `local/certbot-deploy-hook.sh` (reloads nginx).
+- Query-page templates load jQuery over `https://` (was blocked as mixed content).
+
+**Admin password**
+- Allow-list: only `snippets/participant.inc` is open — query page, `getQuery`,
+  `processAnswer`, `/s/`, `/media/`, favicon. Everything else (dashboard, data downloads,
+  logs, experiment creation, cAdvisor) needs HTTP basic auth over HTTPS; on port 80 those
+  paths redirect to HTTPS so a password never travels unencrypted. Logins in the
+  gitignored `local/nginx/admin.htpasswd` (README §3.6).
+- Backend 8000 and cAdvisor 8888 bound to `127.0.0.1` in `docker-compose.yml.pre`; the
+  security group closes MongoDB/Redis/RabbitMQ.
+- Bare `https://siplab-next.xyz/` → experiment list.
+
+**Per-experiment protocol and short links** (`next/site_links.py`, `next/short_links.py`)
+- YAML `protocol: http | https` (default `http`; old experiments unchanged). `https`
+  experiments redirect plain-HTTP visits to `https://NEXT_HTTPS_HOST`, keeping
+  `?participant=`; `http` experiments are served on both schemes, never downgraded.
+- YAML `link_name: rank4` → `https://siplab-next.xyz/s/rank4` (302, query string kept,
+  protocol honoured). Names are unique (`app_data.short_links`); `local/relink.sh` moves
+  one on purpose.
+- Launch refuses `protocol: https` without working HTTPS, and a taken or malformed
+  `link_name`. `launch.py` and the dashboard show the participant link and short link.
+- `NEXT_HTTPS_HOST` comes from the environment or the gitignored `local/site.local.conf`.
 
 **Operations**
-- `local/healthcheck.sh` (cron, every 5 min): full-path probe, dead-socket count, containers, 5xx, load → `health.log`, webhook alert on change, auto-restart of the stateless backend on the leak signature.
-- `local/make_live.sh`: builds the gitignored `_live` configs (real Prolific codes) from the tracked templates + `prolific_codes.local.txt` — templates are versioned, codes never enter git.
-- The stale tracked venv (5,343 files, 5,326 already missing) and the generated `local/docker-compose.yml` are untracked; `git status` is clean.
+- `healthcheck.sh`: probes the dashboard over HTTPS with its own login (`HEALTH_AUTH`),
+  warns 20 days before the certificate expires (Let's Encrypt no longer emails).
+- `docker_up.sh`: reads `site.local.conf`; `GENERATE_ONLY=1` writes `docker-compose.yml`
+  without starting anything.
+- Configs: neutral attention-check fail message (used in the Nov 2026 study); media
+  examples use relative `/media/...` paths; `protocol` / `link_name` shown (commented) in
+  the production config. `next/assistant/s3.py` builds `https://` URLs.
 
-**Test tooling** (`local/`): `load_sim.py` (HTTP participants), `check_export.py` (export integrity / double-record detector), `leak_monitor.sh`, `diag_result_backend.py` (leak regression), `test_query_page_retry.py` (browser scenarios, screenshots), `acceptance_driver.sh`, `integration_driver.sh`.
+**Tests and tools** (`local/`, `apps/ARankB/tests/`)
+- `test_duplicate_answer.py` (7 unit tests; 6 fail on the old code),
+  `repro_duplicate_answer.py` (scenarios A–D), `check_https.sh` (48 checks),
+  `test_https_e2e.py` (real Chrome), `wait_per_question.py` (participant wait metric),
+  `capacity_ramp.sh` (`BASE=` entry point, memory sampling).
 
-**Docs**: README (§3.2–3.5 with screenshots, §7), DEV_DOCUMENTATION (lifecycle + architecture diagrams with Redis, server-error contract, Step 6 test tools), CLAUDE.md runbook, `REPRO_REDIS_LEAK.md`, `CAPACITY_REPORT.md`.
+**Docs**: README §3.6 (new) + §2.3/3.2/3.3/3.4, CLAUDE.md runbook, DEV_DOCUMENTATION
+(nginx/HTTPS, protocol, short links), `HTTPS_PLAN.md` (design + results),
+`REPRO_DUPLICATE_ANSWER.md`, `CAPACITY_REPORT.md`, `RELEASE_NOTES.md` (v0.4.0).
 
-## How it was verified
+## How it was verified (on `dev`, live, 2026-11-10)
 
-- Leak: reproduced the exact outage on old code (port range squeezed → `Errno 99`, every request 500); on the fix the same protocol gives all-200 and 0 `Errno 99`. In-process regression FLAT at 8-way concurrency.
-- Acceptance on the rebuilt stack: 10 participants (2,407 requests, all 200, 0 CLOSE_WAIT), 2 h idle (0 sockets, RSS flat), **25 simultaneous participants through nginx: 7,519 requests, all 200, 0 technical exits, 0 CLOSE_WAIT**, export integrity PASS. Latency at 25 on the t2.2xlarge was poor (p50 9 s) — a capacity question, not a reliability one.
-- **Capacity ramp on the replacement box (c6i.2xlarge, 8 real cores):** 25 / 40 / 60 simultaneous participants → 7,519 / 11,868 / 14,368 requests, **every one HTTP 200, 0 technical exits, 0 leaked sockets, 0 % steal**; getQuery p50 13.6 s / 20.1 s / 29.7 s (p95 32 / 48 / 68 s). Reliability holds to 60; the comfortable range on 8 cores is 10–15 concurrent, ~25 with ~15 s waits; a c6i.4xlarge is the step up (`CAPACITY_REPORT.md`). The t2.2xlarge was retired after its burst credits ran out mid-test and slowed everything 2.5× — README §2.1 now explains burstable instances and the type change.
-- Browser: normal flow, worker paused mid-submit → banner → recovery with no duplicate answer, retries exhausted → technical exit → resume, genuine expulsion → fail exit, refresh → resume, full run → success exit: all PASS.
-- Dashboard plots, expelling-answer storage, and every health-check path (healthy / probe failure / leak signature with auto-restart / recovery) each reproduced-then-verified.
+| Check | Result |
+|---|---|
+| Duplicate answers: unit tests | 7/7 pass (6/7 fail on the old code) |
+| Duplicate answers: scenarios A–D over HTTPS, with and without precompute | all correct — no skipped question, no double-counted trap, both copies report an expulsion |
+| `check_https.sh dev-https dev-http` | 48/48 pass (certificate, HTTP/2, no HSTS, open participant paths, 10 admin paths 401 / 200 with password, HTTP→HTTPS redirects, protocol matrix, short links incl. relink, ports closed from outside, health check) |
+| Launch refusals | taken `link_name`, malformed `link_name`, `protocol: htps` all refused |
+| Real Chrome (`test_https_e2e.py`) | `http://52.2.236.217/s/dev-img?participant=…` → HTTPS page with ID kept, 32 questions to the success debrief, all images loaded over HTTP/2, no browser errors, export ids 1..32 once; `http` experiment over HTTPS not downgraded |
+| Load, 20 participants over HTTPS (full 158-question production study) | 5,934 requests all 200, 18 completed + 2 expelled as designed, export PASS, **median wait 5.3 s** (Nov 2 baseline 5.6 s) |
+| Load, 30 participants over HTTPS | 8,901 requests all 200, 27 + 3, export PASS, **median wait 13.6 s** — saturated (worker ~15.5/16 vCPUs); plan ≤ 20–25 with this InfoTuple code |
+| Both load levels | 0 technical exits, 0 server errors, 0 CLOSE_WAIT, 0 duplicate answers, health check OK |
 
-## Deploying elsewhere (the lab box already runs this)
+## Outside git (already done on the lab box; needed on any other server)
 
-`docker pull redis:8`; `docker rm -f local_nextbackenddocker_1 local_minionworker_1 local_rabbitmqredis_1` (never mongodb); `cd local && ./docker_up.sh <PUBLIC_IP>`; `docker exec reverse_proxy nginx -s reload`. Create a venv from `local/requirements.txt`; `./make_live.sh` for live configs; install the cron line from README §3.3.
+DNS A records (`@`, `www`) → server IP; security group 80/443 open, 22 from your IP only;
+`sudo apt install certbot`, `/var/www/certbot`, the certificate, the deploy hook in
+`/etc/letsencrypt/renewal-hooks/deploy/`; `local/site.local.conf`
+(`NEXT_HTTPS_HOST=…`); `local/nginx/admin.htpasswd` (logins incl. `healthcheck`);
+`HEALTH_AUTH=` in `local/alert.local.conf`. Full steps: README §3.6.
+
+**Not yet applied on the lab box:** the `127.0.0.1` binding of ports 8000/8888 takes
+effect at the next full deploy (`docker rm -f local_nextbackenddocker_1
+local_minionworker_1 local_cadvisor_1`, then `./docker_up.sh 52.2.236.217`). Until then
+the security group blocks both.
 
 ## Reviewing this PR
 
-GitHub will show ~5,400 changed files because the stale tracked venv (`local/local-venv/`, 5,343 files) is removed; the real change is **49 files, +2,168 / −599**. Filter out `local/local-venv` when reviewing. The commit list below also appears in the PR tab together with the pre-squash history of `prolific-id` (already in master via #3); the new work is these 33:
+45 files, +1,856 / −133. Commits (oldest first):
 
 ```
-2fd98d3 Keep Prolific completion codes in gitignored _live configs
-0bf646a Add post-incident proposal: query page error handling, Redis leak, dashboard stats
-efbed2e Add leak_monitor.sh and load_sim.py for reproducing the Redis leak
-a545ee6 load_sim: add --host-header so nginx can be exercised from localhost
-d19676b Reproduce the Redis connection leak outage on demand (before-fix results)
-6faff20 Fix backend Redis connection leak: release each request's celery result backend
-4c1ffe4 Remove the rabbitmqredis CLIENT KILL cron; use the plain redis image
-49d3138 Celery settings: make result expiry/serializers effective, enable keepalive
-e753380 Safety nets: gunicorn -w 2 + --max-requests, nginx 330 s proxy timeouts
-5c6f3cc Broker/Butler hygiene: cache the worker domain, drop per-request SET, share minionredis
-afd4b33 REPRO_REDIS_LEAK: record the real mechanism and the after-fix results
-d73a085 Add retry_attempts, debrief_error, debrief_link_error experiment fields
-5fe091f Query page: retry server errors, separate technical-problem exit
-15b55aa processAnswer: return a structured 200 {meta.expelled: true} on expulsion
-7bc8c5f Add browser test for query-page error handling (selenium grid)
-7f1c287 Configs: add retry/technical-exit fields, explicit success and fail wording
-a769cea Add check_export.py: per-participant export integrity check
-3989134 Docs: three completion codes / technical exit (README), load_sim, check_export, leak_mo
-d09cfc9 Runbook: stability fixes, three completion codes, test tools; proposal marked implement
-97afcb3 Acceptance results: leak soaks and 25-participant run all clean; capacity ramp plan
-d9e60a4 Add make_live.sh: generate the gitignored _live launch configs from tracked templates
-a431d76 Docs: retry/technical exit with screenshots, architecture with Redis, test tools
-544250f Docs: prune duplication — drop the implemented proposal note, trim runbook and legacy n
-7c5d312 Dashboard: fix every stats plot failing with 'XAxis has no attribute get_converter'
-f5530d5 ARankB: record the expelling trap answer before the expulsion propagates
-eff1aa9 Add healthcheck.sh: cron health probe with alerts and auto-restart on the leak signatur
-647eecd Stop tracking the local venv and the generated docker-compose.yml
-de5dc1f Add PR notes and an unattended integration driver
-c9c0245 Integration re-run results; track CPU steal in the monitor and health check
-77aa439 Docs: burstable instances throttle after a few hours - recommend c6i, document the type
-6666299 Capacity ramp on c6i.2xlarge: 25/40/60 simultaneous participants, all stable, latency s
-a919175 Configs: one production rank-4 config, one sample; rank2/5/6/tutorial on the Prolific s
-095c4c5 Docs: lab box is a c6i.2xlarge; measured sizing; PR notes with ramp results
+038464c Configs: neutral attention-check fail message ("Click on this link to return to Prolific.")
+3b84fda capacity_ramp.sh: sample container and host memory, report min host memory per level
+2657099 Reproduce duplicate-answer bug: skipped query and double-counted wrong trap
+1fa20dd processAnswer: one answer per query - duplicates wait for and replay the original's outcome
+840b59a..794e34c  HTTPS plan (4 commits)
+cf4d04f Query page: load jQuery over https
+f028f7b nginx: config folder mount, domain names, ACME webroot, 443 published; backend/cAdvisor ports host-only
+2227c33 certbot deploy hook: reload nginx after a certificate renewal
+7e1248d HTTPS on siplab-next.xyz with an admin password; participant paths stay open
+1732419 Per-experiment protocol (http|https) and short study links /s/<link_name>
+d479eb7 Media: relative /media/ paths in config examples; S3 URLs over https
+20e1095 test_https_e2e.py: real Chrome over the live domain
+1396882 Docs: HTTPS, admin password, per-experiment protocol, short links
+f7b24f1 nginx: bare https://<domain>/ -> /dashboard/experiment_list
+1fba14f capacity_ramp.sh: BASE/HOSTHDR entry point
+1f53b34 wait_per_question.py
+76bb08f Capacity: 20/30 participants with the new InfoTuple scoring (Nov 9/10)
+4262985 check_https.sh: 48 acceptance checks
 ```
+
+`CAPACITY_REPORT.md` also records the Nov 9/10 runs of the **unmerged** InfoTuple
+candidate scoring (30 participants at 0.3 s median) — results only, that code is not in
+this PR.
+
+## Next (separate PRs, on top of `dev`)
+
+1. **InfoTuple** — branch `fix/infotuple-mi-samples` (on origin; local tip `9c36142`
+   also has the memory-sampling commit already in `dev`). Sample-count bug fix (selection
+   was effectively random since Mar 2025), vectorized score, candidates as distinct body
+   sets (the big speed-up), tests, `sim_infotuple.py`, `REPRO_INFOTUPLE_MI.md`. Merges
+   cleanly onto `dev` (trial merge 2026-11-10). Open scientific question before using it
+   in a study: in simulation the fixed selector did not beat random questions.
+2. **LORE** — branch `claude/lore-embedding-b0214b` (worktree
+   `.claude/worktrees/lore-embedding-b0214b`), built **on top of** the InfoTuple branch:
+   LORE map fitting (default for new experiments; SOE selectable), configs `d: 6`,
+   `LORE_EMBEDDING.md`. Merges cleanly onto dev + InfoTuple. **Needs the worker/backend
+   image rebuilt** (`cblearn==0.4.0`, `scikit-learn==1.9.1`, pulls numba) — then re-run the
+   unit tests, `check_https.sh`, and `capacity_ramp.sh 20 30` with LORE on.

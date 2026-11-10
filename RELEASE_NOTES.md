@@ -1,5 +1,52 @@
 # Release notes
 
+## v0.4.0 — HTTPS, admin password, short study links; duplicate answers fixed (2026-11-10)
+
+*Branch `dev`, PR to `master` pending (`PR_NOTES.md`). Builds on v0.3.0. Question
+selection (InfoTuple) is unchanged.*
+
+### Fixed
+
+- **Duplicate answers no longer skip questions or double-count traps.** A browser that
+  re-sent an answer after a dropped connection made the server process it twice: the next
+  question was skipped and a wrong trap could count twice (early expulsion). Now exactly
+  one copy is processed; the others wait and return the same result
+  (`REPRO_DUPLICATE_ANSWER.md`).
+
+### Added
+
+- **HTTPS** at `https://siplab-next.xyz` (Let's Encrypt, renewed automatically; the health
+  check warns 20 days before expiry).
+- **Admin password**: the dashboard, data downloads, logs and experiment creation need a
+  login, over HTTPS only. Participants never see a password (README §3.6).
+- **Per-experiment `protocol: http | https`** (default `http`): HTTPS studies redirect
+  plain-HTTP visits, keeping `?participant=`. Launch fails if HTTPS isn't working.
+- **Short study links**: `link_name: rank4` → `https://siplab-next.xyz/s/rank4`; names
+  are unique, `local/relink.sh` moves one on purpose.
+- `launch.py` and the dashboard print the participant link to paste into Prolific.
+- Test tools: `check_https.sh`, `test_https_e2e.py`, `repro_duplicate_answer.py`,
+  `wait_per_question.py`; unit tests `test_duplicate_answer.py`.
+
+### Changed
+
+- nginx config is the folder `local/nginx/` (was `local/nginx.conf`); the backend (8000)
+  and cAdvisor (8888) answer on the server only.
+- Configs: neutral attention-check fail message; media examples use relative `/media/...`
+  paths.
+
+### Measured (`CAPACITY_REPORT.md`)
+
+- 20 simultaneous participants over HTTPS: median wait 5.3 s (unchanged from v0.3.0);
+  30: 13.6 s — the machine is saturated, plan for ≤ 20–25 with this InfoTuple code.
+
+### Upgrading an existing deployment
+
+Everything outside git is listed in `PR_NOTES.md` ("Outside git") and README §3.6:
+DNS, security group, certbot + certificate + deploy hook, `local/site.local.conf`,
+`local/nginx/admin.htpasswd`, `HEALTH_AUTH`. Then recreate nginx
+(`GENERATE_ONLY=1 ./docker_up.sh <IP>`, `docker rm -f reverse_proxy`,
+`docker-compose up -d nginx`) and, at the next full deploy, the backend and cAdvisor.
+
 ## v0.3.0 — Reliability under load, honest participant exits, alerting (2026-08-23)
 
 *Merged as PR #4 (`4f9a0f5`). Builds on v0.2.0 (Prolific flow, flexible traps, trap
