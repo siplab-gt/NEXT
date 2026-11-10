@@ -14,10 +14,15 @@
 # Optional settings in alert.local.conf (gitignored), KEY=value:
 #   WEBHOOK_URL=https://hooks.slack.com/...     PROBE_EXP_UID=<exp uid for the probe>
 #   HOST_HEADER=52.2.236.217  AUTO_RESTART=1  CLOSE_WAIT_CRIT=5000  CLOSE_WAIT_WARN=1000  STEAL_WARN=20
+#   HEALTH_AUTH=healthcheck:<password>   (nginx admin login; the probe then goes over HTTPS)
+#   CERT_WARN_DAYS=20   (warn when the certificate nginx serves expires sooner)
+# NEXT_HTTPS_HOST comes from site.local.conf.
 # Exit status: 0 healthy, 1 warning, 2 critical.
 set -u
 cd "$(dirname "$0")"
 [ -f alert.local.conf ] && . ./alert.local.conf
+[ -f site.local.conf ] && . ./site.local.conf
+HEALTH_AUTH=${HEALTH_AUTH:-}; NEXT_HTTPS_HOST=${NEXT_HTTPS_HOST:-}
 WEBHOOK_URL=${WEBHOOK_URL:-}; HOST_HEADER=${HOST_HEADER:-52.2.236.217}
 AUTO_RESTART=${AUTO_RESTART:-1}; CLOSE_WAIT_CRIT=${CLOSE_WAIT_CRIT:-5000}; CLOSE_WAIT_WARN=${CLOSE_WAIT_WARN:-1000}
 PROBE_TIMEOUT=${PROBE_TIMEOUT:-60}
@@ -48,9 +53,16 @@ fi
 exp=${PROBE_EXP_UID:-$(docker exec local_mongodb_1 mongosh --quiet --host 127.0.0.1 --port 27017 app_data --eval 'var e=db.getCollection("ARankB:experiments").find({},{exp_uid:1}).sort({start_date:-1}).limit(1).toArray(); print(e.length?e[0].exp_uid:"")' 2>/dev/null | tail -1)}
 probe="skipped"
 if [ -n "$exp" ]; then
-  code=$(curl -s -m "$PROBE_TIMEOUT" -o /dev/null -w '%{http_code}' -H "Host: $HOST_HEADER" -H 'Content-Type: application/json' \
+  # The dashboard is behind the admin password on HTTPS (port 80 redirects admin
+  # paths there): with HEALTH_AUTH set, probe https://<host> on this machine.
+  if [ -n "$HEALTH_AUTH" ] && [ -n "$NEXT_HTTPS_HOST" ]; then
+    target=(-u "$HEALTH_AUTH" --resolve "$NEXT_HTTPS_HOST:443:127.0.0.1" "https://$NEXT_HTTPS_HOST/dashboard/get_stats")
+  else
+    target=(-H "Host: $HOST_HEADER" http://127.0.0.1/dashboard/get_stats)
+  fi
+  code=$(curl -s -m "$PROBE_TIMEOUT" -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
     -d "{\"exp_uid\":\"$exp\",\"args\":{\"stat_id\":\"most_current_embedding\",\"params\":{\"alg_label\":\"InfoTuple\"},\"force_recompute\":0}}" \
-    http://127.0.0.1/dashboard/get_stats)
+    "${target[@]}")
   probe="HTTP $code"
   [ "$code" = "200" ] || { worst 2; msgs+=("probe failed ($probe, exp ${exp:0:8})"); }
 fi
@@ -63,6 +75,18 @@ awk -v l="$load" -v c="$cores" 'BEGIN{exit !(l > 2*c)}' && { worst 1; msgs+=("lo
 # 6. CPU steal (burstable instances: credits exhausted -> everything slows down)
 steal=$( { head -1 /proc/stat; sleep 1; head -1 /proc/stat; } | awk 'NR==1{s1=$9; t1=$2+$3+$4+$5+$6+$7+$8+$9} NR==2{s2=$9; t2=$2+$3+$4+$5+$6+$7+$8+$9; if(t2>t1) printf "%.0f", 100*(s2-s1)/(t2-t1); else print 0}')
 [ "${steal:-0}" -ge "${STEAL_WARN:-20}" ] && { worst 1; msgs+=("CPU throttled: steal ${steal}% (burstable credits exhausted?)"); }
+# 7. HTTPS certificate actually served by nginx (catches a failed renewal, or a
+# renewal nginx never reloaded). Let's Encrypt no longer emails expiry warnings.
+cert_days=""
+if [ -n "$NEXT_HTTPS_HOST" ]; then
+  end=$(echo | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername "$NEXT_HTTPS_HOST" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+  if [ -z "$end" ]; then
+    worst 1; msgs+=("HTTPS: no certificate served on 443")
+  else
+    cert_days=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
+    [ "$cert_days" -lt "${CERT_WARN_DAYS:-20}" ] && { worst 1; msgs+=("HTTPS certificate expires in $cert_days days - check certbot.timer / sudo certbot renew"); }
+  fi
+fi
 
 # auto-remediation: the leak signature only (backend is stateless)
 if [ "$leak" = 1 ] && [ "$AUTO_RESTART" = 1 ]; then
@@ -70,7 +94,7 @@ if [ "$leak" = 1 ] && [ "$AUTO_RESTART" = 1 ]; then
 fi
 
 case $level in 0) status=OK;; 1) status=WARN;; 2) status=CRIT;; esac
-line="$ts $status est=$est close_wait=$cw all_tcp=$all errno99=$errno99 probe=$probe nginx5xx=$n5 load=$load steal=${steal:-0}%${msgs:+ | ${msgs[*]}}${actions:+ | ${actions[*]}}"
+line="$ts $status est=$est close_wait=$cw all_tcp=$all errno99=$errno99 probe=$probe nginx5xx=$n5 load=$load steal=${steal:-0}%${cert_days:+ cert_days=$cert_days}${msgs:+ | ${msgs[*]}}${actions:+ | ${actions[*]}}"
 echo "$line" >> $LOG
 
 # alert on state change, and every 6th consecutive non-OK run (~30 min)
