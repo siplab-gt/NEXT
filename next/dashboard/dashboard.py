@@ -6,6 +6,8 @@ last updated: 9/16/15
 Flask controller for dashboards.
 """
 from next.dashboard.database import DatabaseBackup, DatabaseRestore
+import next.site_links as site_links
+import next.short_links as short_links
 import next.apps.Butler as Butler
 import os
 import json
@@ -150,8 +152,14 @@ def experiment_dashboard(exp_uid, app_id):
     # looks for /next/apps/{{ app_id }}/dashboard/{{ app_id }}.html
     template = env.get_template('myAppDashboard.html'.format(app_id))
     # The context we pass to the dashboard template.
+    experiment = rm.get_experiment(exp_uid)
+    protocol = site_links.protocol_of(experiment)
+    link_name = short_links.name_for(exp_uid)
     ctx = dict(app_id=app_id,
                exp_uid=exp_uid,
+               protocol=protocol,
+               participant_url=site_links.participant_url(exp_uid, protocol),
+               short_url=site_links.short_url(link_name, protocol) if link_name else None,
                alg_list=alg_list,
                exceptions_present=False,  # exceptions_present(exp_uid),
                url_for=url_for,

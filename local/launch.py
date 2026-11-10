@@ -81,11 +81,17 @@ def launch(init_filename, targets_filename=None):
         print((response['message']))
         sys.exit()
 
-    dashboard_url = host_url + \
-        '/dashboard/experiment_dashboard/{}/{}'.format(
-            response['exp_uid'], init['app_id'])
-    print(('Dashboard URL: {}'.format(dashboard_url)))
-    print(('NEXT Home URL: {}'.format(host_url + '/home')))
+    dashboard_url = response.get('dashboard_url') or (host_url +
+        '/dashboard/experiment_dashboard/{}/{}'.format(response['exp_uid'], init['app_id']))
+    print('Experiment UID:  {}'.format(response['exp_uid']))
+    print('Dashboard URL:   {}'.format(dashboard_url))
+    if response.get('participant_url'):
+        # the link to paste into Prolific / Qualtrics (right scheme and host)
+        print('Participant URL: {}'.format(response['participant_url']))
+    if response.get('short_url'):
+        print('Short URL:       {}'.format(response['short_url']))
+    if response.get('message'):
+        print(response['message'])
 
     return response
 

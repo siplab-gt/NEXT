@@ -32,6 +32,31 @@ NEXT_BACKEND_GLOBAL_HOST = os.environ.get(
     'NEXT_BACKEND_GLOBAL_HOST', 'localhost')
 NEXT_BACKEND_GLOBAL_PORT = os.environ.get('NEXT_BACKEND_GLOBAL_PORT', '8000')
 
+
+def read_site_local_conf():
+    """KEY=value lines from local/site.local.conf (gitignored, per server). The
+    repo is mounted into the containers, so this works without a redeploy;
+    an environment variable of the same name wins."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'local', 'site.local.conf')
+    values = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    values[key.strip()] = value.strip().strip('"\'')
+    except (IOError, OSError):
+        pass
+    return values
+
+
+# HTTPS hostname of this server (e.g. siplab-next.xyz), used by experiments with
+# `protocol: https` (HTTPS_PLAN.md). Empty = this server has no HTTPS.
+NEXT_HTTPS_HOST = (os.environ.get('NEXT_HTTPS_HOST')
+                   or read_site_local_conf().get('NEXT_HTTPS_HOST', ''))
+
 AWS_ACCESS_ID = os.environ.get('AWS_ACCESS_ID', '')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
 

@@ -76,6 +76,16 @@ initExp:
           type: bool
           default: false
           optional: true
+        protocol:
+          description: How participants reach the query page. https = served at https://NEXT_HTTPS_HOST (plain-HTTP visits are redirected there; launch fails if this server has no working HTTPS). http = plain HTTP allowed (HTTPS visits are served too, never downgraded). See HTTPS_PLAN.md.
+          type: str
+          values: [http, https]
+          default: http
+          optional: true
+        link_name:
+          description: Optional short link /s/<link_name> to this experiment's query page (lowercase letters, digits, "-"). Launch fails if the name is already taken; move a name on purpose with local/relink.sh.
+          type: str
+          optional: true
 
 processAnswer:
   args:

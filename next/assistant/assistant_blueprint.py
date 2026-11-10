@@ -11,6 +11,8 @@ from next.lib.pijemont import doc as doc_gen
 from next.lib.pijemont import verifier
 from next.broker.broker import JobBroker
 import next.assistant.target_unpacker as target_unpacker
+import next.site_links as site_links
+import next.short_links as short_links
 import sys
 import json
 
@@ -109,6 +111,19 @@ class ExperimentAssistant(Resource):
                         list(map(lambda target: target.update({pair['key']: pair['value']}),
                                  init_exp_args['args']['targets']['targetset']))
 
+            # Checks that must pass before anything is created (HTTPS_PLAN.md):
+            # an https experiment needs a working HTTPS hostname, and a
+            # link_name must be free - never hand out a link that won't work.
+            exp_args = init_exp_args.get('args') or {}
+            protocol = exp_args.get('protocol', 'http')
+            link_name = exp_args.get('link_name')
+            if protocol == 'https':
+                problem = site_links.https_problem()
+                if problem:
+                    raise ValueError('protocol: https is not possible: ' + problem)
+            if link_name:
+                short_links.check_available(link_name)
+
             # Init the experiment:
             app_id = init_exp_args['app_id']
             exp_uid = '%030x' % random.randrange(16**30)
@@ -118,6 +133,16 @@ class ExperimentAssistant(Resource):
             response_json, didSucceed, message = r
             if not didSucceed:
                 raise ValueError(message)
+
+            links = {'participant_url': site_links.participant_url(exp_uid, protocol),
+                     'dashboard_url': site_links.dashboard_url(exp_uid, app_id)}
+            if link_name:
+                try:
+                    short_links.claim(link_name, exp_uid)
+                    links['short_url'] = site_links.short_url(link_name, protocol)
+                except Exception as e:  # taken in the meantime (race): no short link
+                    message = (message or '') + '\nWARNING: link_name {!r} could not be claimed ({}); ' \
+                        'the experiment has no short link'.format(link_name, e)
         except:
             tb = traceback.format_exc()
             info = sys.exc_info()
@@ -134,8 +159,10 @@ class ExperimentAssistant(Resource):
 
             return {'success': False, 'message': message, 'exp_uid': None}
 
-        return {'success': didSucceed, 'message': message, 'exp_uid': exp_uid,
-                'app_id': args['args']['app_id']}
+        response = {'success': didSucceed, 'message': message, 'exp_uid': exp_uid,
+                    'app_id': args['args']['app_id']}
+        response.update(links)
+        return response
 
 
 assistant_api.add_resource(ExperimentAssistant, '/init/experiment')

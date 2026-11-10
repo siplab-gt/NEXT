@@ -6,6 +6,7 @@ from next.dashboard.dashboard import dashboard
 from next.assistant.assistant_blueprint import assistant
 from next.home import home
 from next.query_page import query_page
+from next.short_links import short_links
 import next.constants as constants
 
 from flask import Flask
@@ -38,6 +39,7 @@ else:
     dashboard_prefix = '/dashboard'
 app.register_blueprint(dashboard, url_prefix=dashboard_prefix)
 app.register_blueprint(query_page, url_prefix='/query')
+app.register_blueprint(short_links, url_prefix='/s')
 
 
 @app.context_processor
