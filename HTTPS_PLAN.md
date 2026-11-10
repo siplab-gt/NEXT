@@ -1,8 +1,9 @@
 # Serving the query page over HTTPS — plan
 
-Status: **plan only, nothing implemented yet** (branch `feature/https`).
-2026-11-02: first version. 2026-11-10: the lab has a domain (written `<domain>` below);
-added the admin password, closing the open ports, and short study links.
+Status: **implemented and live on 2026-11-10** (branch `feature/https-impl`), domain
+**`siplab-next.xyz`** (written `<domain>` below). User guide: README §3.6. What was built,
+how it differs from this plan, and the test results: "Implementation" at the end.
+2026-11-02: first plan. 2026-11-10: admin password, closed ports, short links added; built.
 
 ## Where things stand today
 
@@ -257,3 +258,57 @@ Run from **outside** the server (a laptop), not from the instance itself.
   connections for a few seconds, and the password changes how you reach the dashboard.
 - Dashboard links on `:8000` stop working from outside (step 6) — use
   `https://<domain>/dashboard/...`.
+
+## Implementation (2026-11-10)
+
+Built on `feature/https-impl` (from `fix/duplicate-answer`), one commit per step.
+
+| Step | Where |
+|---|---|
+| DNS `@` + `www` → 52.2.236.217 (Porkbun); security group 80/443 open, 22 from one IP, everything else closed (verified by probing the public IP) | done by the user |
+| jQuery over `https://` in the three query-page templates | `next/query_page/templates/` |
+| nginx config as a folder mounted as `conf.d/` (`local/nginx/next.conf` + `snippets/*.inc`); domain names; ACME webroot; 443 published | `local/nginx/`, `docker-compose.yml.pre` |
+| Certificate (Let's Encrypt, `siplab-next.xyz` + `www`, expires 2027-02-08), renewal by `certbot.timer`, deploy hook reloads nginx (dry run OK) | host; `local/certbot-deploy-hook.sh` |
+| 443 server (HTTP/2, TLS 1.2/1.3, no HSTS) + admin password (allow-list `snippets/participant.inc`; admin paths redirect HTTP→HTTPS) | `local/nginx/` |
+| Health check: probe over HTTPS as user `healthcheck`, certificate-expiry warning | `local/healthcheck.sh` |
+| `protocol` + `link_name` YAML keys; redirect in the query page; `/s/<name>`; launch checks; links printed and on the dashboard; `relink.sh` | `next/site_links.py`, `next/short_links.py`, `apps/ARankB/myApp.yaml`, `next/assistant/assistant_blueprint.py`, `local/launch.py`, `local/relink.sh` |
+| Relative `/media/` paths in config examples; S3 URLs over `https://` | `local/*.yaml`, `next/assistant/s3.py` |
+
+**Different from the plan**
+- The old single-file mount of `nginx.conf` went stale when an editor replaced the file
+  (the container kept the old version), and the image's `default.conf` answered every
+  hostname except the IP — the domain got 404s. Mounting the whole folder fixes both.
+- `NEXT_HTTPS_HOST` is read from the environment **or** `local/site.local.conf`, so the
+  backend picks it up without a redeploy; `launch.py` gets the links from the server.
+- Launch checks run on the server (experiment creation), not in `launch.py`, so every
+  way of creating an experiment is covered. HTTPS readiness is tested by fetching
+  `https://<domain>/favicon.ico` with certificate verification.
+- Short-link names are stored with `_id` = name (atomic claim); moving one keeps a history.
+- No `DOCKER-USER` iptables layer: the security group was verified to block MongoDB,
+  Redis and RabbitMQ from outside, and iptables rules that survive reboots next to
+  Docker's own are fragile. Revisit if the security group ever changes.
+- Let's Encrypt stopped sending expiry emails in 2025 — the health check's
+  `cert_days` warning replaces them.
+
+**Still to apply at the next full deploy** (`docker rm -f local_nextbackenddocker_1
+local_minionworker_1 local_cadvisor_1`, then `./docker_up.sh 52.2.236.217`): the
+backend's port 8000 and cAdvisor's 8888 bound to `127.0.0.1` (today they are published
+on all interfaces but blocked by the security group).
+
+**Tests (all passed)**
+- From the public address: participant paths 200 on HTTP and HTTPS; 10 admin paths
+  401 without / with a wrong password, 200 with it; admin paths on HTTP → 301 to HTTPS;
+  certificate valid for both names, HTTP/2, no HSTS header.
+- Redirect matrix for an `https` and an `http` experiment, by IP / domain / short link,
+  `?participant=` kept on every hop; unknown or dangling short link → "Study not found".
+- Launch refusals: taken `link_name`, malformed `link_name`, `protocol: htps`; HTTPS
+  readiness check fails with no hostname and with an expired certificate.
+- `load_sim.py` full runs over HTTPS on both experiments + `check_export.py`: 0 server
+  errors, 0 export problems; `repro_duplicate_answer.py` over HTTPS: all correct.
+- Real Chrome (`local/test_https_e2e.py`): from `http://52.2.236.217/s/demo-img?participant=…`
+  to the HTTPS page with the ID kept, jQuery loaded, a full 32-question run to the
+  success debrief, all 6 cat images loaded over HTTP/2, no browser errors, export ids
+  1..32 exactly once; an `http` experiment over HTTPS served without a downgrade.
+
+Demo experiments from the tests: `demo-https` 2fd93031…, `demo-http` 18c281c9…,
+`demo-img` 6b5c3f54… (short links stay taken; they're harmless).

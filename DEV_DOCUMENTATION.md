@@ -857,6 +857,24 @@ Request path: the browser talks only to nginx; the API publishes every `getQuery
 
 `rabbitmqredis` is the stock `redis:8` image (the former custom image with a connection-reaping cron is gone); `minionredis` is a separate Redis used only by `Butler` memory. Worker pool sizes are environment variables in `local/docker-compose.yml.pre`; celery settings live in `next/broker/celery_app/celery_broker.py`.
 
+### nginx, HTTPS and the admin password (added Nov 2026)
+
+nginx is the only public entry point (ports 80 and 443; the backend's 8000 and cAdvisor's 8888 are bound to the host only, the database/broker ports are closed by the security group). Its config is the folder `local/nginx/`, mounted read-only as the container's `conf.d/`:
+
+- `next.conf` — the port-80 server (participant paths, Let's Encrypt challenge, every other path → `301 https://<domain>/...`) and the port-443 server (certificate from `/etc/letsencrypt`, HTTP/2, participant paths open, everything else behind basic auth).
+- `snippets/participant.inc` — **the allow-list of password-free paths**: `/query/`, `= /api/experiment/getQuery`, `= /api/experiment/processAnswer`, `/s/`, plus `/media/` from `common.inc`. A new participant-facing endpoint must be added here or participants get a password prompt (HTTPS) / a redirect (HTTP).
+- `snippets/admin.inc` (basic auth, `admin.htpasswd`, gitignored), `snippets/proxy_backend.inc` (proxy + 330 s timeouts, `X-Forwarded-Proto`), `snippets/common.inc` (gzip, upload size, `/media/`).
+
+Never send an HSTS header: browsers would then refuse plain HTTP on the domain, breaking `protocol: http` experiments.
+
+### Per-experiment protocol and short links
+
+- `next/site_links.py` builds every participant/dashboard link and decides HTTPS: `NEXT_HTTPS_HOST` (env, else `local/site.local.conf`) is the server's HTTPS hostname; `protocol_of(experiment)` reads `args.protocol` (default `http`).
+- `next/query_page/query_page.py` redirects an `https` experiment visited over plain HTTP (`X-Forwarded-Proto`) to `https://NEXT_HTTPS_HOST` with the query string; an `http` experiment over HTTPS is served as is.
+- `next/short_links.py` — collection `app_data.short_links` (`_id` = name, `exp_uid`, `created`, `history`), the Flask blueprint for `/s/<name>` (302, query string kept, protocol honoured; unknown → 404 page) and a CLI (`python -m next.short_links move|list`, wrapped by `local/relink.sh`).
+- `next/assistant/assistant_blueprint.py` (experiment creation) refuses `protocol: https` when `site_links.https_problem()` reports a problem, and a `link_name` that is malformed or taken; after `initExp` succeeds it claims the name and returns `participant_url`, `short_url`, `dashboard_url`, which `launch.py` prints.
+- Tests: `local/test_https_e2e.py` (real Chrome via a throwaway Selenium container); see `HTTPS_PLAN.md` for the full matrix.
+
 ---
 
 ## Step 5: Testing Your Implementation

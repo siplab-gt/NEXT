@@ -2,7 +2,8 @@
 
 This checkout on the lab EC2 instance IS the live deployment: the whole repo is
 bind-mounted into the Docker containers. The instance has an **Elastic IP:
-52.2.236.217** (stable across stop/start).
+52.2.236.217** (stable across stop/start) and the domain **siplab-next.xyz** (Porkbun
+DNS, A records for `@` and `www`) with HTTPS (Let's Encrypt, auto-renewed) — README §3.6.
 
 ## Critical safety rules
 
@@ -64,8 +65,9 @@ Configs in `local/`: **`ARankB-InfoTuple-cog_rank4_precompute.yaml` is the produ
 rank-4 study** (150 queries + 8 traps, one-step-ahead precompute on);
 `cog_rank4_sample_base.yaml` is its 32-query demo used by every test; `cog_rank2 / 5 /
 6.yaml` and `cog_tutorial.yaml` are other studies on the same Prolific standard. The
-command prints the experiment UID; each launch creates a brand-new experiment (old
-data is untouched).
+command prints the experiment UID, the Participant URL (scheme per `protocol`), the
+Short URL (if `link_name`) and the Dashboard URL; each launch creates a brand-new
+experiment (old data is untouched).
 
 - **⚠ Prolific completion codes live only in `*_live.yaml` configs**, which are
   gitignored (`local/*_live.yaml`) because the GitHub repo is public — the tracked
@@ -76,6 +78,9 @@ data is untouched).
   (`SUCCESS_CODE=`, `FAILURE_CODE=`, `TECHNICAL_CODE=`) — re-run it after editing the
   template; pass another template as an argument for the other studies. Never put
   real codes in a tracked file.
+- **`protocol: http|https`** (default http) and **`link_name: <name>`** (short link
+  `/s/<name>`) are per-experiment YAML keys. Launch fails on a taken `link_name` or on
+  `https` without working HTTPS; move a name on purpose with `local/relink.sh`.
 - **One-step-ahead precompute** (`precompute: true` in the YAML, off by default) is
   on in the production config. Monitor with
   `docker logs local_minionworker_1 2>&1 | grep PRECOMPUTE`; design and levers in
@@ -83,18 +88,23 @@ data is untouched).
 
 ## URLs (substitute the experiment UID)
 
-- Experiment list: `http://52.2.236.217/dashboard/experiment_list`
-- Dashboard (data downloads live here): `http://52.2.236.217/dashboard/experiment_dashboard/<EXP_UID>/ARankB`
-- Participant query page: `http://52.2.236.217/query/query_page/query_page/<EXP_UID>`
+- **Admin pages need the admin password and HTTPS** (nginx basic auth; logins in
+  gitignored `local/nginx/admin.htpasswd`, add with README §3.6; plain-HTTP admin URLs
+  redirect to HTTPS). On the server itself the backend is open at
+  `http://localhost:8000` (no password) — use that from scripts here.
+- Experiment list: `https://siplab-next.xyz/dashboard/experiment_list`
+- Dashboard (data downloads live here): `https://siplab-next.xyz/dashboard/experiment_dashboard/<EXP_UID>/ARankB`
+- Participant query page (open, HTTP and HTTPS): `https://siplab-next.xyz/query/query_page/query_page/<EXP_UID>`
+  or the short link `https://siplab-next.xyz/s/<link_name>`
   — append `?participant=<PROLIFIC_ID>` to pre-fill the ID modal (Qualtrics
-  end-of-survey redirect: `?participant=${e://Field/PROLIFIC_PID}`); without it,
-  participants type their ID manually. Exported `participant_uid` is prefixed
-  `<EXP_UID>_`.
+  end-of-survey redirect: `?participant=${e://Field/PROLIFIC_PID}`); it survives the
+  redirects. Without it, participants type their ID manually. Exported
+  `participant_uid` is prefixed `<EXP_UID>_`.
 
 ## Data
 
 - Backup: `docker exec local_mongodb_1 mongodump --host 127.0.0.1 --port 27017 --out /next_backend/local/backup_$(date +%F)`
-- Export per experiment: dashboard links, or `/api/experiment/<EXP_UID>/participants?zip=1` (JSON) / `?csv=1&zip=1` (CSV).
+- Export per experiment: dashboard links, or `/api/experiment/<EXP_UID>/participants?zip=1` (JSON) / `?csv=1&zip=1` (CSV) — on the server via `http://localhost:8000`, from outside with the admin password over HTTPS.
 - Cleanup / orphaned-volume recovery: README §5. A ~441 MB orphaned volume with
   Oct 2025–Mar 2026 data still awaits recovery — never prune dangling volumes.
 
@@ -102,8 +112,7 @@ data is untouched).
 
 - The Redis connection leak behind the 2026-08-21 outage is fixed
   (`next/broker/broker.py`); `rabbitmqredis` is the stock `redis:8` image;
-  gunicorn runs `-w 2 --max-requests 2000`; nginx waits 330 s (`local/nginx.conf`,
-  apply with `docker exec reverse_proxy nginx -t && docker exec reverse_proxy nginx -s reload`).
+  gunicorn runs `-w 2 --max-requests 2000`; nginx waits 330 s (`local/nginx/snippets/proxy_backend.inc`).
   How it works and how to check it: DEV_DOCUMENTATION "System architecture" and
   §6.4; the outage itself: `REPRO_REDIS_LEAK.md`.
 - The query page retries server errors and has a separate "Technical problem"
@@ -114,6 +123,15 @@ data is untouched).
   local/health.log` before assuming the stack is fine.
 
 ## Code changes on the live stack
+
+- nginx config is the folder `local/nginx/` (mounted read-only as the container's
+  `conf.d/`): `next.conf` (port 80 + 443 servers), `snippets/participant.inc` (the ONLY
+  password-free paths — a new participant endpoint must be added there),
+  `snippets/admin.inc`, `snippets/common.inc`, `snippets/proxy_backend.inc`. Apply:
+  `docker exec reverse_proxy nginx -t && docker exec reverse_proxy nginx -s reload`.
+  Never add an HSTS header (breaks `protocol: http` experiments). Port changes in
+  `docker-compose.yml.pre` need the container recreated (`GENERATE_ONLY=1
+  ./docker_up.sh 52.2.236.217`, `docker rm -f reverse_proxy`, `docker-compose up -d nginx`).
 
 - Templates/widgets (`.html`) and `next/query_page/static/js`: live after `docker restart local_nextbackenddocker_1` (~2 s). Backend Python under `next/` is also hot-reloaded by gunicorn `--reload`.
 - `apps/*/myApp.py` / algorithms: celery children re-import within ~5 tasks — run
@@ -129,4 +147,6 @@ troubleshooting §3.2). DEV_DOCUMENTATION.md = architecture (System architecture
 Framework Contracts incl. server-error handling, trap questions, database quick
 reference, test tools §6). Reports: `PRECOMPUTE_REPORT.md` (precompute design +
 first load test), `REPRO_REDIS_LEAK.md` (the Aug 2026 outage, reproduced and
-fixed), `CAPACITY_REPORT.md` (acceptance numbers + capacity ramp plan).
+fixed), `CAPACITY_REPORT.md` (acceptance numbers + capacity ramp plan), `HTTPS_PLAN.md`
+(HTTPS, admin password, short links, per-experiment protocol — design + results),
+`REPRO_DUPLICATE_ANSWER.md` (skipped-question bug: duplicate answers, fixed).

@@ -128,7 +128,7 @@ To launch an AWS instance, you will need hard drive space. Select the amount of 
 ![DiskStorage](picRef/DiskStorage.png) 
 ### 2.2. Launch Instance  
 Now you are ready to launch your instance. Simply click Launch instance. Wait for all the checks to pass and then you are ready to SSH into the system. Make sure to take note of the public dns address and the public ip under instance information. You will need them for SSH and nginx respectively.
-Note: We have included a web server (nginx) into the Docker environment so that you do not need to set up the reverse proxy yourself. You will only need to add the ip address in the nginx.conf file before spinning up the dockers.
+Note: We have included a web server (nginx) into the Docker environment so that you do not need to set up the reverse proxy yourself. You will only need to add the ip address (and, for HTTPS, the domain name) to `server_name` in `local/nginx/next.conf` before spinning up the dockers (§3.6).
 - **SSH** -
 Once you have set up your instance (from scratch or from the AMI) and all checks have passed, you can now SSH into your system. All system configuration and experiment launching can be handled from the terminal. Make sure to use the ubuntu user and the .pem file as your identity file when SSHing in. The command will look something like this:
   - ``` ssh -i /Users/gburdell/Downloads/"students_dev.pem"  ubuntu@ec2-44-223-248-38.compute-1.amazonaws.com ```
@@ -140,7 +140,7 @@ This section describes how to set up NEXT on the newly created AWS instance. We 
 You can clone the latest version of the repository by using the following command:  
   - ``` git clone https://github.com/siplab-gt/NEXT.git ```
 
-  Once you have cloned the repository, change directory to the ```NEXT/local/``` directory and edit the ```nginx.conf``` file. You want to replace the value for server_name to the public ip address of your instance. It is currently set to next.localhost.
+  Once you have cloned the repository, change directory to the ```NEXT/local/``` directory and edit ```nginx/next.conf```: set `server_name` (port-80 and port-443 servers) to your instance's public IP and your domain name, and the domain in the `return 301 https://...` line and the certificate paths. HTTPS setup: §3.6.
 
 - **Update System and Install Latest Docker** -
 The NEXT platform uses Docker to house and manage all services. You will need to make sure to have the up to date versions and the right libraries installed. To do so follow these steps:
@@ -216,6 +216,7 @@ You now have created and activated a Python environment named local-venv. You ha
   - Finally, you can launch the experiment with:
   ```python launch.py NAME_OF_YAML_FILE_YOU_CONFIGURED```. And to make sure the experiment has successfully launched, go to the home page of NEXT and find ***Experiment List***. Click it and you should be able to find the experiment you just launched by looking at the ***start date***. 
   - Click on the experiment(its ID will look something like ```e7b915a9032b1948750ae5a1a45f47```), you will be redirected to the experiment dashboard page. Under ***Experiment info***, you can find the link to open up a query page. Share this link with your experiment participants. 
+  - `launch.py` also prints the links directly: **Participant URL** (the one to paste into Prolific/Qualtrics — `https://` or `http://` according to the experiment's `protocol`), **Short URL** (if the YAML has a `link_name`) and the **Dashboard URL**. The dashboard shows the same two participant links. See §3.6.
 
 
 ### 3.3. Monitoring and Logging
@@ -235,9 +236,9 @@ You now have created and activated a Python environment named local-venv. You ha
       ```
       */5 * * * * /home/ubuntu/NEXT/local/healthcheck.sh >/dev/null 2>&1
       ```
-      and put `WEBHOOK_URL=https://hooks.slack.com/...` (plus any threshold overrides listed in the script header) in the gitignored `local/alert.local.conf`. Without a webhook the alerts are still written to `health.log`. `tail -3 local/health.log` is the quickest way to see how the stack is doing.
+      and put `WEBHOOK_URL=https://hooks.slack.com/...` (plus any threshold overrides listed in the script header) in the gitignored `local/alert.local.conf`. Without a webhook the alerts are still written to `health.log`. Since the dashboard is behind the admin password (§3.6), the probe logs in as its own `healthcheck` user over HTTPS: `HEALTH_AUTH=healthcheck:<password>` in `alert.local.conf` (must match its line in `local/nginx/admin.htpasswd`). It also warns (`cert_days=` in the log) when the certificate nginx serves expires within 20 days — Let's Encrypt no longer emails expiry warnings. `tail -3 local/health.log` is the quickest way to see how the stack is doing.
     - **Connection health (manual):** `cd local && ./leak_monitor.sh 30 > leak.csv &` samples the backend's connections to the Redis result store every 30 s (live, dead/`close_wait`, Redis's own client count, load, memory, nginx 5xx and `Errno 99` counts). Healthy: `close_wait` ≈ 0 and the live count returns to zero within a minute of participants finishing. Run it during any collection day and glance at the last line now and then (`tail -1 local/leak.csv`).
-    - **Cadvisor** allows you to monitor cpu, memory, and disk usage on the system wide level, as well as per process and per container. We have implemented a password protected version for you. The default user and password is admin and password. To change these, simply change the content in the ```cadvisor_user.txt``` and ```cadvisor_password.txt``` files respectively. The docker environment will use these to set the username and password for cadvisor. To sign into cadvisor, go to this url: ``` instance-public-ipaddress/cadvisor ```
+    - **Cadvisor** allows you to monitor cpu, memory, and disk usage on the system wide level, as well as per process and per container. We have implemented a password protected version for you. The default user and password is admin and password. To change these, simply change the content in the ```cadvisor_user.txt``` and ```cadvisor_password.txt``` files respectively. The docker environment will use these to set the username and password for cadvisor. To sign into cadvisor, go to ```https://<your-domain>/cadvisor/``` (admin password first, §3.6, then cadvisor's own login). Port 8888 only answers on the server itself.
 
 ### 3.4. Linking Participants to Prolific / Qualtrics IDs
 - Before the first query, every participant is shown a popup asking for their **Prolific ID**. The entered ID becomes their `participant_uid`, so it appears on every response row in the downloaded JSON/CSV participant data (see 3.3).
@@ -245,12 +246,14 @@ You now have created and activated a Python environment named local-venv. You ha
   ![Prolific ID popup, pre-filled from the URL parameter](picRef/QueryPage_ProlificModal.png)
 - The popup is **pre-filled automatically** when the query page URL carries a `participant` parameter:
   ```
-  http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=PROLIFIC_ID
+  https://siplab-next.xyz/query/query_page/query_page/EXP_UID?participant=PROLIFIC_ID
+  https://siplab-next.xyz/s/LINK_NAME?participant=PROLIFIC_ID        (short link, §3.6)
   ```
+  The parameter survives every redirect (short link, HTTP → HTTPS). Use the Participant URL / Short URL that `launch.py` printed — it already has the right scheme for the experiment's `protocol`.
 - Recommended funnel setup (Prolific → Qualtrics → NEXT):
   - Set the Prolific study URL to your Qualtrics survey with the ID appended: ```https://your-qualtrics-survey-url?PROLIFIC_PID={{%PROLIFIC_PID%}}```
   - In the Qualtrics Survey Flow, add an **Embedded Data** element named ```PROLIFIC_PID``` (its value is taken from the URL parameter automatically).
-  - Set the Qualtrics End-of-Survey redirect to: ```http://InstanceIPAddress/query/query_page/query_page/EXP_UID?participant=${e://Field/PROLIFIC_PID}```
+  - Set the Qualtrics End-of-Survey redirect to: ```https://siplab-next.xyz/s/LINK_NAME?participant=${e://Field/PROLIFIC_PID}``` (or the long Participant URL with `?participant=${e://Field/PROLIFIC_PID}` appended)
   - If the parameter is ever missing, the popup simply shows an empty box and the participant types their ID by hand — nothing breaks.
 - **Analysis note:** the exported `participant_uid` is prefixed with the experiment UID (i.e. `EXPUID_PROLIFICID`). Strip the prefix (or match by suffix) when joining against Qualtrics/Prolific records.
 - **Refresh behavior:** if a participant accidentally refreshes mid-session, re-entering the same ID (pre-filled automatically when the URL parameter is present) resumes their progress — a refresh costs **zero** queries: all prior answers are kept, and the unanswered query that was on screen is re-served at the same position, so the participant still answers the full configured number of queries. A participant who reloads the page after finishing is taken directly to the completion (debrief) screen instead of being served extra queries. The same applies after the "Technical problem" exit (§3.5): reopening the link continues the study where it stopped.
@@ -290,10 +293,32 @@ What the participant sees in each case (test experiment; the links carry placeho
 
 ---
 
+### 3.6. HTTPS, the admin password, and short study links
+The lab server answers at **`siplab-next.xyz`** (and `www.`), with a free Let's Encrypt certificate. Design and test results: `HTTPS_PLAN.md`.
+
+- **Participants vs. admin.** Only what a participant needs is open without a password, over HTTP and HTTPS: the query page (`/query/...`), its two calls (`/api/experiment/getQuery`, `/api/experiment/processAnswer`), short links (`/s/...`) and study media (`/media/...`). The list is `local/nginx/snippets/participant.inc`. **Everything else** — dashboard, data downloads, logs, creating/retiring experiments, cAdvisor — needs the **admin password**, and only over HTTPS: on plain HTTP those paths redirect to `https://siplab-next.xyz/...`, so the password never travels unencrypted.
+- **Admin logins** live in `local/nginx/admin.htpasswd` (gitignored), one line per person. Add one (prompts for the password; no restart needed):
+  ```
+  cd /home/ubuntu/NEXT/local && printf '%s:%s\n' NAME "$(openssl passwd -6)" >> nginx/admin.htpasswd
+  ```
+  Remove a person by deleting their line. The `healthcheck` line is the health check's own login (§3.3) — keep it.
+- **Without a login** (or for scripts on the server), the backend is reachable on the server itself at `http://localhost:8000` — e.g. from a laptop through SSH: `ssh -L 8000:127.0.0.1:8000 ubuntu@siplab-next.xyz`, then open `http://localhost:8000/dashboard/experiment_list`. Data export by script: `curl -u NAME 'https://siplab-next.xyz/api/experiment/EXP_UID/participants?csv=1&zip=1' -o data.zip`.
+- **Per-experiment HTTP or HTTPS** — YAML `protocol: http` (default) or `protocol: https`:
+  - `https`: participants use `https://siplab-next.xyz/...`; a plain-HTTP visit (domain or IP) is redirected there with `?participant=` kept. Launch **fails** if this server has no working HTTPS (no hostname, or no valid certificate), instead of printing a dead link.
+  - `http`: plain HTTP is allowed; an HTTPS visit is served as it is (never downgraded).
+  - Experiments launched before this feature behave as `http`. The HTTPS hostname is a server setting, `NEXT_HTTPS_HOST=siplab-next.xyz` in the gitignored `local/site.local.conf`.
+- **Short links** — YAML `link_name: rank4` gives `https://siplab-next.xyz/s/rank4` (lowercase letters, digits, `-`). The redirect keeps `?participant=` and follows the experiment's `protocol`. A name belongs to one experiment: **launching with a name that is already taken fails**, so a relaunch can never silently move a link a live study uses. To move a name on purpose (e.g. relaunch after a bug, before publishing): `cd local && ./relink.sh rank4 NEW_EXP_UID`; `./relink.sh list` shows all names. Short names are guessable — pick ones that aren't obvious if strangers starting a study would matter (e.g. `rank4-k7q`).
+- **Images, video, audio:** put files in `local/media/` and reference them with **relative** paths, `primary_description: '/media/cats/cat01.png'` — never `http://<ip>/media/...`, which browsers block or fail on HTTPS pages. Relative paths work over HTTP and HTTPS and survive an IP or name change.
+- **Certificate renewal** is automatic (`certbot.timer`, twice a day; `local/certbot-deploy-hook.sh` installed as `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` reloads nginx). Check: `sudo certbot certificates`; test: `sudo certbot renew --dry-run`. The health check warns 20 days before expiry.
+- **nginx config** is the folder `local/nginx/` (mounted as the container's `conf.d/`): `next.conf` (the two servers), `snippets/*.inc`. Apply a change: `docker exec reverse_proxy nginx -t && docker exec reverse_proxy nginx -s reload`.
+- **Open ports:** the AWS security group must allow only 80 and 443 from anywhere, and 22 from your own IP. The backend (8000) and cAdvisor (8888) listen on the server only; MongoDB, Redis and RabbitMQ are closed by the security group.
+- **Setting this up on another server** (once): DNS A record → the server's IP; security group 80/443; in `local/`: `server_name`, redirect host and certificate paths in `nginx/next.conf`, `NEXT_HTTPS_HOST=<domain>` in `site.local.conf`, an empty `nginx/admin.htpasswd` (`touch`) plus logins; then `sudo apt install certbot && sudo mkdir -p /var/www/certbot`, start the stack with the 443 server block commented out, `sudo certbot certonly --webroot -w /var/www/certbot -d <domain> -d www.<domain> --email <you> --agree-tos -n`, install the deploy hook (`sudo install -m 755 certbot-deploy-hook.sh /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh`), re-enable the 443 block and reload nginx.
+- **Test it all** with a real browser: `local/test_https_e2e.py` (instructions in the file).
+
 ## 4. End Experiment & Shutdown server
 ### 4.1. Retire/Unretire an Experiment
   - At the experiment list page on NEXT 
-  ```http://InstanceIPAddress/dashboard/experiment_list```, check the correct experiment and click "retire" or "unretire".
+  ```https://siplab-next.xyz/dashboard/experiment_list``` (admin password, §3.6), check the correct experiment and click "retire" or "unretire".
 
 ### 4.2. Shutdown the application
   - Go to ```Next/local ```.
