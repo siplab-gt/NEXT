@@ -220,6 +220,31 @@ Raw data: `local/ramp_archive_c6i4xlarge_infotuple-bodysets_http_2026-11-09/`,
 `local/ramp_archive_c6i4xlarge_https_2026-11-10/` (on the server only, not in git). Throwaway experiments:
 `5515cd27…`, `ebe5c882…` (Nov 9), `125a41de…`, `c07722b3…` (Nov 10).
 
+## `dev` branch: master's InfoTuple + duplicate-answer fix + HTTPS (2026-11-10 evening)
+
+Branch `dev` = `origin/master` + config wording (`e9510f6`) + duplicate-answer fix +
+HTTPS work, **without** the InfoTuple changes (commit `4262985`). Same driver, over HTTPS
+(`BASE=https://siplab-next.xyz HOSTHDR= ./capacity_ramp.sh 20 30`).
+
+| Participants | Median wait | p90 | p99 | Max | Requests (all 200) | Completed / expelled | Export check | Worker CPU avg / peak (of 16) | Peak load | Max queued |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 20 | **5.3 s** | 12.0 s | 17.5 s | 26 s | 5,934 | 18 / 2 | PASS | 6.6 / 15.7 | 16.0 | 12 |
+| 30 | **13.6 s** | 23.5 s | 34.4 s | 48 s | 8,901 | 27 / 3 | PASS | 9.7 / 15.9 | 21.1 | 26 |
+
+Both levels: 0 technical exits, 0 server errors, 0 CLOSE_WAIT, 0 % steal, 0
+`DUPLICATE-ANSWER` events, health check OK throughout. Run length 46 min (20) and 65 min
+(30); at 30 the worker sat at ~15.5 of 16 vCPUs, and precompute fell behind (3,876 ready
+of 5,547 scheduled; 469 stale, 431 abandoned).
+
+- **20 matches the Nov 2 baseline** (5.6 s): HTTPS and the duplicate-answer fix cost
+  nothing measurable on master's InfoTuple code either.
+- **30 is saturated: 13.6 s median**, worse than the 9–12 s estimated above. Stable and
+  correct, but a 158-question study takes a participant ~70 min. With master's InfoTuple
+  code, plan for **≤ 20–25 simultaneous participants**. (With the unmerged InfoTuple
+  candidate scoring, 30 waited 0.3 s — previous section.)
+
+Raw data: `local/ramp_archive_c6i4xlarge_dev-https_2026-11-10/` (server only).
+
 ## Next: c6i.4xlarge pass (when ~25 comfortable participants are needed)
 
 Stop → change instance type → start → `docker start …` (README §2.1), then in this order,
