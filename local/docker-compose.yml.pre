@@ -9,7 +9,7 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
     ports:
-      - "0.0.0.0:8888:8080"
+      - "127.0.0.1:8888:8080"   # this host only; public access via nginx /cadvisor/ (password)
     privileged: true
     secrets:
       - cadvisor_user
@@ -21,10 +21,15 @@ services:
     image: nginx:latest
     container_name: reverse_proxy
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
-      - ./media/:/var/www/media/
+      # the whole folder replaces conf.d/ (see nginx/next.conf for why)
+      - ./nginx/:/etc/nginx/conf.d/:ro
+      - ./media/:/var/www/media/:ro
+      # HTTPS: certificates (certbot on the host) and the HTTP-01 challenge folder
+      - /etc/letsencrypt/:/etc/letsencrypt/:ro
+      - /var/www/certbot/:/var/www/certbot/:ro
     ports:
       - 80:80
+      - 443:443
     restart: always
     networks:
       - nextnet
@@ -86,7 +91,9 @@ services:
      - {{NEXT_DIR}}:/opt/miniconda3
     working_dir: /next_backend
     ports:
-      - "0.0.0.0:8000:8000"
+      # this host only (launch.py, SSH tunnel); the public path is nginx, where
+      # the admin password applies - 8000 open to the world would bypass it
+      - "127.0.0.1:8000:8000"
     environment:
       - MONGODB_PORT_27017_TCP_ADDR=mongodb
       - MINIONREDIS_PORT_6379_TCP_ADDR=minionredis
@@ -97,6 +104,7 @@ services:
       - PYTHONPATH=:/next_backend
       - NEXT_BACKEND_GLOBAL_HOST
       - NEXT_BACKEND_GLOBAL_PORT
+      - NEXT_HTTPS_HOST
       - TERM=xterm
       - CELERY_ON=True
     networks:

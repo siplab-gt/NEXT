@@ -16,6 +16,11 @@ export ACTIVE_MASTER=$HOST
 export SLAVE_LIST=
 export NEXT_BACKEND_GLOBAL_HOST=$HOST
 
+# Site settings that differ per server, e.g. NEXT_HTTPS_HOST=siplab-next.xyz (the
+# HTTPS hostname used by experiments with protocol: https). Gitignored; see README.
+[ -f site.local.conf ] && . ./site.local.conf
+export NEXT_HTTPS_HOST=${NEXT_HTTPS_HOST:-}
+
 
 modify_ports=false
 if [ "$modify_ports" = true ] ; then
@@ -61,6 +66,13 @@ sed -i -e 's|{{NEXT_DIR}}|'"$dir"'|g' docker-compose.yml
 sed -i -e 's|{{GIT_HASH}}|'"$git_hash"'|g' docker-compose.yml
 
 
+
+# GENERATE_ONLY=1 ./docker_up.sh <host>: only write docker-compose.yml (e.g. to
+# recreate a single container with `docker-compose up -d nginx`), start nothing.
+if [ "${GENERATE_ONLY:-0}" = 1 ]; then
+    echo "docker-compose.yml written; not starting anything (GENERATE_ONLY=1)."
+    exit 0
+fi
 
 echo "Stopping any existing machines..."
 docker-compose stop
