@@ -1,6 +1,8 @@
 # Serving the query page over HTTPS — plan
 
-Status: **plan only, nothing implemented yet** (branch `feature/https`, 2026-11-02).
+Status: **plan only, nothing implemented yet** (branch `feature/https`).
+2026-11-02: first version. 2026-11-10: the lab has a domain (written `<domain>` below);
+added the admin password, closing the open ports, and short study links.
 
 ## Where things stand today
 
@@ -13,59 +15,165 @@ Status: **plan only, nothing implemented yet** (branch `feature/https`, 2026-11-
 - **One blocker:** the page loads jQuery from `http://code.jquery.com/...` (line 8).
   On an HTTPS page browsers block that script ("mixed content") and the query page
   stops working. Same line in `query_page_popup.html` and `queries_unlimited.html`.
-- The instance only has an IP (Elastic IP 52.2.236.217) and AWS's default name.
-  Let's Encrypt refuses `*.amazonaws.com` names, so we need our own hostname.
+  (`queries_unlimited.html` and `captioncontest.html` also build `http://<host>:8000`
+  API URLs; production doesn't use them — fix only if someone does.)
+- **The dashboard and the data downloads have no password.** `SITE_KEY` is unset and
+  nginx has no access control, so anyone who finds the address can list experiments,
+  download participant data (incl. Prolific IDs), retire experiments, or create new
+  ones. This is already true on the bare IP; a domain makes it urgent, because
+  issuing a certificate publishes the name in public Certificate Transparency logs,
+  which scanners watch.
+- **Internal services are published on all interfaces** (`0.0.0.0` in
+  `docker-compose.yml.pre`): backend 8000, MongoDB 27017/28017, RabbitMQ 5672/15672,
+  Redis 6379, cAdvisor 8888. Port 8000 is the Flask app itself, so a password in
+  nginx can be bypassed on `:8000` unless that port is closed. Whether the AWS
+  security group already blocks these is unknown — check it (step 2).
 
-## Decision: hostname (open)
+## Hostname
 
-Everything below works with any hostname; switching later only means re-issuing the
-certificate and updating the Prolific/Qualtrics links (media paths are relative, so
-configs don't change).
+The lab has a domain. One name serves every study on this server: studies are
+separated by the experiment ID in the path (or by a short link name, see below),
+the query page keeps no cookies or browser storage, and exported participant IDs are
+prefixed with the experiment ID — so concurrent studies on one domain do not interact.
+Subdomain-per-study is not needed (it would need a wildcard certificate via the
+registrar's DNS API, or a re-issued certificate per study, for no gain). A second
+server, if there ever is one, gets its own subdomain (e.g. `next2.<domain>`).
 
-| Option | Cost | Time | Trade-off |
-|---|---|---|---|
-| **DuckDNS** (`<name>.duckdns.org`) | free | minutes | Good for building and testing now. Dynamic-DNS domains are sometimes flagged by corporate/school web filters and security tools, and look less trustworthy to participants. |
-| **Bought domain** (Cloudflare Registrar, Porkbun, Namecheap) | ~$10–15/yr | under an hour | Clean reputation, lab controls it. Someone must keep the renewal paid. |
-| **Georgia Tech subdomain** (`*.gatech.edu`) | usually free | days–weeks | Most trustworthy to participants; depends on GT's process for a server hosted on AWS — ask the advisors / OIT. |
+What all studies on the server *do* share is CPU: the measured capacity
+(`CAPACITY_REPORT.md`) is for the total number of simultaneous participants across
+every live study.
 
-Leaning: DuckDNS now to build and test, then a bought or GT domain before the next
-real collection. Whichever is used, it gets an A record pointing at 52.2.236.217 (the
-Elastic IP is stable, so no dynamic-update cron is needed). Keep any DuckDNS or
-registrar token in a gitignored local file, never in the repo (the repo is public).
+Keep any registrar token in a gitignored local file, never in the repo (the repo is
+public).
 
 ## Steps
 
-1. **Hostname** — set up the chosen name (see above), point it at 52.2.236.217, confirm with
-   `dig +short <hostname>`.
-2. **Security group** — allow inbound TCP 443 (AWS console; the AWS CLI is not
-   installed on the instance).
+Order matters: the admin password (step 6) goes live together with HTTPS, before the
+domain is given to anyone.
+
+1. **DNS** — A record `<domain>` → 52.2.236.217 (Elastic IP, stable, no dynamic
+   update needed). Confirm with `dig +short <domain>`.
+2. **Security group** (AWS console; the AWS CLI is not installed on the instance) —
+   inbound should be exactly: TCP 80 and 443 from anywhere, TCP 22 (ideally only from
+   the lab's / your IPs). Remove any rule for 8000, 8888, 27017, 28017, 5672, 15672,
+   6379. Screenshot the before/after for the record.
 3. **Fix mixed content** — `http://code.jquery.com` → `https://code.jquery.com` in the
    three query-page templates. Works on plain HTTP too, so it can ship first; live
    after `docker restart local_nextbackenddocker_1`.
-4. **Certificate** — install certbot on the host; use the webroot method: nginx
-   serves `/.well-known/acme-challenge/` from a host folder on port 80.
-5. **nginx + compose** (one change, then recreate only nginx):
-   - `local/nginx.conf`: new `server { listen 443 ssl; http2 on; ... }` with the
-     certificate and the same `location` blocks as today (incl. the 330 s timeouts).
-     Port 80 keeps serving everything as today, plus the ACME location. **No global
-     HTTP→HTTPS redirect and no HSTS header** — the choice is made per experiment
-     (step 9).
+4. **Certificate** — install certbot on the host; webroot method: nginx serves
+   `/.well-known/acme-challenge/` from a host folder on port 80.
+5. **nginx + compose for HTTPS** (applied together with step 6, one nginx recreate):
+   - `local/nginx.conf`: new `server { listen 443 ssl; http2 on; server_name <domain>; ... }`
+     with the certificate and the same `location` blocks as today (incl. the 330 s
+     timeouts) — move the shared proxy settings into an `include` snippet so the two
+     server blocks can't drift. Port 80 keeps serving participant pages as today,
+     plus the ACME location. **No global HTTP→HTTPS redirect and no HSTS header** —
+     the choice is made per experiment (step 10).
    - `local/docker-compose.yml.pre`: publish `443:443`; mount `/etc/letsencrypt`
-     (read-only) and the ACME webroot into the nginx container.
+     (read-only), the ACME webroot, and the password file (step 6) into nginx.
    - Apply: `docker rm -f reverse_proxy`, then `docker-compose up -d nginx`
      (stateless container; a few seconds of downtime). The user runs compose.
-6. **Renewal** — certbot's systemd timer renews automatically; add a deploy hook
+6. **Admin password + close direct ports** — see "Admin password" below.
+7. **Renewal** — certbot's systemd timer renews automatically; add a deploy hook
    `docker exec reverse_proxy nginx -s reload`.
-7. **Media paths (rule for all future configs)** — image/video/audio targets are
-   written as **relative paths** to files in `local/media/`, e.g.
+8. **Media paths (rule for all future configs)** — image/video/audio targets are
+   **relative paths** to files in `local/media/`, e.g.
    `primary_description: '/media/cats/cat01.png'`, never `http://<ip>/...`.
-   Fix the example comment in `ARankB-InfoTuple-cog_rank4_precompute.yaml` (and the
-   other configs) to show this form, document the rule in README, and change
-   `next/assistant/s3.py` to build `https://` URLs. Test with the `cats/` images over
-   HTTPS before any image study. Details in "Images, video and audio" below.
-8. **Links and docs** — Prolific study URL, Qualtrics end-of-survey redirect, CLAUDE.md
-   URLs, README. Then a manual click-through and a short load test.
-9. **Per-experiment `protocol` setting** — see the next section.
+   The example comment in every `local/*.yaml` still shows
+   `http://44.223.248.38/media/video01.mp4` (an old IP) — change it to the relative
+   form, document the rule in README, and change `next/assistant/s3.py` to build
+   `https://` URLs. Details in "Images, video and audio" below.
+9. **Short study links** — see "Short study links" below.
+10. **Per-experiment `protocol` setting** — see "Choosing HTTP or HTTPS per experiment".
+11. **Links, docs, test** — Prolific study URL, Qualtrics end-of-survey redirect,
+    CLAUDE.md URLs (dashboard links become `https://<domain>/dashboard/...`), README.
+    Then the test list at the end, a manual click-through and a short load test.
+
+## Admin password
+
+Goal: participants reach the study with no login; everything else needs a password.
+
+**Mechanism: nginx HTTP basic auth, allow-list style.** Every path requires the
+password *except* the few a participant needs. New endpoints added later are
+protected by default.
+
+Open (no password) — exactly what the query page uses:
+
+| Path | Why |
+|---|---|
+| `/query/` | the query page and its JS (`/query/static/...`) |
+| `= /api/experiment/getQuery` | next question (POST from `next_widget.js`) |
+| `= /api/experiment/processAnswer` | submit answer (POST) |
+| `/s/` | short study links |
+| `/media/` | study images / video / audio |
+| `/.well-known/acme-challenge/` | certificate renewal |
+
+Password-protected — everything else, notably `/dashboard/...` (experiment list,
+dashboards, stats, retire, database backup/restore), `/api/experiment/<uid>/participants`
+(data download), `/api/experiment/<uid>/logs`, `/api/experiment` (GET/POST),
+`/assistant/...` (creating experiments), `/home`, `/cadvisor/`.
+
+Details:
+- **Password file:** `local/admin.htpasswd`, gitignored, mounted read-only into nginx.
+  One line per person (`openssl passwd -6` hash), so access can be removed per person
+  by deleting a line and reloading nginx (`nginx -s reload`, no restart).
+- **Only over HTTPS.** Basic auth sends the password with every request, so on port 80
+  the protected paths **redirect to `https://<domain>/...`** instead of asking for it.
+  This redirect is per-path (admin paths only); participant paths on port 80 are
+  untouched, so `http` experiments keep working.
+- **Close the bypass on port 8000 — without touching MongoDB.**
+  - Security group (step 2) is the main control.
+  - Second layer: bind the **stateless** containers' ports to localhost in
+    `docker-compose.yml.pre` — backend `127.0.0.1:8000:8000`, cAdvisor
+    `127.0.0.1:8888:8080`. They are recreated on every deploy anyway.
+  - **Do not change the ports of `local_mongodb_1`** (or RabbitMQ/Redis) now:
+    changing them means recreating the container, and the compose recreate bug's
+    workaround (`docker rm`) is forbidden for MongoDB because it orphans the data
+    volume. Instead add host firewall rules in the `DOCKER-USER` iptables chain that
+    drop outside traffic to 27017, 28017, 5672, 15672, 6379 (Docker bypasses ufw;
+    `DOCKER-USER` is the supported place), persisted with `iptables-persistent`.
+    Rebinding MongoDB to localhost can wait for a planned migration with a fresh backup.
+  - Anything that used those ports from outside (e.g. MongoDB Compass on a laptop)
+    switches to an SSH tunnel: `ssh -L 27017:127.0.0.1:27017 ubuntu@<domain>`.
+- **Things that call protected paths and need updating:**
+  - `local/healthcheck.sh` probes `http://127.0.0.1/dashboard/get_stats` → give it its
+    own `healthcheck` user, credentials in the gitignored `local/alert.local.conf`
+    (`HEALTH_AUTH=user:pass`), passed with `curl -u`, and probe over HTTPS
+    (`--resolve <domain>:443:127.0.0.1`). Without this it alerts every 5 minutes.
+  - `launch.py` talks to `localhost:8000` directly — still works after the localhost
+    binding. Change the URLs it *prints* to `https://<domain>/dashboard/...`.
+  - Data exports by script: `curl -u <user> 'https://<domain>/api/experiment/<EXP_UID>/participants?csv=1&zip=1'`.
+- `SITE_KEY` stays unset: it only hides the dashboard under a secret path, which leaks
+  through browser history and links. The password is the control.
+
+## Short study links
+
+Goal: `https://<domain>/s/rank4` instead of
+`https://<domain>/query/query_page/query_page/8674955c...`.
+
+- **YAML:** optional `args.link_name: rank4` (lowercase letters, digits, `-`; declared
+  in `apps/ARankB/myApp.yaml` like `precompute`, so a malformed name is rejected at
+  launch). Experiments without it keep only the long link.
+- **Storage:** a small MongoDB collection `short_links` (`name → exp_uid`, created
+  date) rather than searching every experiment's args — so a name can be moved
+  explicitly without editing an experiment.
+- **One name, one experiment.** At launch, if the name already points to another
+  experiment, the launch **fails** with "rank4 already points to <uid> (launched
+  <date>)". A relaunch must never silently move a link a live Prolific study is
+  using. To move it on purpose (e.g. relaunch after a bug, before publishing the
+  Prolific study): a small host script, `./local-venv/bin/python relink.py rank4 <new_uid>`,
+  which prints the old and new target.
+- **Route:** Flask `/s/<name>` → `302` redirect to the full query-page URL, **keeping
+  the query string** so `?participant=<PROLIFIC_ID>` survives. It honours the
+  experiment's `protocol` (an `https` experiment reached over HTTP is sent straight to
+  `https://<domain>/query/...` in one hop). `302`, not `301`, so browsers don't cache
+  a link that may be moved. Unknown name → a plain "study not found" page.
+- **Shown where you need it:** `launch.py` and the experiment dashboard print the short
+  link next to the long one.
+- **Caveat:** short names are guessable, so a stranger could open a study. Today that
+  is prevented only by the long random ID. In practice data is already filtered to
+  Prolific's approved participants; pick names that aren't obvious if this matters
+  (e.g. `rank4-k7q`).
 
 ## Choosing HTTP or HTTPS per experiment
 
@@ -80,9 +188,8 @@ HTTPS hostname (or none, e.g. on a second machine).
   `apps/ARankB/myApp.yaml` (same pattern as `precompute`) so a typo is rejected at
   launch.
 - **Server setting, not YAML:** the HTTPS hostname belongs to the server, so it is
-  one env var, `NEXT_HTTPS_HOST` (e.g. the DuckDNS/GT name), set by `docker_up.sh`
-  next to `NEXT_BACKEND_GLOBAL_HOST`. Every `https` experiment on this server shares
-  it — they differ only by experiment UID in the path, so one domain is enough.
+  one env var, `NEXT_HTTPS_HOST=<domain>`, set by `docker_up.sh` next to
+  `NEXT_BACKEND_GLOBAL_HOST`. Every `https` experiment on this server shares it.
 - **Query page** (`next/query_page/query_page.py`): reads `experiment['args']['protocol']`
   and the scheme the visitor came in on (`X-Forwarded-Proto`, already set by nginx).
   - `https` experiment visited over HTTP → redirect to
@@ -96,14 +203,10 @@ HTTPS hostname (or none, e.g. on a second machine).
   `NEXT_HTTPS_HOST` (or its certificate is missing/expired), instead of handing out
   a link that won't work.
 - **Links:** `launch.py` and the experiment dashboard print the participant link with
-  the right scheme and host — `https://<NEXT_HTTPS_HOST>/query/query_page/query_page/<EXP_UID>`
-  or `http://52.2.236.217/query/...` — so the link pasted into Prolific/Qualtrics is
-  always the correct one.
-- **Never enable HSTS** on the HTTPS hostname: it would make browsers refuse HTTP on
-  that name for months, breaking `http` experiments linked through it.
-- **Test:** launch the 32-query demo twice (`protocol: http` and `protocol: https`),
-  open each link over both schemes, check redirects, `?participant=` pre-fill, a full
-  run-through with answers recorded, and the image demo (`/media/cats/`).
+  the right scheme and host (and the short link, if any), so the link pasted into
+  Prolific/Qualtrics is always the correct one.
+- **Never enable HSTS** on the domain: it would make browsers refuse HTTP on that name
+  for months, breaking `http` experiments linked through it.
 
 ## Images, video and audio (planned for future studies)
 
@@ -115,12 +218,11 @@ target's `primary_description` straight into `<img src>`, `<video><source src>` 
 - **Recommended: host media on this server, use relative URLs.** Put files in
   `local/media/` (already served by nginx at `/media/`, e.g. `local/media/cats/`)
   and write targets as `primary_description: '/media/cats/cat01.png'`. A relative URL
-  inherits the page's scheme and hostname, so the same config works on HTTP today
-  and HTTPS later, and survives a hostname change.
-- **Don't** write `http://52.2.236.217/media/...` or `http://<ip>/...` in configs
-  (the example comment in the rank-4 YAML does this — update it). Browsers try to
-  upgrade such image/video/audio URLs to HTTPS, and the IP has no certificate,
-  so they would fail to load.
+  inherits the page's scheme and hostname, so the same config works on HTTP and
+  HTTPS and survives a hostname change.
+- **Don't** write `http://52.2.236.217/media/...` or `http://<ip>/...` in configs.
+  Browsers try to upgrade such image/video/audio URLs to HTTPS, and the IP has no
+  certificate, so they would fail to load.
 - **S3, if ever used:** `next/assistant/s3.py` builds `http://<bucket>.s3.amazonaws.com/...`;
   change to `https://`. S3 serves HTTPS out of the box.
 - **Performance:** the 443 server block enables HTTP/2, which loads many images in
@@ -129,13 +231,29 @@ target's `primary_description` straight into `<img src>`, `<video><source src>` 
   `proxy_cache` lines there do nothing for `alias`). For large video, keep files
   small (re-encode to H.264, modest bitrate) — bandwidth, not TLS, is the limit.
 
+## Test plan
+
+Run from **outside** the server (a laptop), not from the instance itself.
+
+- **Participant side, no password:** launch the 32-query demo twice
+  (`protocol: http` + `link_name: demo-http`, `protocol: https` + `link_name: demo-https`).
+  Open each via long link and short link, over both schemes: redirects as designed,
+  `?participant=` pre-fill survives every redirect, full run-through with answers
+  recorded, image demo (`/media/cats/`) loads over HTTPS.
+- **Short links:** relaunching with an existing `link_name` fails; `relink.py` moves it;
+  unknown name shows "not found".
+- **Admin side:** `/dashboard/experiment_list`, a dashboard, the participants download,
+  `/api/experiment/<uid>/logs`, `POST /assistant/init/experiment` → 401 without the
+  password over HTTPS, redirect to HTTPS over HTTP, work with the password.
+- **Bypass closed:** `curl http://<domain>:8000/dashboard/experiment_list` and
+  `nc -zv <domain> 27017 6379 5672 15672 8888` → refused / timed out.
+- **Stack:** `local/healthcheck.sh` logs OK; `launch.py` still launches; a short load
+  test at the usual participant count shows no change in wait times.
+
 ## Cutover timing and caveats
 
 - No forced cutover: existing and running experiments default to `http` and are
-  untouched. Still, recreate the nginx container (step 5) between collections — it
-  drops connections for a few seconds.
-- `local/healthcheck.sh` probes `http://127.0.0.1/...` and keeps working (port 80
-  still answers locally). Dashboard links to `:8000` stay HTTP — admin only.
-- HTTPS does not close the other published ports: MongoDB 27017, Redis 6379,
-  RabbitMQ 5672/15672, backend 8000, cAdvisor 8888. Check the security group allows
-  none of them from the internet; an open MongoDB is a larger risk than plain HTTP.
+  untouched. Still, apply steps 5–6 between collections — recreating nginx drops
+  connections for a few seconds, and the password changes how you reach the dashboard.
+- Dashboard links on `:8000` stop working from outside (step 6) — use
+  `https://<domain>/dashboard/...`.
