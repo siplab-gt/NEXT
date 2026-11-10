@@ -5,9 +5,12 @@
 # N HTTP participants through nginx (think 8-15 s, 10% wrong traps, full study),
 # CPU/memory/queue/steal sampler, export check, one summary line in ramp.log.
 # Stops early when a level has >10% technical exits.
+# Participants' entry point: BASE (default http://127.0.0.1 with Host 52.2.236.217);
+#   over HTTPS like real participants: BASE=https://siplab-next.xyz HOSTHDR= ./capacity_ramp.sh 20 30
 set -u
 cd /home/ubuntu/NEXT/local
 PY=./local-venv/bin/python; LOG=ramp.log
+BASE=${BASE:-http://127.0.0.1}; HOSTHDR=${HOSTHDR-52.2.236.217}
 say(){ echo "[$(date -u +%FT%TZ)] $*" | tee -a $LOG; }
 sampler(){ # every 60 s: load, steal, worker/backend CPU, rabbit backlog, container + host memory
   while :; do
@@ -19,13 +22,13 @@ sampler(){ # every 60 s: load, steal, worker/backend CPU, rabbit backlog, contai
     echo "$(date -u +%FT%TZ) load=$(cut -d' ' -f1 /proc/loadavg) steal=${st}% $cpu queued=$q ${mem}host_avail_mb=$avail" >> "$1"; sleep 59
   done
 }
-say "=== CAPACITY RAMP on $(nproc) cores ($(curl -s -m 2 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 30' | xargs -I{} curl -s -m 2 -H 'X-aws-ec2-metadata-token: {}' http://169.254.169.254/latest/meta-data/instance-type)), commit $(git -C .. rev-parse --short HEAD) ==="
+say "=== CAPACITY RAMP on $(nproc) cores ($(curl -s -m 2 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 30' | xargs -I{} curl -s -m 2 -H 'X-aws-ec2-metadata-token: {}' http://169.254.169.254/latest/meta-data/instance-type)), commit $(git -C .. rev-parse --short HEAD), entry $BASE ==="
 ./leak_monitor.sh 30 > leak_ramp.csv 2>/dev/null & MON=$!
 for n in "$@"; do
   exp=$($PY launch.py ARankB-InfoTuple-cog_rank4_precompute.yaml 2>&1 | grep -oE "experiment_dashboard/[a-f0-9]+" | head -1 | cut -d/ -f2)
   say "LEVEL $n participants -> experiment $exp"
   sampler ramp_sys_$n.log & SMP=$!
-  $PY load_sim.py --base http://127.0.0.1 --host-header 52.2.236.217 --exp $exp --participants $n --think 8,15 --wrong-trap-fraction 0.1 --stagger 1 --tag ramp$n --quiet > loadsim_ramp$n.log 2>&1
+  $PY load_sim.py --base "$BASE" --host-header "$HOSTHDR" --exp $exp --participants $n --think 8,15 --wrong-trap-fraction 0.1 --stagger 1 --tag ramp$n --quiet > loadsim_ramp$n.log 2>&1
   kill $SMP 2>/dev/null
   grep -E "duration|getQuery |processAnswer |statuses|participants:|5xx total" loadsim_ramp$n.log >> $LOG
   $PY check_export.py $exp --prefix simramp$n > check_ramp$n.log 2>&1 && say "export check ($n): PASS" || say "export check ($n): FAIL (see check_ramp$n.log)"
