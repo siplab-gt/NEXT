@@ -11,6 +11,7 @@ import os
 import sys
 import numpy
 import json
+import time
 import traceback
 import next.utils as utils
 import next.lib.pijemont.verifier as verifier
@@ -219,21 +220,41 @@ class App(object):
             args_dict = verifier.verify(
                 args_dict, self.reference_dict['processAnswer']['args'])
             # Update timing info in query
-            query = self.butler.queries.get(uid=args_dict['args']['query_uid'])
+            query_uid = args_dict['args']['query_uid']
+            query = self.butler.queries.get(uid=query_uid)
             timestamp_answer_received = args_dict['args'].get(
                 'timestamp_answer_received', None)
             delta_datetime = utils.str2datetime(timestamp_answer_received) - \
                 utils.str2datetime(query['timestamp_query_generated'])
             round_trip_time = delta_datetime.total_seconds()
             response_time = float(args_dict['args'].get('response_time', 0.))
-            query_update = self.call_app_fn(
-                query['alg_label'], query['alg_id'], 'processAnswer', args_dict)
+
+            # One answer per query. Browsers re-send a POST after a dropped
+            # connection, so the same answer can arrive twice, even at the same
+            # time on different workers. Processing it twice skipped the
+            # participant's next question and could count a wrong trap twice
+            # (REPRO_DUPLICATE_ANSWER.md). The atomic counter lets exactly one
+            # request process the answer; any copy waits for that outcome and
+            # returns the same result.
+            answer_posts = self.butler.queries.increment(
+                uid=query_uid, key='answer_posts')
+            if answer_posts > 1:
+                return self._duplicate_answer(exp_uid, query_uid, answer_posts)
+
+            try:
+                query_update = self.call_app_fn(
+                    query['alg_label'], query['alg_id'], 'processAnswer', args_dict)
+            except Exception as app_error:
+                self.butler.queries.set_many(uid=query_uid, key_value_dict={
+                    'answer_outcome': 'error', 'answer_error': str(app_error)})
+                raise
             query_update.update({'response_time': response_time,
                                  'network_delay': round_trip_time - response_time,
-                                 'timestamp_answer_received': timestamp_answer_received
+                                 'timestamp_answer_received': timestamp_answer_received,
+                                 'answer_outcome': 'ok'
                                  })
             self.butler.queries.set_many(
-                uid=args_dict['args']['query_uid'], key_value_dict=query_update)
+                uid=query_uid, key_value_dict=query_update)
 
             return json.dumps({'args': {}, 'meta': {'log_entry_durations': self.log_entry_durations}}), True, ''
 
@@ -247,6 +268,34 @@ class App(object):
             self.butler.ell.log(self.app_id+':APP-EXCEPTION', log_entry)
             traceback.print_tb(exc_traceback)
             raise Exception(error)
+
+    # How long a duplicate answer waits for the original request to finish
+    # (the query page itself gives up on a request after 120 s).
+    DUPLICATE_ANSWER_WAIT_S = 120
+    DUPLICATE_ANSWER_POLL_S = 0.2
+
+    def _duplicate_answer(self, exp_uid, query_uid, answer_posts):
+        """A copy of an answer that is already being (or has been) processed:
+        change nothing, wait for the original's outcome and return the same
+        result, so the page moves on only after the answer is fully recorded and
+        an expulsion is never lost when the original's response was."""
+        utils.debug_print('DUPLICATE-ANSWER exp={} query={} copy={}'.format(
+            exp_uid, query_uid, answer_posts))
+        deadline = time.time() + self.DUPLICATE_ANSWER_WAIT_S
+        outcome = None
+        while time.time() < deadline:
+            outcome = self.butler.queries.get(uid=query_uid, key='answer_outcome')
+            if outcome is not None:
+                break
+            time.sleep(self.DUPLICATE_ANSWER_POLL_S)
+        if outcome == 'error':
+            # same error as the original - an expulsion maps to meta.expelled
+            raise Exception(self.butler.queries.get(uid=query_uid, key='answer_error'))
+        if outcome is None:
+            utils.debug_print('DUPLICATE-ANSWER original still running after {} s: exp={} query={}'.format(
+                self.DUPLICATE_ANSWER_WAIT_S, exp_uid, query_uid))
+        # no log_entry_durations: no algorithm ran, so there is no duration to log
+        return json.dumps({'args': {}, 'meta': {'duplicate': True}}), True, ''
 
     def getModel(self, exp_uid, args_json):
         try:

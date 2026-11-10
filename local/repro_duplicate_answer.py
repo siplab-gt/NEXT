@@ -16,6 +16,9 @@ every 4th query, tolerance 0.3 x 8 traps -> expelled at the 3rd wrong trap).
      answer q5-q7, answer trap q8 wrong once.
      Correct: 2 wrong traps -> NOT expelled.   Bug: counted as 3 -> expelled at q8.
   C0 control for C without any duplicate: must NOT be expelled.
+  D  3 wrong traps, the 3rd (expelling) one sent twice at the same time.
+     Correct: BOTH copies report the expulsion (the page must show the fail exit
+     even when the original's response is the one lost).
 
 Usage (from this box, through nginx like real participants):
   ./local-venv/bin/python repro_duplicate_answer.py --exp <EXP_UID>
@@ -120,6 +123,28 @@ for name, dup in (("C", True), ("C0", False)):
     print("{:2s} {:10s} 2 wrong traps{} -> expelled={} at query {} -> {}".format(
         name, "", " (1st sent twice)" if dup else "", was_expelled, last_qid,
         "OK" if ok else "BUG (expelled early)"))
+
+# D: the expelling answer itself arrives twice (at the same time) -> BOTH copies must
+# report the expulsion, so the page shows the fail exit even if the original's
+# response was the one lost on the network.
+participant = pid("D")
+copies = None
+for _ in range(12):
+    q = get_query(participant)
+    if q["query_id"] > 12:
+        break
+    third_trap = q.get("isTrap") and q["query_id"] == 12
+    resp = answer(q, wrong_trap=bool(q.get("isTrap")), duplicate=("par" if third_trap else None))
+    if third_trap:
+        copies = [expelled(s, b) for s, b in resp]
+        break
+    if any(expelled(s, b) for s, b in resp):
+        copies = ["expelled early at %d" % q["query_id"]]
+        break
+ok = copies == [True, True]
+results["D"] = ok
+print("D  {:10s} 3rd wrong trap sent twice -> expelled per copy={} -> {}".format(
+    "concurrent", copies, "OK" if ok else "BUG"))
 
 bad = [k for k, v in results.items() if not v]
 print("RESULT:", "all correct" if not bad else "bug reproduced in " + ", ".join(bad))
