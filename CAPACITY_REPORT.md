@@ -166,6 +166,60 @@ Further levers if needed: `OPENBLAS_NUM_THREADS=1` (less contention, modest gain
 c6i.8xlarge (16 physical cores, ~2× throughput), or a lower `down_sample` (an algorithm
 choice).
 
+## New InfoTuple candidate scoring, over HTTP and HTTPS (2026-11-09 / 2026-11-10)
+
+Same machine and worker counts (c6i.4xlarge, 8 async + 12 sync), same driver
+(`./capacity_ramp.sh 20 30`: production rank-4 precompute config, 158 questions incl.
+8 traps, think 8–15 s, 10 % wrong traps, full study, fresh experiment per level).
+What changed is the code:
+
+- **Nov 9, HTTP** — commit `ae17d38` (branch `fix/infotuple-mi-samples`, **not merged**):
+  InfoTuple scores each distinct body set once (10,626 for rank-4 instead of a 5 %
+  sample of orderings), with the vectorized information score and the sample-count fix
+  (`REPRO_INFOTUPLE_MI.md`). Participants through nginx on `http://127.0.0.1`.
+- **Nov 10, HTTPS** — commit `8bf6e54` (branch `feature/https-impl` = the above + the
+  duplicate-answer fix + HTTPS). Participants through `https://siplab-next.xyz`, i.e. the
+  public address, TLS and the admin-password nginx config, like real participants
+  (`BASE=https://siplab-next.xyz HOSTHDR= ./capacity_ramp.sh 20 30`).
+
+Wait per question = `processAnswer` + the following `getQuery`, steady state (first
+10 min excluded), computed with `local/wait_per_question.py` — the same script gives
+5.58 s for the Nov 2 run above, matching its published 5.6 s.
+
+| Run | Participants | Median wait | p90 | p99 | Max | Requests (all 200) | Completed / expelled | Export check | Worker CPU avg / peak (of 16) | Peak load |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Nov 2, old InfoTuple, HTTP | 20 | 5.58 s | 12.7 s | 19.0 s | 28.1 s | 5,934 | 18 / 2 | PASS | 10.3 / 15.6 | 16.9 |
+| Nov 9, new InfoTuple, HTTP | 20 | 0.37 s | 3.3 s | 5.3 s | 6.1 s | 5,934 | 18 / 2 | PASS | 2.0 / 7.4 | 18.0 |
+| Nov 9, new InfoTuple, HTTP | 30 | 0.26 s | 3.4 s | 5.2 s | 5.8 s | 8,901 | 27 / 3 | PASS | 3.1 / 9.1 | 10.0 |
+| **Nov 10, new InfoTuple, HTTPS** | **20** | **0.24 s** | 3.1 s | 5.1 s | 6.0 s | 5,934 | 18 / 2 | PASS | 1.5 / 7.8 | 5.1 |
+| **Nov 10, new InfoTuple, HTTPS** | **30** | **0.29 s** | 3.6 s | 5.4 s | 6.2 s | 8,901 | 27 / 3 | PASS | 3.7 / 8.3 | 8.9 |
+
+Every run: 0 technical exits, 0 server errors, 0 CLOSE_WAIT, 0 % steal; expulsions
+exactly the designed ones (3rd wrong trap). Nov 10 also: 0 `DUPLICATE-ANSWER` events
+(~7,400 answers), precompute served the ready question 5,540 times of 5,545 scheduled
+(plus 280 deliberate wrap skips), host memory never below 25 GB free, health check OK
+throughout.
+
+**Findings**
+- **HTTPS costs nothing measurable.** Nov 10 (HTTPS, through the public address) and
+  Nov 9 (HTTP, local) agree within run-to-run noise at both levels.
+- **The new InfoTuple scoring is what made the machine fast** — roughly 20× shorter
+  median wait at 20 participants and a ~4× shorter worst case, with the worker using
+  ~2–4 of 16 vCPUs on average instead of ~10. At 30 participants the system is far from
+  saturated (at most 11 tasks queued, load ≤ 10), so the old closed-loop estimates
+  (30 ≈ 9–12 s) no longer apply *to this code*.
+- The remaining tail (p90 ~3 s) is mostly in `processAnswer` (p95 2.8–3.5 s); not
+  investigated.
+
+**Caveat — these numbers depend on unmerged code.** The InfoTuple changes
+(`fix/infotuple-mi-samples`) are still awaiting a decision: in simulation the fixed
+selector did not beat random questions (`REPRO_INFOTUPLE_MI.md`). If they are not
+adopted, capacity is the Nov 2 table above (20 ≈ 5.6 s; 30 estimated 9–12 s). HTTPS was
+not measured on the old InfoTuple code, but it adds no measurable cost here.
+Raw data: `local/ramp_archive_c6i4xlarge_infotuple-bodysets_http_2026-11-09/`,
+`local/ramp_archive_c6i4xlarge_https_2026-11-10/` (on the server only, not in git). Throwaway experiments:
+`5515cd27…`, `ebe5c882…` (Nov 9), `125a41de…`, `c07722b3…` (Nov 10).
+
 ## Next: c6i.4xlarge pass (when ~25 comfortable participants are needed)
 
 Stop → change instance type → start → `docker start …` (README §2.1), then in this order,
